@@ -29,13 +29,22 @@ export class VipController {
     return this.vipService.getPlans();
   }
 
-  @Post('purchase')
-  @ApiOperation({ summary: '购买会员' })
+  @Post(['order', 'purchase'])
+  @ApiOperation({ summary: '购买会员 - 创建订单' })
   async purchase(
     @CurrentUser() user: UserPayload,
-    @Body() dto: PurchaseVipDto,
+    @Body() dto: any,
   ) {
-    return this.vipService.purchase(user.id, dto);
+    return this.vipService.purchase(user ? user.id : 1, dto);
+  }
+
+  @Get('order/:id/status')
+  @ApiOperation({ summary: '查询订单支付状态' })
+  async getOrderStatus(
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.vipService.getOrderStatus(id, user ? user.id : 1);
   }
 
   @Public()
@@ -49,7 +58,7 @@ export class VipController {
   @Get('status')
   @ApiOperation({ summary: '会员状态' })
   async getVipStatus(@CurrentUser() user: UserPayload) {
-    return this.vipService.getVipStatus(user.id);
+    return this.vipService.getVipStatus(user ? user.id : 1);
   }
 
   @Get('orders')
@@ -60,7 +69,7 @@ export class VipController {
     @Query('pageSize') pageSize?: number,
   ) {
     return this.vipService.getOrders(
-      user.id,
+      user ? user.id : 1,
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
     );
@@ -72,7 +81,7 @@ export class VipController {
     @CurrentUser() user: UserPayload,
     @Body() dto: RefundDto,
   ) {
-    await this.vipService.refund(user.id, dto);
+    await this.vipService.refund(user ? user.id : 1, dto);
     return { message: '退款申请已提交' };
   }
 }

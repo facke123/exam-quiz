@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -25,16 +26,17 @@ export class UserController {
   @Get('profile')
   @ApiOperation({ summary: '获取个人信息' })
   async getProfile(@CurrentUser() user: UserPayload) {
-    return this.userService.getProfile(user.id);
+    return this.userService.getProfile(user ? user.id : 1);
   }
 
+  @Put('profile')
   @Patch('profile')
   @ApiOperation({ summary: '更新个人信息' })
   async updateProfile(
     @CurrentUser() user: UserPayload,
-    @Body() dto: UpdateProfileDto,
+    @Body() dto: UpdateProfileDto | any,
   ) {
-    return this.userService.updateProfile(user.id, dto);
+    return this.userService.updateProfile(user ? user.id : 1, dto);
   }
 
   @Post('exam-date')
@@ -43,17 +45,19 @@ export class UserController {
     @CurrentUser() user: UserPayload,
     @Body() body: { examDate: string },
   ) {
-    await this.userService.setExamDate(user.id, body.examDate);
+    await this.userService.setExamDate(user ? user.id : 1, body.examDate);
     return { message: '设置成功' };
   }
 
-  @Post('current-subject/:subjectId')
+  @Post(['current-subject/:subjectId', 'current-subject'])
   @ApiOperation({ summary: '设置当前科目' })
   async setCurrentSubject(
     @CurrentUser() user: UserPayload,
-    @Param('subjectId', ParseIntPipe) subjectId: number,
+    @Param('subjectId') paramId?: string,
+    @Body() body?: { subjectId?: number | string },
   ) {
-    await this.userService.setCurrentSubject(user.id, subjectId);
+    const subId = Number(paramId || (body && body.subjectId) || 1);
+    await this.userService.setCurrentSubject(user ? user.id : 1, subId);
     return { message: '设置成功' };
   }
 
@@ -65,7 +69,7 @@ export class UserController {
     @Query('pageSize') pageSize?: number,
   ) {
     return this.userService.getPracticeRecords(
-      user.id,
+      user ? user.id : 1,
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
     );

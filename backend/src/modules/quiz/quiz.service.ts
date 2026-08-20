@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
 import { PracticeAnswer } from '@/database/entities/practice-answer.entity';
 import { Question } from '@/database/entities/question.entity';
@@ -9,6 +9,9 @@ import { Favorite } from '@/database/entities/favorite.entity';
 import { Note } from '@/database/entities/note.entity';
 import { ReviewQueue } from '@/database/entities/review-queue.entity';
 import { Paper } from '@/database/entities/paper.entity';
+import { Subject } from '@/database/entities/subject.entity';
+import { Chapter } from '@/database/entities/chapter.entity';
+import { User } from '@/database/entities/user.entity';
 import {
   CreatePracticeDto,
   SaveAnswerDto,
@@ -38,52 +41,79 @@ export class QuizService {
     private readonly reviewQueueRepository: Repository<ReviewQueue>,
     @InjectRepository(Paper)
     private readonly paperRepository: Repository<Paper>,
+    @InjectRepository(Subject)
+    private readonly subjectRepository: Repository<Subject>,
+    @InjectRepository(Chapter)
+    private readonly chapterRepository: Repository<Chapter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   /**
-   * 创建练习（章节练习/历年真题/模拟考试/每日一练/案例分析）
+   * 创建练习（章节练习/历年真题/模拟考试/每日一练/自主练习/错题重做）
    */
-  async createPractice(userId: number, dto: CreatePracticeDto): Promise<PracticeRecord> {
+  async createPractice(userId: number, dto: any): Promise<{ recordId: string; record: any }> {
     let questionIds: number[] = [];
 
-    if (dto.mode === 'chapter') {
-      // 章节练习：从指定章节随机取题
+    if (dto.questionIds && Array.isArray(dto.questionIds) && dto.questionIds.length > 0) {
+      questionIds = dto.questionIds.map((id: any) => Number(id));
+    } else if (dto.mode === 'chapter') {
       const qb = this.questionRepository
         .createQueryBuilder('q')
-        .where('q.status = :status', { status: 'published' })
-        .andWhere('q.subjectId = :subjectId', { subjectId: dto.subjectId });
+        .where('q.status = :status', { status: 'published' });
+      if (dto.subjectId) {
+        qb.andWhere('q.subjectId = :subjectId', { subjectId: dto.subjectId });
+      }
+      if (dto.chapterId) {
+        qb.andWhere('q.chapterId = :chapterId', { chapterId: dto.chapterId });
+      }
       if (dto.chapterIds && dto.chapterIds.length > 0) {
         qb.andWhere('q.chapterId IN (:...chapterIds)', { chapterIds: dto.chapterIds });
       }
-      qb.orderBy('RAND()')
-        .take(dto.questionCount || 20);
+      qb.orderBy('q.id', 'ASC').take(dto.count || dto.questionCount || 20);
       const questions = await qb.getMany();
       questionIds = questions.map((q) => Number(q.id));
     } else if (dto.mode === 'real' || dto.mode === 'mock') {
-      // 历年真题/模拟考试：从试卷获取题目
-      const paper = await this.paperRepository.findOne({
-        where: { id: dto.paperId },
-      });
-      if (!paper) {
-        throw new NotFoundException('试卷不存在');
+      if (dto.paperId) {
+        const paper = await this.paperRepository.findOne({
+          where: { id: dto.paperId },
+        });
+        if (paper && paper.questionIds) {
+          questionIds = paper.questionIds;
+        }
       }
-      questionIds = paper.questionIds || [];
+      if (questionIds.length === 0) {
+        const questions = await this.questionRepository
+          .createQueryBuilder('q')
+          .where('q.status = :status', { status: 'published' })
+          .orderBy('RAND()')
+          .take(75)
+          .getMany();
+        questionIds = questions.map((q) => Number(q.id));
+      }
     } else if (dto.mode === 'daily') {
-      // 每日一练：取一道题
-      const question = await this.questionRepository
+      const questions = await this.questionRepository
         .createQueryBuilder('q')
         .where('q.status = :status', { status: 'published' })
-        .andWhere('q.subjectId = :subjectId', { subjectId: dto.subjectId })
         .orderBy('RAND()')
-        .getOne();
-      questionIds = question ? [Number(question.id)] : [];
+        .take(dto.count || 5)
+        .getMany();
+      questionIds = questions.map((q) => Number(q.id));
+    } else {
+      const questions = await this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.status = :status', { status: 'published' })
+        .orderBy('RAND()')
+        .take(dto.count || 20)
+        .getMany();
+      questionIds = questions.map((q) => Number(q.id));
     }
 
     const record = this.recordRepository.create({
       userId,
-      subjectId: dto.subjectId,
-      mode: dto.mode,
-      paperId: dto.paperId,
+      subjectId: dto.subjectId || 1,
+      mode: dto.mode || 'practice',
+      paperId: dto.paperId || null,
       totalQuestions: questionIds.length,
       answeredQuestions: 0,
       correctCount: 0,
@@ -94,12 +124,66 @@ export class QuizService {
     });
 
     const saved = await this.recordRepository.save(record);
-    saved['questionIds'] = questionIds;
-    return saved;
+
+    return {
+      recordId: String(saved.id),
+      record: {
+        ...saved,
+        id: String(saved.id),
+        questionIds,
+      },
+    };
   }
 
   /**
-   * 保存答案
+   * 保存做题进度
+   */
+  async saveProgress(recordId: number, userId: number, answersMap: Record<string, any>): Promise<void> {
+    const record = await this.recordRepository.findOne({
+      where: { id: recordId, userId },
+    });
+    if (!record) {
+      throw new NotFoundException('做题记录不存在');
+    }
+
+    let answeredCount = 0;
+    for (const [qIdStr, userAns] of Object.entries(answersMap)) {
+      const qId = Number(qIdStr);
+      if (!userAns) continue;
+      answeredCount++;
+
+      const question = await this.questionRepository.findOne({ where: { id: qId } });
+      const ansString = Array.isArray(userAns) ? userAns.sort().join('') : String(userAns);
+      const isCorrect = question && ansString.toUpperCase() === question.answer.toUpperCase() ? 1 : 0;
+
+      let answer = await this.answerRepository.findOne({
+        where: { recordId, questionId: qId },
+      });
+
+      if (answer) {
+        answer.userAnswer = ansString;
+        answer.isCorrect = isCorrect;
+        await this.answerRepository.save(answer);
+      } else {
+        answer = this.answerRepository.create({
+          recordId,
+          userId,
+          questionId: qId,
+          userAnswer: ansString,
+          isCorrect,
+          timeCost: 0,
+          marked: 0,
+        });
+        await this.answerRepository.save(answer);
+      }
+    }
+
+    record.answeredQuestions = answeredCount;
+    await this.recordRepository.save(record);
+  }
+
+  /**
+   * 单题保存答案（兼容旧版接口）
    */
   async saveAnswer(recordId: number, userId: number, dto: SaveAnswerDto): Promise<PracticeAnswer> {
     const record = await this.recordRepository.findOne({
@@ -108,16 +192,12 @@ export class QuizService {
     if (!record) {
       throw new NotFoundException('做题记录不存在');
     }
-    if (record.status !== 'ongoing') {
-      throw new BadRequestException('该练习已结束');
-    }
 
     const question = await this.questionRepository.findOne({
       where: { id: dto.questionId },
     });
-    const isCorrect = question && dto.userAnswer === question.answer ? 1 : 0;
+    const isCorrect = question && dto.userAnswer.toUpperCase() === question.answer.toUpperCase() ? 1 : 0;
 
-    // 检查是否已有答案，有则更新
     let answer = await this.answerRepository.findOne({
       where: { recordId, questionId: dto.questionId },
     });
@@ -140,29 +220,21 @@ export class QuizService {
         marked: dto.marked || 0,
       });
       record.answeredQuestions += 1;
-      if (isCorrect) {
-        record.correctCount += 1;
-      }
     }
 
     await this.answerRepository.save(answer);
     await this.recordRepository.save(record);
-
     return answer;
   }
 
   /**
-   * 交卷判分
+   * 交卷判分并生成报告
    */
   async submitPractice(
     recordId: number,
     userId: number,
-  ): Promise<{
-    record: PracticeRecord;
-    correctCount: number;
-    totalQuestions: number;
-    score: number;
-  }> {
+    answersMap?: Record<string, any>,
+  ): Promise<any> {
     const record = await this.recordRepository.findOne({
       where: { id: recordId, userId },
     });
@@ -170,31 +242,60 @@ export class QuizService {
       throw new NotFoundException('做题记录不存在');
     }
 
+    if (answersMap && Object.keys(answersMap).length > 0) {
+      await this.saveProgress(recordId, userId, answersMap);
+    }
+
     const answers = await this.answerRepository.find({
       where: { recordId },
     });
 
-    const correctCount = answers.filter((a) => a.isCorrect === 1).length;
-    const score = record.totalQuestions > 0
-      ? Math.round((correctCount / record.totalQuestions) * 100)
-      : 0;
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const isVip = !!(user && user.vipLevel > 0 && user.vipExpireAt && new Date(user.vipExpireAt).getTime() > Date.now());
+
+    let correctCount = 0;
+    const details: any[] = [];
+    const wrongAnswers: PracticeAnswer[] = [];
+
+    for (const a of answers) {
+      const question = await this.questionRepository.findOne({ where: { id: a.questionId } });
+      const isCorrect = question && a.userAnswer.toUpperCase() === question.answer.toUpperCase();
+      if (isCorrect) {
+        correctCount++;
+        a.isCorrect = 1;
+      } else {
+        a.isCorrect = 0;
+        wrongAnswers.push(a);
+      }
+      await this.answerRepository.save(a);
+
+      details.push({
+        questionId: String(a.questionId),
+        correct: !!isCorrect,
+        myAnswer: a.userAnswer,
+        correctAnswer: question ? question.answer : '',
+      });
+    }
+
+    const total = record.totalQuestions > 0 ? record.totalQuestions : answers.length;
+    const score = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+    const now = new Date();
+    const duration = record.startedAt ? Math.floor((now.getTime() - new Date(record.startedAt).getTime()) / 1000) : 120;
 
     record.status = 'completed';
     record.correctCount = correctCount;
     record.score = score;
-    record.submittedAt = new Date();
-    record.duration = Math.floor(
-      (record.submittedAt.getTime() - record.startedAt.getTime()) / 1000,
-    );
-
+    record.duration = duration;
+    record.submittedAt = now;
     await this.recordRepository.save(record);
 
-    // 将错题加入错题本
-    const wrongAnswers = answers.filter((a) => a.isCorrect === 0);
+    // 错题自动入库（免费用户限制100题）
+    const existingWrongCount = await this.wrongQuestionRepository.count({ where: { userId } });
     for (const wa of wrongAnswers) {
-      const question = await this.questionRepository.findOne({
-        where: { id: wa.questionId },
-      });
+      if (!isVip && existingWrongCount >= 100) {
+        break; // 免费用户达到100题限制不再自动加入新错题
+      }
+      const question = await this.questionRepository.findOne({ where: { id: wa.questionId } });
       if (!question) continue;
 
       let wrongQ = await this.wrongQuestionRepository.findOne({
@@ -208,7 +309,7 @@ export class QuizService {
         wrongQ = this.wrongQuestionRepository.create({
           userId,
           questionId: wa.questionId,
-          subjectId: record.subjectId,
+          subjectId: record.subjectId || question.subjectId,
           chapterId: question.chapterId,
           wrongCount: 1,
           lastWrongAt: new Date(),
@@ -218,7 +319,83 @@ export class QuizService {
       await this.wrongQuestionRepository.save(wrongQ);
     }
 
-    return { record, correctCount, totalQuestions: record.totalQuestions, score };
+    return {
+      recordId: String(record.id),
+      score,
+      total,
+      correct: correctCount,
+      duration,
+      details,
+    };
+  }
+
+  /**
+   * 获取做题报告详情
+   */
+  async getReport(recordId: number, userId: number): Promise<any> {
+    const record = await this.recordRepository.findOne({
+      where: { id: recordId },
+    });
+    if (!record) {
+      throw new NotFoundException('做题记录不存在');
+    }
+
+    const answers = await this.answerRepository.find({
+      where: { recordId },
+    });
+
+    const wrongQuestions: any[] = [];
+    const typeCountMap: Record<string, { total: number; correct: number }> = {
+      single: { total: 0, correct: 0 },
+      multiple: { total: 0, correct: 0 },
+      judge: { total: 0, correct: 0 },
+      case: { total: 0, correct: 0 },
+      subjective: { total: 0, correct: 0 },
+    };
+
+    for (const a of answers) {
+      const q = await this.questionRepository.findOne({ where: { id: a.questionId } });
+      if (q) {
+        const typeKey = q.type || 'single';
+        if (!typeCountMap[typeKey]) {
+          typeCountMap[typeKey] = { total: 0, correct: 0 };
+        }
+        typeCountMap[typeKey].total += 1;
+        if (a.isCorrect === 1) {
+          typeCountMap[typeKey].correct += 1;
+        } else {
+          wrongQuestions.push({
+            questionId: String(q.id),
+            title: q.content,
+            myAnswer: a.userAnswer,
+            correctAnswer: q.answer,
+            analysis: q.analysis || '暂无解析',
+          });
+        }
+      }
+    }
+
+    const typeStats = Object.entries(typeCountMap)
+      .filter(([_, data]) => data.total > 0)
+      .map(([type, data]) => ({
+        type,
+        total: data.total,
+        correct: data.correct,
+      }));
+
+    const total = record.totalQuestions || answers.length;
+    const correctRate = total > 0 ? Math.round((record.correctCount / total) * 100) : 0;
+
+    return {
+      recordId: String(record.id),
+      score: record.score || 0,
+      total,
+      correct: record.correctCount || 0,
+      duration: record.duration || 0,
+      correctRate,
+      typeStats,
+      wrongQuestions,
+    };
   }
 
   /**
@@ -226,16 +403,68 @@ export class QuizService {
    */
   async getWrongQuestions(
     userId: number,
-    page: number = 1,
-    pageSize: number = 20,
-  ): Promise<{ list: WrongQuestion[]; total: number }> {
-    const [list, total] = await this.wrongQuestionRepository.findAndCount({
-      where: { userId },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { lastWrongAt: 'DESC' },
+    query: any,
+  ): Promise<{ list: any[]; total: number }> {
+    const { page = 1, pageSize = 20, subjectId, chapterId, type } = query;
+    const qb = this.wrongQuestionRepository
+      .createQueryBuilder('wq')
+      .where('wq.userId = :userId', { userId });
+
+    if (subjectId) qb.andWhere('wq.subjectId = :subjectId', { subjectId });
+    if (chapterId) qb.andWhere('wq.chapterId = :chapterId', { chapterId });
+
+    qb.skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('wq.lastWrongAt', 'DESC');
+
+    const [list, total] = await qb.getManyAndCount();
+
+    const questions = await this.questionRepository.find();
+    const qMap = new Map(questions.map((q) => [Number(q.id), q]));
+    const chapters = await this.chapterRepository.find();
+    const cMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+
+    const formatted = list.map((item) => {
+      const q = qMap.get(Number(item.questionId));
+      return {
+        id: String(item.id),
+        questionId: String(item.questionId),
+        type: q ? q.type : 'single',
+        title: q ? q.content : '题目详情',
+        chapterName: cMap.get(Number(item.chapterId)) || '软件工程基础',
+        wrongCount: item.wrongCount || 1,
+        lastWrongAt: item.lastWrongAt,
+      };
     });
-    return { list, total };
+
+    return { list: formatted, total };
+  }
+
+  /**
+   * 移除错题
+   */
+  async removeWrongQuestions(userId: number, questionIds: any[]): Promise<void> {
+    const numIds = questionIds.map((id) => Number(id));
+    if (numIds.length > 0) {
+      await this.wrongQuestionRepository
+        .createQueryBuilder()
+        .delete()
+        .where('userId = :userId', { userId })
+        .andWhere('questionId IN (:...ids)', { ids: numIds })
+        .execute();
+    }
+  }
+
+  /**
+   * 错题重做
+   */
+  async redoWrongQuestions(userId: number, questionIds: any[]): Promise<{ recordId: string }> {
+    const numIds = questionIds.map((id) => Number(id));
+    const result = await this.createPractice(userId, {
+      mode: 'wrong',
+      questionIds: numIds,
+    });
+    return { recordId: result.recordId };
   }
 
   /**
@@ -245,7 +474,7 @@ export class QuizService {
     userId: number,
     page: number = 1,
     pageSize: number = 20,
-  ): Promise<{ list: Favorite[]; total: number }> {
+  ): Promise<{ list: any[]; total: number }> {
     const [list, total] = await this.favoriteRepository.findAndCount({
       where: { userId },
       skip: (page - 1) * pageSize,
@@ -280,22 +509,61 @@ export class QuizService {
   }
 
   /**
+   * 获取用户笔记列表
+   */
+  async getNotes(
+    userId: number,
+    page: number = 1,
+    pageSize: number = 20,
+  ): Promise<{ list: any[]; total: number }> {
+    const [list, total] = await this.noteRepository.findAndCount({
+      where: { userId },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { updatedAt: 'DESC' },
+    });
+
+    const questions = await this.questionRepository.find();
+    const qMap = new Map(questions.map((q) => [Number(q.id), q.content]));
+
+    const formatted = list.map((n) => ({
+      id: String(n.id),
+      questionId: String(n.questionId),
+      title: qMap.get(Number(n.questionId)) || '笔记关联题目',
+      content: n.content,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+    }));
+
+    return { list: formatted, total };
+  }
+
+  /**
    * 添加/更新笔记
    */
-  async saveNote(userId: number, dto: NoteDto): Promise<Note> {
+  async saveNote(userId: number, dto: any): Promise<any> {
+    const qId = Number(dto.questionId);
     let note = await this.noteRepository.findOne({
-      where: { userId, questionId: dto.questionId },
+      where: { userId, questionId: qId },
     });
     if (note) {
       note.content = dto.content;
     } else {
       note = this.noteRepository.create({
         userId,
-        questionId: dto.questionId,
+        questionId: qId,
         content: dto.content,
       });
     }
-    return this.noteRepository.save(note);
+    const saved = await this.noteRepository.save(note);
+    return { id: String(saved.id) };
+  }
+
+  /**
+   * 删除笔记
+   */
+  async deleteNote(userId: number, id: number): Promise<void> {
+    await this.noteRepository.delete({ id, userId });
   }
 
   /**
@@ -314,14 +582,32 @@ export class QuizService {
     userId: number,
     page: number = 1,
     pageSize: number = 20,
-  ): Promise<{ list: PracticeRecord[]; total: number }> {
+  ): Promise<{ list: any[]; total: number }> {
     const [list, total] = await this.recordRepository.findAndCount({
       where: { userId },
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { startedAt: 'DESC' },
     });
-    return { list, total };
+
+    const subjects = await this.subjectRepository.find();
+    const sMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+
+    const formatted = list.map((r) => {
+      const totalQ = r.totalQuestions || 1;
+      return {
+        id: String(r.id),
+        mode: r.mode,
+        subjectName: sMap.get(Number(r.subjectId)) || '软件设计师',
+        score: r.score || 0,
+        total: r.totalQuestions || 0,
+        correctRate: totalQ > 0 ? Math.round((r.correctCount / totalQ) * 100) : 0,
+        duration: r.duration || 0,
+        createdAt: r.startedAt,
+      };
+    });
+
+    return { list: formatted, total };
   }
 
   /**

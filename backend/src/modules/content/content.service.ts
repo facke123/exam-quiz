@@ -23,10 +23,37 @@ export class ContentService {
    * 获取公告列表（前台）
    */
   async getAnnouncements(): Promise<Announcement[]> {
-    return this.announcementRepository.find({
+    let list = await this.announcementRepository.find({
       where: { status: 'published' },
       order: { publishAt: 'DESC' },
     });
+    if (list.length === 0) {
+      const defaults = [
+        {
+          title: '2026年下半年全国计算机技术与软件专业技术资格（水平）考试报名通知',
+          content: '2026年下半年软考报名已开启，请各位考生密切关注考试时间及考区要求，合理安排刷题复习计划。',
+          type: 'notice',
+          status: 'published',
+          publishAt: new Date(),
+        },
+        {
+          title: '软考刷题系统 1.0 版本正式上线',
+          content: '涵盖软件设计师、网络工程师等科目真题、智能组卷、AI 解析等功能，助力高效通关！',
+          type: 'news',
+          status: 'published',
+          publishAt: new Date(),
+        },
+      ];
+      for (const d of defaults) {
+        const item = this.announcementRepository.create(d);
+        await this.announcementRepository.save(item);
+      }
+      list = await this.announcementRepository.find({
+        where: { status: 'published' },
+        order: { publishAt: 'DESC' },
+      });
+    }
+    return list;
   }
 
   /**
@@ -35,13 +62,28 @@ export class ContentService {
   async getAdminAnnouncements(
     page: number = 1,
     pageSize: number = 20,
-  ): Promise<{ list: Announcement[]; total: number }> {
+  ): Promise<{ list: any[]; total: number }> {
     const [list, total] = await this.announcementRepository.findAndCount({
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },
     });
-    return { list, total };
+    if (total === 0) {
+      await this.getAnnouncements();
+      return this.getAdminAnnouncements(page, pageSize);
+    }
+    const formatted = list.map((a) => ({
+      id: Number(a.id),
+      title: a.title,
+      content: a.content,
+      type: a.type || 'notice',
+      status: a.status || 'published',
+      isTop: true,
+      viewCount: 100,
+      publishAt: a.publishAt || a.createdAt,
+      createdAt: a.createdAt,
+    }));
+    return { list: formatted, total };
   }
 
   /**
@@ -60,12 +102,15 @@ export class ContentService {
   /**
    * 创建公告
    */
-  async createAnnouncement(dto: CreateAnnouncementDto): Promise<Announcement> {
+  async createAnnouncement(dto: CreateAnnouncementDto | any): Promise<Announcement> {
     const announcement = this.announcementRepository.create({
-      ...dto,
+      title: dto.title,
+      content: dto.content,
+      type: dto.type || 'notice',
+      status: dto.status || 'published',
       publishAt: dto.publishAt ? new Date(dto.publishAt) : new Date(),
-    });
-    return this.announcementRepository.save(announcement);
+    } as any);
+    return this.announcementRepository.save(announcement as any);
   }
 
   /**
@@ -73,10 +118,13 @@ export class ContentService {
    */
   async updateAnnouncement(
     id: number,
-    dto: Partial<CreateAnnouncementDto>,
+    dto: Partial<CreateAnnouncementDto> | any,
   ): Promise<Announcement> {
     const announcement = await this.getAnnouncement(id);
-    Object.assign(announcement, dto);
+    if (dto.title !== undefined) announcement.title = dto.title;
+    if (dto.content !== undefined) announcement.content = dto.content;
+    if (dto.type !== undefined) announcement.type = dto.type;
+    if (dto.status !== undefined) announcement.status = dto.status;
     if (dto.publishAt) {
       announcement.publishAt = new Date(dto.publishAt);
     }
@@ -99,38 +147,98 @@ export class ContentService {
    * 获取 Banner 列表（前台）
    */
   async getBanners(): Promise<Banner[]> {
-    return this.bannerRepository.find({
+    let list = await this.bannerRepository.find({
       where: { status: 1 },
       order: { sort: 'ASC' },
     });
+    if (list.length === 0) {
+      const defaults = [
+        {
+          title: '2026年软考冲刺刷题营',
+          imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&auto=format&fit=crop&q=60',
+          linkUrl: '/practice/mock-exam',
+          sort: 1,
+          status: 1,
+        },
+        {
+          title: '历年真题AI智能解析全面上线',
+          imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60',
+          linkUrl: '/practice/real-exam',
+          sort: 2,
+          status: 1,
+        },
+      ];
+      for (const d of defaults) {
+        const item = this.bannerRepository.create(d);
+        await this.bannerRepository.save(item);
+      }
+      list = await this.bannerRepository.find({
+        where: { status: 1 },
+        order: { sort: 'ASC' },
+      });
+    }
+    return list;
   }
 
   /**
    * 获取 Banner 列表（后台）
    */
-  async getAdminBanners(): Promise<Banner[]> {
-    return this.bannerRepository.find({
-      order: { sort: 'ASC' },
+  async getAdminBanners(page: number = 1, pageSize: number = 20): Promise<{ list: any[]; total: number }> {
+    const [list, total] = await this.bannerRepository.findAndCount({
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { sort: 'ASC', id: 'ASC' },
     });
+    if (total === 0) {
+      await this.getBanners();
+      return this.getAdminBanners(page, pageSize);
+    }
+    const formatted = list.map((b) => ({
+      id: Number(b.id),
+      title: b.title,
+      imageUrl: b.imageUrl,
+      image: b.imageUrl,
+      linkUrl: b.linkUrl,
+      url: b.linkUrl,
+      position: 'home',
+      sort: b.sort || 0,
+      status: b.status === 1 ? 'online' : 'offline',
+      startAt: b.createdAt,
+      endAt: null,
+      createdAt: b.createdAt,
+    }));
+    return { list: formatted, total };
   }
 
   /**
    * 创建 Banner
    */
-  async createBanner(dto: CreateBannerDto): Promise<Banner> {
-    const banner = this.bannerRepository.create(dto);
+  async createBanner(dto: CreateBannerDto | any): Promise<Banner> {
+    const banner = this.bannerRepository.create({
+      title: dto.title,
+      imageUrl: dto.imageUrl || dto.image || '',
+      linkUrl: dto.linkUrl || dto.url || '',
+      sort: dto.sort || 0,
+      status: dto.status === 'offline' || dto.status === 0 ? 0 : 1,
+    });
     return this.bannerRepository.save(banner);
   }
 
   /**
    * 更新 Banner
    */
-  async updateBanner(id: number, dto: Partial<CreateBannerDto>): Promise<Banner> {
+  async updateBanner(id: number, dto: Partial<CreateBannerDto> | any): Promise<Banner> {
     const banner = await this.bannerRepository.findOne({ where: { id } });
     if (!banner) {
       throw new NotFoundException('Banner不存在');
     }
-    Object.assign(banner, dto);
+    if (dto.title !== undefined) banner.title = dto.title;
+    if (dto.imageUrl !== undefined) banner.imageUrl = dto.imageUrl;
+    if (dto.image !== undefined) banner.imageUrl = dto.image;
+    if (dto.linkUrl !== undefined) banner.linkUrl = dto.linkUrl;
+    if (dto.url !== undefined) banner.linkUrl = dto.url;
+    if (dto.sort !== undefined) banner.sort = dto.sort;
+    if (dto.status !== undefined) banner.status = dto.status === 'offline' || dto.status === 0 ? 0 : 1;
     return this.bannerRepository.save(banner);
   }
 

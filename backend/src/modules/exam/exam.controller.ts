@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -23,35 +24,37 @@ import { Public } from '@/common/decorators/public.decorator';
 /**
  * 考试管理控制器
  */
-@ApiTags('考试管理')
+@ApiTags('考试与试卷管理')
 @ApiBearerAuth()
-@Controller('exam')
+@Controller()
 export class ExamController {
   constructor(private readonly examService: ExamService) {}
 
-  // ==================== 科目 ====================
+  // ==================== 科目管理 ====================
 
   @Public()
-  @Get('subjects')
+  @Get(['exam/subjects', 'admin/subjects', 'admin/subjects/all'])
   @ApiOperation({ summary: '科目列表' })
   async getSubjects() {
-    return this.examService.getSubjects();
+    const list = await this.examService.getSubjects();
+    return { list, total: list.length };
   }
 
   @Public()
-  @Get('subjects/:id')
+  @Get(['exam/subjects/:id', 'admin/subjects/:id'])
   @ApiOperation({ summary: '科目详情' })
   async getSubject(@Param('id', ParseIntPipe) id: number) {
     return this.examService.getSubject(id);
   }
 
-  @Post('subjects')
+  @Post(['exam/subjects', 'admin/subjects'])
   @ApiOperation({ summary: '创建科目' })
   async createSubject(@Body() dto: CreateSubjectDto) {
     return this.examService.createSubject(dto);
   }
 
-  @Patch('subjects/:id')
+  @Put(['exam/subjects/:id', 'admin/subjects/:id'])
+  @Patch(['exam/subjects/:id', 'admin/subjects/:id'])
   @ApiOperation({ summary: '更新科目' })
   async updateSubject(
     @Param('id', ParseIntPipe) id: number,
@@ -60,29 +63,34 @@ export class ExamController {
     return this.examService.updateSubject(id, dto);
   }
 
-  @Delete('subjects/:id')
+  @Delete(['exam/subjects/:id', 'admin/subjects/:id'])
   @ApiOperation({ summary: '删除科目' })
   async deleteSubject(@Param('id', ParseIntPipe) id: number) {
     await this.examService.deleteSubject(id);
     return { message: '删除成功' };
   }
 
-  // ==================== 章节 ====================
+  // ==================== 章节与知识点管理 ====================
 
   @Public()
-  @Get('chapters/:subjectId')
-  @ApiOperation({ summary: '章节列表' })
-  async getChapters(@Param('subjectId', ParseIntPipe) subjectId: number) {
-    return this.examService.getChapters(subjectId);
+  @Get(['exam/chapters/:subjectId', 'admin/chapters/tree', 'question/chapters'])
+  @ApiOperation({ summary: '章节树列表' })
+  async getChapters(
+    @Param('subjectId') subjectIdParam?: string,
+    @Query('subjectId') subjectIdQuery?: string,
+  ) {
+    const subId = Number(subjectIdParam || subjectIdQuery || 1);
+    return this.examService.getChapters(subId);
   }
 
-  @Post('chapters')
+  @Post(['exam/chapters', 'admin/chapters'])
   @ApiOperation({ summary: '创建章节' })
   async createChapter(@Body() dto: CreateChapterDto) {
     return this.examService.createChapter(dto);
   }
 
-  @Patch('chapters/:id')
+  @Put(['exam/chapters/:id', 'admin/chapters/:id'])
+  @Patch(['exam/chapters/:id', 'admin/chapters/:id'])
   @ApiOperation({ summary: '更新章节' })
   async updateChapter(
     @Param('id', ParseIntPipe) id: number,
@@ -91,29 +99,27 @@ export class ExamController {
     return this.examService.updateChapter(id, dto);
   }
 
-  @Delete('chapters/:id')
+  @Delete(['exam/chapters/:id', 'admin/chapters/:id'])
   @ApiOperation({ summary: '删除章节' })
   async deleteChapter(@Param('id', ParseIntPipe) id: number) {
     await this.examService.deleteChapter(id);
     return { message: '删除成功' };
   }
 
-  // ==================== 知识点 ====================
-
   @Public()
-  @Get('knowledge-points/:chapterId')
-  @ApiOperation({ summary: '知识点列表' })
+  @Get('exam/knowledge-points/:chapterId')
+  @ApiOperation({ summary: '获取知识点列表' })
   async getKnowledgePoints(@Param('chapterId', ParseIntPipe) chapterId: number) {
     return this.examService.getKnowledgePoints(chapterId);
   }
 
-  @Post('knowledge-points')
+  @Post('exam/knowledge-points')
   @ApiOperation({ summary: '创建知识点' })
   async createKnowledgePoint(@Body() dto: CreateKnowledgePointDto) {
     return this.examService.createKnowledgePoint(dto);
   }
 
-  @Patch('knowledge-points/:id')
+  @Patch('exam/knowledge-points/:id')
   @ApiOperation({ summary: '更新知识点' })
   async updateKnowledgePoint(
     @Param('id', ParseIntPipe) id: number,
@@ -122,42 +128,47 @@ export class ExamController {
     return this.examService.updateKnowledgePoint(id, dto);
   }
 
-  @Delete('knowledge-points/:id')
+  @Delete('exam/knowledge-points/:id')
   @ApiOperation({ summary: '删除知识点' })
   async deleteKnowledgePoint(@Param('id', ParseIntPipe) id: number) {
     await this.examService.deleteKnowledgePoint(id);
     return { message: '删除成功' };
   }
 
-  // ==================== 试卷 ====================
+  // ==================== 试卷管理 ====================
 
   @Public()
-  @Get('papers')
-  @ApiOperation({ summary: '试卷列表' })
+  @Get(['exam/papers', 'admin/papers'])
+  @ApiOperation({ summary: '获取试卷列表' })
   async getPapers(
     @Query('subjectId') subjectId?: number,
     @Query('type') type?: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
   ) {
     return this.examService.getPapers(
       subjectId ? Number(subjectId) : undefined,
       type,
+      page ? Number(page) : 1,
+      pageSize ? Number(pageSize) : 20,
     );
   }
 
   @Public()
-  @Get('papers/:id')
-  @ApiOperation({ summary: '试卷详情' })
+  @Get(['exam/papers/:id', 'admin/papers/:id'])
+  @ApiOperation({ summary: '获取试卷详情' })
   async getPaper(@Param('id', ParseIntPipe) id: number) {
     return this.examService.getPaper(id);
   }
 
-  @Post('papers')
+  @Post(['exam/papers', 'admin/papers'])
   @ApiOperation({ summary: '创建试卷' })
   async createPaper(@Body() dto: CreatePaperDto) {
     return this.examService.createPaper(dto);
   }
 
-  @Patch('papers/:id')
+  @Put(['exam/papers/:id', 'admin/papers/:id'])
+  @Patch(['exam/papers/:id', 'admin/papers/:id'])
   @ApiOperation({ summary: '更新试卷' })
   async updatePaper(
     @Param('id', ParseIntPipe) id: number,
@@ -166,14 +177,14 @@ export class ExamController {
     return this.examService.updatePaper(id, dto);
   }
 
-  @Delete('papers/:id')
+  @Delete(['exam/papers/:id', 'admin/papers/:id'])
   @ApiOperation({ summary: '删除试卷' })
   async deletePaper(@Param('id', ParseIntPipe) id: number) {
     await this.examService.deletePaper(id);
     return { message: '删除成功' };
   }
 
-  @Post('papers/generate')
+  @Post(['exam/papers/generate', 'admin/papers/generate'])
   @ApiOperation({ summary: '自动组卷' })
   async generatePaper(@Body() dto: GeneratePaperDto) {
     return this.examService.generatePaper(dto);

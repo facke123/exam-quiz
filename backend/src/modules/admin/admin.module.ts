@@ -8,19 +8,20 @@ import { Admin } from '@/database/entities/admin.entity';
 import { User } from '@/database/entities/user.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
 import { OperationLog } from '@/database/entities/operation-log.entity';
+import { PracticeRecord } from '@/database/entities/practice-record.entity';
 
 /**
  * 管理模块
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Admin, User, SystemConfig, OperationLog]),
+    TypeOrmModule.forFeature([Admin, User, SystemConfig, OperationLog, PracticeRecord]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get('jwt.secret'),
-        signOptions: { expiresIn: '1d' },
+        signOptions: { expiresIn: '7d' },
       }),
     }),
   ],

@@ -5,29 +5,46 @@ import { getRedisConfig } from '../config/redis.config';
 
 /**
  * Redis 服务
- * 封装 ioredis 常用操作
+ * 封装 ioredis 常用操作（支持开发模式内存降级）
  */
 @Injectable()
 export class RedisService implements OnModuleInit {
   private readonly logger = new Logger(RedisService.name);
-  private client: Redis;
+  private client: Redis | null = null;
+  private memoryStore = new Map<string, { value: string; expireAt?: number }>();
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    this.client = new Redis(getRedisConfig(this.configService));
-    this.client.on('connect', () => {
-      this.logger.log('Redis 连接成功');
-    });
-    this.client.on('error', (err) => {
-      this.logger.error(`Redis 连接错误: ${err.message}`);
-    });
+    try {
+      const config = getRedisConfig(this.configService);
+      this.client = new Redis({
+        ...config,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => null,
+      });
+
+      this.client.connect().then(() => {
+        this.logger.log('Redis 连接成功');
+      }).catch((err) => {
+        this.logger.warn(`Redis 连接失败，已启用内存缓存降级: ${err.message}`);
+        this.client = null;
+      });
+
+      this.client.on('error', (err) => {
+        this.logger.warn(`Redis 异常，使用内存降级: ${err.message}`);
+      });
+    } catch (e: any) {
+      this.logger.warn(`Redis 初始化跳过，使用内存降级: ${e.message}`);
+      this.client = null;
+    }
   }
 
   /**
    * 获取底层 Redis 客户端
    */
-  getClient(): Redis {
+  getClient(): Redis | null {
     return this.client;
   }
 
@@ -35,125 +52,117 @@ export class RedisService implements OnModuleInit {
    * 获取值
    */
   async get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    if (this.client) {
+      try {
+        return await this.client.get(key);
+      } catch {
+        // fallback
+      }
+    }
+    const data = this.memoryStore.get(key);
+    if (!data) return null;
+    if (data.expireAt && data.expireAt < Date.now()) {
+      this.memoryStore.delete(key);
+      return null;
+    }
+    return data.value;
   }
 
   /**
    * 设置值
    */
   async set(key: string, value: string, ttl?: number): Promise<void> {
-    if (ttl) {
-      await this.client.set(key, value, 'EX', ttl);
-    } else {
-      await this.client.set(key, value);
+    if (this.client) {
+      try {
+        if (ttl) {
+          await this.client.set(key, value, 'EX', ttl);
+        } else {
+          await this.client.set(key, value);
+        }
+        return;
+      } catch {
+        // fallback
+      }
     }
+    const expireAt = ttl ? Date.now() + ttl * 1000 : undefined;
+    this.memoryStore.set(key, { value, expireAt });
   }
 
   /**
    * 删除键
    */
   async del(key: string): Promise<number> {
-    return this.client.del(key);
+    if (this.client) {
+      try {
+        return await this.client.del(key);
+      } catch {
+        // fallback
+      }
+    }
+    const existed = this.memoryStore.has(key);
+    this.memoryStore.delete(key);
+    return existed ? 1 : 0;
   }
 
   /**
    * 设置过期时间
    */
   async expire(key: string, seconds: number): Promise<boolean> {
-    const result = await this.client.expire(key, seconds);
-    return result === 1;
+    if (this.client) {
+      try {
+        const result = await this.client.expire(key, seconds);
+        return result === 1;
+      } catch {
+        // fallback
+      }
+    }
+    const data = this.memoryStore.get(key);
+    if (data) {
+      data.expireAt = Date.now() + seconds * 1000;
+      return true;
+    }
+    return false;
   }
 
   /**
    * 自增
    */
   async incr(key: string): Promise<number> {
-    return this.client.incr(key);
+    if (this.client) {
+      try {
+        return await this.client.incr(key);
+      } catch {
+        // fallback
+      }
+    }
+    const current = await this.get(key);
+    const newVal = current ? parseInt(current, 10) + 1 : 1;
+    await this.set(key, newVal.toString());
+    return newVal;
   }
 
   /**
    * 自减
    */
   async decr(key: string): Promise<number> {
-    return this.client.decr(key);
+    if (this.client) {
+      try {
+        return await this.client.decr(key);
+      } catch {
+        // fallback
+      }
+    }
+    const current = await this.get(key);
+    const newVal = current ? parseInt(current, 10) - 1 : -1;
+    await this.set(key, newVal.toString());
+    return newVal;
   }
 
   /**
    * 判断键是否存在
    */
   async exists(key: string): Promise<boolean> {
-    const result = await this.client.exists(key);
-    return result === 1;
-  }
-
-  /**
-   * 获取哈希字段值
-   */
-  async hget(key: string, field: string): Promise<string | null> {
-    return this.client.hget(key, field);
-  }
-
-  /**
-   * 设置哈希字段值
-   */
-  async hset(key: string, field: string, value: string): Promise<number> {
-    return this.client.hset(key, field, value);
-  }
-
-  /**
-   * 获取哈希所有字段
-   */
-  async hgetall(key: string): Promise<Record<string, string>> {
-    return this.client.hgetall(key);
-  }
-
-  /**
-   * 删除哈希字段
-   */
-  async hdel(key: string, ...fields: string[]): Promise<number> {
-    return this.client.hdel(key, ...fields);
-  }
-
-  /**
-   * 向列表左侧插入
-   */
-  async lpush(key: string, ...values: string[]): Promise<number> {
-    return this.client.lpush(key, ...values);
-  }
-
-  /**
-   * 从列表右侧弹出
-   */
-  async rpop(key: string): Promise<string | null> {
-    return this.client.rpop(key);
-  }
-
-  /**
-   * 获取列表长度
-   */
-  async llen(key: string): Promise<number> {
-    return this.client.llen(key);
-  }
-
-  /**
-   * 设置集合成员
-   */
-  async sadd(key: string, ...members: string[]): Promise<number> {
-    return this.client.sadd(key, ...members);
-  }
-
-  /**
-   * 判断是否为集合成员
-   */
-  async sismember(key: string, member: string): Promise<boolean> {
-    const result = await this.client.sismember(key, member);
-    return result === 1;
-  }
-
-  /**
-   * 获取集合所有成员
-   */
-  async smembers(key: string): Promise<string[]> {
-    return this.client.smembers(key);
+    const val = await this.get(key);
+    return val !== null;
   }
 }

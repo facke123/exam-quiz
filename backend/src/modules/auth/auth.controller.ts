@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { SendCodeDto } from './dto/send-code.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '@/common/decorators/public.decorator';
@@ -34,11 +35,18 @@ export class AuthController {
   }
 
   @Public()
+  @Post('send-code')
+  @ApiOperation({ summary: '发送验证码' })
+  async sendCode(@Body() dto: SendCodeDto) {
+    return this.authService.sendCode(dto);
+  }
+
+  @Public()
   @Post('forgot-password')
   @ApiOperation({ summary: '忘记密码' })
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+  async forgotPassword(@Body() dto: any) {
     await this.authService.forgotPassword(dto);
-    return { message: '验证码已发送' };
+    return { message: '密码重置成功' };
   }
 
   @Public()

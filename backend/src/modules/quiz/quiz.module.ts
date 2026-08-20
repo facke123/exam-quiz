@@ -10,6 +10,9 @@ import { Favorite } from '@/database/entities/favorite.entity';
 import { Note } from '@/database/entities/note.entity';
 import { ReviewQueue } from '@/database/entities/review-queue.entity';
 import { Paper } from '@/database/entities/paper.entity';
+import { Subject } from '@/database/entities/subject.entity';
+import { Chapter } from '@/database/entities/chapter.entity';
+import { User } from '@/database/entities/user.entity';
 
 /**
  * 做题模块
@@ -25,6 +28,9 @@ import { Paper } from '@/database/entities/paper.entity';
       Note,
       ReviewQueue,
       Paper,
+      Subject,
+      Chapter,
+      User,
     ]),
   ],
   controllers: [QuizController],

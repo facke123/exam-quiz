@@ -7,6 +7,10 @@ import { Question } from '@/database/entities/question.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
 import { PracticeAnswer } from '@/database/entities/practice-answer.entity';
 import { Order } from '@/database/entities/order.entity';
+import { WrongQuestion } from '@/database/entities/wrong-question.entity';
+import { Favorite } from '@/database/entities/favorite.entity';
+import { Chapter } from '@/database/entities/chapter.entity';
+import { Subject } from '@/database/entities/subject.entity';
 
 /**
  * 统计模块
@@ -19,6 +23,10 @@ import { Order } from '@/database/entities/order.entity';
       PracticeRecord,
       PracticeAnswer,
       Order,
+      WrongQuestion,
+      Favorite,
+      Chapter,
+      Subject,
     ]),
   ],
   controllers: [StatsController],
