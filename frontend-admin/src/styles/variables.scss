@@ -1,0 +1,41 @@
+// Element Plus 主题变量覆盖
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': (
+      'base': #2f6bff,
+    ),
+    'success': (
+      'base': #22c55e,
+    ),
+    'warning': (
+      'base': #f59e0b,
+    ),
+    'danger': (
+      'base': #ef4444,
+    ),
+    'info': (
+      'base': #94a3b8,
+    ),
+  )
+);
+
+// 自定义全局 CSS 变量
+:root {
+  --app-sidebar-width: 220px;
+  --app-sidebar-collapsed-width: 64px;
+  --app-navbar-height: 56px;
+  --app-tabs-height: 40px;
+  --app-content-bg: #f5f7fa;
+  --app-border-color: #ebeef5;
+  --app-text-primary: #303133;
+  --app-text-regular: #606266;
+  --app-text-secondary: #909399;
+}
+
+html.dark {
+  --app-content-bg: #141414;
+  --app-border-color: #303030;
+  --app-text-primary: #e5eaf3;
+  --app-text-regular: #cfd3dc;
+  --app-text-secondary: #a3a6ad;
+}

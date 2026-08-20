@@ -1,0 +1,102 @@
+# ============================================================
+# 软考刷题系统 - .gitignore
+# ============================================================
+
+# ---------- 依赖目录 ----------
+node_modules/
+.pnp/
+.pnp.js
+.pnp.cjs
+.pnp.mjs
+
+# ---------- 构建产物 ----------
+dist/
+build/
+out/
+.next/
+.nuxt/
+.nitro/
+.cache/
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
+
+# ---------- 日志 ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- 环境变量 / 密钥 ----------
+.env
+.env.*
+!.env.example
+!.env.production.example
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+
+# ---------- 编辑器 / IDE ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+.history/
+.fleet
+
+# ---------- 操作系统 ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ---------- 测试 / 覆盖率 ----------
+coverage/
+*.lcov
+.nyc_output/
+
+# ---------- TypeScript ----------
+*.tsbuildinfo
+
+# ---------- Docker 数据卷(本地数据持久化, 不提交) ----------
+docker/mysql/data/
+docker/redis/data/
+docker/rabbitmq/data/
+docker/minio/data/
+!docker/mysql/data/.gitkeep
+!docker/redis/data/.gitkeep
+!docker/rabbitmq/data/.gitkeep
+!docker/minio/data/.gitkeep
+
+# ---------- 上传 / 临时文件 ----------
+uploads/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# ---------- 包管理锁文件(保留, 此处仅示例: 锁文件应提交) ----------
+# package-lock.json  -> 提交
+# pnpm-lock.yaml     -> 提交
+
+# ---------- Misc ----------
+.docusaurus/
+.serverless/
+.fusebox/
+.dynamodb/

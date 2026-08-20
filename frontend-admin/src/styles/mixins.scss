@@ -1,0 +1,47 @@
+// 响应式断点
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == sm {
+    @media (max-width: 768px) {
+      @content;
+    }
+  } @else if $breakpoint == md {
+    @media (max-width: 992px) {
+      @content;
+    }
+  } @else if $breakpoint == lg {
+    @media (max-width: 1200px) {
+      @content;
+    }
+  }
+}
+
+// 多行文本省略
+@mixin text-ellipsis($lines: 1) {
+  @if $lines == 1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  } @else {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: $lines;
+    overflow: hidden;
+  }
+}
+
+// 卡片样式
+@mixin card-box {
+  background: var(--el-bg-color);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+}
+
+// 页面搜索栏样式
+@mixin search-bar {
+  margin-bottom: 16px;
+  padding: 16px 16px 0;
+  background: var(--el-bg-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+}

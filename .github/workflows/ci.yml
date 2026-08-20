@@ -1,0 +1,128 @@
+# ============================================================
+# 软考刷题系统 - 持续集成 (CI)
+# 触发: push 到 main/develop, 或对 main/develop 的 PR
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# 同分支并发时取消旧的运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------- 后端测试与构建 --------------------
+  backend-test:
+    name: Backend Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: backend/dist
+          retention-days: 7
+
+  # -------------------- H5 前端构建 --------------------
+  frontend-h5-build:
+    name: Frontend H5 Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-h5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-h5/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: /api
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-h5-dist
+          path: frontend-h5/dist
+          retention-days: 7
+
+  # -------------------- 后台管理端构建 --------------------
+  frontend-admin-build:
+    name: Frontend Admin Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-admin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: /api
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-admin-dist
+          path: frontend-admin/dist
+          retention-days: 7

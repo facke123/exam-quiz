@@ -1,0 +1,40 @@
+# ============================================================
+# 软考刷题系统 - 移动端 H5 镜像 (多阶段构建)
+# ============================================================
+
+# ---------- Stage 1: 构建 ----------
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# 复制依赖清单以利用 docker 缓存
+COPY frontend-h5/package.json frontend-h5/package-lock.json* ./
+
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# 复制源码并构建
+COPY frontend-h5/ ./
+
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
+RUN npm run build
+
+# ---------- Stage 2: 运行 ----------
+FROM nginx:alpine AS runner
+
+# 复制 nginx 站点配置
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+
+# 复制构建产物到 nginx 静态目录
+COPY --from=builder /app/dist /usr/share/nginx/html/h5
+
+# 创建缓存目录
+RUN mkdir -p /var/cache/nginx && chown -R nginx:nginx /var/cache/nginx
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget --spider -q http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

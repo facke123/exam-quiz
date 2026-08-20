@@ -1,0 +1,61 @@
+# ============================================================
+# 软考刷题系统 - NestJS 后端镜像 (多阶段构建)
+# ============================================================
+
+# ---------- Stage 1: 构建 ----------
+FROM node:20-alpine AS builder
+
+# 安装构建依赖(部分 npm 包需要原生编译)
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# 先复制依赖清单以利用 docker 缓存
+COPY backend/package.json backend/package-lock.json* ./
+
+# 安装依赖(含 devDependencies 以便编译)
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# 复制源码
+COPY backend/ ./
+
+# 编译 TypeScript -> dist
+RUN npm run build
+
+# 裁剪生产依赖
+RUN npm prune --production --legacy-peer-deps
+
+# ---------- Stage 2: 运行 ----------
+FROM node:20-alpine AS runner
+
+# 安装常用工具与 tini(优雅信号处理)
+RUN apk add --no-cache tini curl wget
+
+WORKDIR /app
+
+# 创建非 root 用户
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# 复制编译产物与生产依赖
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+# 可选: 复制启动脚本
+# COPY docker/start-backend.sh /start.sh
+# RUN chmod +x /start.sh
+
+# 切换非 root 用户
+USER appuser
+
+# 健康检查(需在容器内可用 curl)
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
+  CMD wget --spider -q http://localhost:3000/health || exit 1
+
+EXPOSE 3000
+
+# 使用 tini 作为 init 进程
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# 启动 NestJS
+CMD ["node", "dist/main.js"]

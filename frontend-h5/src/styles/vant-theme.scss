@@ -1,0 +1,69 @@
+// Vant 4 主题变量覆盖
+// 文档：https://vant-ui.github.io/vant/v4/#/zh-CN/config-provider
+
+:root {
+  // 主色
+  --van-primary-color: #6366f1;
+  --van-primary-active-color: #4f46e5;
+
+  // 文字
+  --van-text-color: #1e293b;
+  --van-text-color-2: #475569;
+  --van-text-color-3: #94a3b8;
+
+  // 背景与边框
+  --van-background: #f8fafc;
+  --van-background-2: #ffffff;
+  --van-border-color: #e2e8f0;
+
+  // 圆角
+  --van-radius-md: 12px;
+  --van-radius-lg: 16px;
+  --van-radius-max: 9999px;
+
+  // 按钮
+  --van-button-primary-background: #6366f1;
+  --van-button-primary-border-color: #6366f1;
+  --van-button-border-radius: 9999px;
+  --van-button-default-height: 44px;
+  --van-button-normal-padding: 0 20px;
+
+  // Tabbar
+  --van-tabbar-height: 56px;
+  --van-tabbar-item-active-color: #6366f1;
+  --van-tabbar-background: rgba(255, 255, 255, 0.88);
+
+  // NavBar
+  --van-nav-bar-background: transparent;
+  --van-nav-bar-title-font-size: 17px;
+  --van-nav-bar-arrow-size: 18px;
+
+  // Cell
+  --van-cell-background: #ffffff;
+  --van-cell-border-color: #e2e8f0;
+  --van-cell-vertical-padding: 14px;
+  --van-cell-group-inset-border-radius: 16px;
+
+  // Tag
+  --van-tag-border-radius: 6px;
+  --van-tag-primary-color: #6366f1;
+
+  // Dialog
+  --van-dialog-border-radius: 16px;
+  --van-dialog-confirm-button-text-color: #6366f1;
+
+  // Toast
+  --van-toast-border-radius: 12px;
+
+  // Loading
+  --van-loading-text-color: #6366f1;
+
+  // Switch
+  --van-switch-on-background: #6366f1;
+
+  // Tab
+  --van-tabs-default-color: #6366f1;
+
+  // Progress
+  --van-progress-color: #6366f1;
+}
