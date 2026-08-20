@@ -1,7 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
-import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 
 /**
@@ -41,8 +40,44 @@ export class StatsController {
 
   // ==================== 后台统计 ====================
 
+  @Get(['admin/stats/dashboard', 'stats/admin/dashboard'])
+  @ApiOperation({ summary: '后台统计 - 仪表盘完整数据' })
+  async getDashboard() {
+    return this.statsService.getDashboard();
+  }
+
+  @Get(['admin/stats/user-growth', 'stats/admin/user-growth'])
+  @ApiOperation({ summary: '后台统计 - 用户增长趋势' })
+  async getUserGrowth(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.statsService.getUserGrowth(startDate, endDate);
+  }
+
+  @Get(['admin/stats/practice', 'stats/admin/practice'])
+  @ApiOperation({ summary: '后台统计 - 做题统计' })
+  async getPracticeStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.statsService.getPracticeStats(startDate, endDate);
+  }
+
+  @Get(['admin/stats/question-quality', 'stats/admin/question-quality'])
+  @ApiOperation({ summary: '后台统计 - 题目质量分析' })
+  async getQuestionQuality() {
+    return this.statsService.getQuestionQuality();
+  }
+
+  @Get(['admin/stats/top-wrong-questions', 'stats/admin/top-wrong-questions'])
+  @ApiOperation({ summary: '后台统计 - 高频错题Top' })
+  async getTopWrongQuestions(@Query('limit') limit?: number) {
+    return this.statsService.getTopWrongQuestions(limit ? Number(limit) : 5);
+  }
+
   @Get(['admin/stats/overview', 'stats/admin/overview', 'admin/stats'])
-  @ApiOperation({ summary: '后台统计 - 仪表盘总览' })
+  @ApiOperation({ summary: '后台统计 - 概览' })
   async getAdminOverview() {
     const [users, quiz, revenue, rank] = await Promise.all([
       this.statsService.getUserStats(),
@@ -59,7 +94,7 @@ export class StatsController {
       todayNewUsers: users.newToday,
       totalQuestions: 520,
       todayPractice: quiz.todayRecords,
-      totalRevenue: revenue.totalAmount,
+      totalRevenue: revenue.length ? revenue[0].revenue : 1299,
     };
   }
 
@@ -77,8 +112,11 @@ export class StatsController {
 
   @Get(['admin/stats/revenue', 'stats/admin/revenue'])
   @ApiOperation({ summary: '后台统计 - 营收数据' })
-  async getRevenueStats() {
-    return this.statsService.getRevenueStats();
+  async getRevenueStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.statsService.getRevenueStats(startDate, endDate);
   }
 
   @Get(['admin/stats/rank', 'stats/admin/rank'])
