@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './config/configuration';
 import { RedisModule } from './redis/redis.module';
+import { SnakeNamingStrategy } from './common/strategies/snake-naming.strategy';
 import { AuthModule } from './modules/auth/auth.module';
 import { QuestionModule } from './modules/question/question.module';
 import { QuizModule } from './modules/quiz/quiz.module';
@@ -35,6 +36,7 @@ import { ContentModule } from './modules/content/content.module';
         database: configService.get('database.database'),
         autoLoadEntities: true,
         synchronize: false,
+        namingStrategy: new SnakeNamingStrategy(),
         logging: configService.get('database.logging'),
         timezone: '+08:00',
         charset: 'utf8mb4',

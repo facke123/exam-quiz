@@ -14,7 +14,7 @@ SET NAMES utf8mb4;
 INSERT INTO admins (username, password, real_name, role, status) VALUES
 (
   'admin',
-  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcflYp1ccQ7vPpTR2dsFQuEhf8m',
+  '$2a$10$Wzwvebb5MK7ea7cCgbJXQucyEqDyxa316gZSoojFSwWM8UBjIR/Xe',
   '超级管理员',
   'super_admin',
   1
