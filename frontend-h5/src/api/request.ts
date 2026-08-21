@@ -34,10 +34,16 @@ service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
     const res = response.data
     if (res.code !== 0) {
-      showFailToast(res.message || '请求失败')
       if (res.code === 401) {
         storage.remove('token')
-        router.replace('/auth/login')
+        storage.remove('userInfo')
+        const currentPath = router.currentRoute.value.fullPath
+        if (!currentPath.startsWith('/auth/')) {
+          showToast('登录已过期，请重新登录')
+          router.replace({ path: '/auth/login', query: { redirect: currentPath } })
+        }
+      } else {
+        showFailToast(res.message || '请求失败')
       }
       return Promise.reject(new Error(res.message || 'Error'))
     }
@@ -47,8 +53,12 @@ service.interceptors.response.use(
     const status = error.response?.status
     if (status === 401) {
       storage.remove('token')
-      showToast('登录已过期，请重新登录')
-      router.replace('/auth/login')
+      storage.remove('userInfo')
+      const currentPath = router.currentRoute.value.fullPath
+      if (!currentPath.startsWith('/auth/')) {
+        showToast('登录已过期，请重新登录')
+        router.replace({ path: '/auth/login', query: { redirect: currentPath } })
+      }
     } else if (status === 500) {
       showFailToast('服务器异常，请稍后重试')
     } else if (error.code === 'ECONNABORTED') {

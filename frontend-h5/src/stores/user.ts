@@ -5,8 +5,8 @@ import * as authApi from '@/api/auth'
 import type { UserInfo } from '@/api/auth'
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref<string>('')
-  const userInfo = ref<UserInfo | null>(null)
+  const token = ref<string>(storage.get<string>('token') || '')
+  const userInfo = ref<UserInfo | null>(storage.get<UserInfo>('userInfo') || null)
 
   const isVip = computed(() => userInfo.value?.isVip ?? false)
   const isLoggedIn = computed(() => !!token.value)
@@ -40,10 +40,14 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function fetchProfile() {
-    const res = await authApi.getProfile()
-    userInfo.value = res.data
-    storage.set('userInfo', res.data)
-    return res.data
+    try {
+      const res = await authApi.getProfile()
+      userInfo.value = res.data
+      storage.set('userInfo', res.data)
+      return res.data
+    } catch (e) {
+      return null
+    }
   }
 
   function logout() {
