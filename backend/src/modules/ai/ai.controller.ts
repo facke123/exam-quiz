@@ -20,6 +20,8 @@ import {
   QueryAiTaskDto,
   AiParseSyllabusDto,
   AiImportSyllabusDto,
+  SaveAiConfigDto,
+  TestLlmConnectionDto,
 } from './dto/ai.dto';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 
@@ -170,4 +172,25 @@ export class AiController {
     await this.aiService.deletePrompt(id);
     return { message: '删除成功' };
   }
+
+  // ==================== AI 模型配置与连通性测试 ====================
+
+  @Get(['admin/ai/config', 'ai/config'])
+  @ApiOperation({ summary: '获取AI大模型配置（脱敏）' })
+  async getAiConfig() {
+    return this.aiService.getAiConfig();
+  }
+
+  @Post(['admin/ai/config', 'ai/config'])
+  @ApiOperation({ summary: '保存更新AI大模型配置' })
+  async saveAiConfig(@Body() dto: SaveAiConfigDto) {
+    return this.aiService.saveAiConfig(dto);
+  }
+
+  @Post(['admin/ai/test-connection', 'ai/test-connection'])
+  @ApiOperation({ summary: '测试AI大模型接口连通性' })
+  async testLlmConnection(@Body() dto: TestLlmConnectionDto) {
+    return this.aiService.testLlmConnection(dto);
+  }
 }
+

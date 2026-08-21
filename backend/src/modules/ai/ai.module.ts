@@ -8,10 +8,11 @@ import { Question } from '@/database/entities/question.entity';
 import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
+import { SystemConfig } from '@/database/entities/system-config.entity';
 
 /**
-  * AI 模块
-  */
+ * AI 模块
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -21,6 +22,7 @@ import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
       Subject,
       Chapter,
       KnowledgePoint,
+      SystemConfig,
     ]),
   ],
   controllers: [AiController],

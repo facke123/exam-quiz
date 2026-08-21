@@ -209,3 +209,57 @@ export function importSyllabus(data: {
   })
 }
 
+// 获取 AI 大模型配置（脱敏）
+export function getAIConfig() {
+  return request<{
+    provider: string
+    baseUrl: string
+    apiKey: string
+    model: string
+    temperature: number
+    maxTokens: number
+    enabled: string
+    hasKey: boolean
+  }>({
+    url: '/admin/ai/config',
+    method: 'get',
+  })
+}
+
+// 保存更新 AI 大模型配置
+export function updateAIConfig(data: {
+  provider?: string
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  enabled?: string | number
+}) {
+  return request<{ success: boolean; message: string }>({
+    url: '/admin/ai/config',
+    method: 'post',
+    data,
+  })
+}
+
+// 测试 AI 大模型接口连通性
+export function testAIConnection(data: {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+}) {
+  return request<{
+    success: boolean
+    latency: number
+    model: string
+    reply: string
+    error?: string
+  }>({
+    url: '/admin/ai/test-connection',
+    method: 'post',
+    data,
+  })
+}
+
+

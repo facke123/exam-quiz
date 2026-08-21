@@ -180,3 +180,61 @@ export class AiImportSyllabusDto {
     }>;
   }>;
 }
+
+/**
+ * AI 模型配置保存 DTO
+ */
+export class SaveAiConfigDto {
+  @ApiPropertyOptional({ description: '提供商 (deepseek/aliyun_qwen/zhipu_glm/moonshot/openai/custom)', example: 'deepseek' })
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @ApiPropertyOptional({ description: '接口Base URL', example: 'https://api.deepseek.com/v1' })
+  @IsOptional()
+  @IsString()
+  baseUrl?: string;
+
+  @ApiPropertyOptional({ description: 'API Key', example: 'sk-xxxxxxxxxxxxxxxx' })
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
+
+  @ApiPropertyOptional({ description: '默认模型名称', example: 'deepseek-chat' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @ApiPropertyOptional({ description: '温度 (0.0 - 1.5)', example: 0.7 })
+  @IsOptional()
+  temperature?: number;
+
+  @ApiPropertyOptional({ description: '最大生成Token数', example: 2048 })
+  @IsOptional()
+  maxTokens?: number;
+
+  @ApiPropertyOptional({ description: '是否启用AI (1/0)', example: '1' })
+  @IsOptional()
+  enabled?: string | number;
+}
+
+/**
+ * 测试 AI 连通性 DTO
+ */
+export class TestLlmConnectionDto {
+  @ApiPropertyOptional({ description: '接口Base URL', example: 'https://api.deepseek.com/v1' })
+  @IsOptional()
+  @IsString()
+  baseUrl?: string;
+
+  @ApiPropertyOptional({ description: 'API Key (若留空则使用已保存的Key)', example: 'sk-xxxxxxxx' })
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
+
+  @ApiPropertyOptional({ description: '模型名称', example: 'deepseek-chat' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+}
+

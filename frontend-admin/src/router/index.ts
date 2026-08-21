@@ -98,6 +98,12 @@ export const constantRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/ai/AIPrompt.vue'),
         meta: { title: 'Prompt管理', icon: 'ChatLineSquare', keepAlive: true },
       },
+      {
+        path: 'config',
+        name: 'AIConfig',
+        component: () => import('@/views/ai/AIConfig.vue'),
+        meta: { title: 'AI模型配置', icon: 'Setting', keepAlive: true },
+      },
     ],
   },
   {
