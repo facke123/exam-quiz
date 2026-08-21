@@ -200,7 +200,7 @@ onMounted(() => {
           </template>
 
           <template #avatar="{ row }">
-            <el-avatar :size="32" :src="row.avatar">{{ row.username[0] }}</el-avatar>
+            <el-avatar :size="32" :src="row.avatar">{{ (row.username || row.nickname || 'A')[0] }}</el-avatar>
           </template>
 
           <template #roles="{ row }">

@@ -158,8 +158,11 @@ function handleSearch(form: Record<string, any>) {
 
 async function loadSubjects() {
   const res = await getAllSubjects()
-  subjects.value = res.data.map((s) => ({ label: s.name, value: s.id }))
-  searchItems[0].options = subjects.value
+  const rawList = Array.isArray(res.data) ? res.data : (res.data?.list || [])
+  subjects.value = rawList.map((s) => ({ label: s.name, value: s.id }))
+  if (searchItems[0]) {
+    searchItems[0].options = subjects.value
+  }
 }
 
 onMounted(() => {

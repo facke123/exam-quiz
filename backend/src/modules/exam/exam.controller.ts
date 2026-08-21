@@ -33,11 +33,19 @@ export class ExamController {
   // ==================== 科目管理 ====================
 
   @Public()
-  @Get(['exam/subjects', 'admin/subjects', 'admin/subjects/all'])
-  @ApiOperation({ summary: '科目列表' })
-  async getSubjects() {
+  @Get(['admin/subjects'])
+  @ApiOperation({ summary: '科目列表（管理后台分页）' })
+  async getAdminSubjects() {
     const list = await this.examService.getSubjects();
     return { list, total: list.length };
+  }
+
+  @Public()
+  @Get(['exam/subjects', 'admin/subjects/all'])
+  @ApiOperation({ summary: '科目列表（全量）' })
+  async getSubjects() {
+    const list = await this.examService.getSubjects();
+    return list;
   }
 
   @Public()

@@ -34,7 +34,7 @@ async function loadSubjects() {
   loading.value = true
   try {
     const res = await getSubjectList({ page: 1, pageSize: 100 })
-    subjects.value = res.data.list
+    subjects.value = Array.isArray(res.data) ? res.data : (res.data?.list || [])
     if (subjects.value.length && !currentSubject.value) {
       selectSubject(subjects.value[0])
     }

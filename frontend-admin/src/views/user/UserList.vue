@@ -169,7 +169,7 @@ onMounted(fetchList)
       @update:page-size="(s) => (query.pageSize = s)"
     >
       <template #avatar="{ row }">
-        <el-avatar :size="32" :src="row.avatar">{{ row.username[0] }}</el-avatar>
+        <el-avatar :size="32" :src="row.avatar">{{ (row.username || row.nickname || 'U')[0] }}</el-avatar>
       </template>
 
       <template #member="{ row }">
