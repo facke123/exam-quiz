@@ -64,16 +64,36 @@ const memberMap: Record<string, { label: string; type: string }> = {
 }
 
 const columns: ProColumn[] = [
-  { prop: 'id', label: 'ID', width: 70 },
-  { prop: 'avatar', label: '头像', width: 70, slot: 'avatar' },
-  { prop: 'username', label: '用户名', width: 120 },
-  { prop: 'phone', label: '手机号', width: 130 },
-  { prop: 'memberLevel', label: '会员', width: 90, slot: 'member' },
-  { prop: 'memberExpireAt', label: '会员到期', width: 110, formatter: (r) => r.memberExpireAt ? formatDateTime(r.memberExpireAt, 'YYYY-MM-DD') : '-' },
-  { prop: 'questionCount', label: '做题量', width: 90, formatter: (r) => formatNumber(r.questionCount) },
-  { prop: 'correctRate', label: '正确率', width: 90, slot: 'correctRate' },
-  { prop: 'status', label: '状态', width: 80, slot: 'status' },
-  { prop: 'registerAt', label: '注册时间', width: 150, formatter: (r) => formatDateTime(r.registerAt) },
+  { prop: 'id', label: 'ID', width: 70, align: 'center' },
+  { prop: 'avatar', label: '头像', width: 70, align: 'center', slot: 'avatar' },
+  { prop: 'username', label: '用户名', minWidth: 140, showOverflowTooltip: true },
+  { prop: 'nickname', label: '昵称', minWidth: 120, slot: 'nickname', showOverflowTooltip: true },
+  { prop: 'phone', label: '手机号', width: 130, align: 'center', slot: 'phone' },
+  { prop: 'email', label: '邮箱', minWidth: 160, slot: 'email', showOverflowTooltip: true },
+  { prop: 'memberLevel', label: '会员等级', width: 100, align: 'center', slot: 'member' },
+  {
+    prop: 'memberExpireAt',
+    label: '会员到期',
+    width: 120,
+    align: 'center',
+    formatter: (r) => (r.memberExpireAt ? formatDateTime(r.memberExpireAt, 'YYYY-MM-DD') : '-'),
+  },
+  {
+    prop: 'questionCount',
+    label: '做题量',
+    width: 90,
+    align: 'center',
+    formatter: (r) => formatNumber(r.questionCount),
+  },
+  { prop: 'correctRate', label: '正确率', width: 90, align: 'center', slot: 'correctRate' },
+  { prop: 'status', label: '状态', width: 80, align: 'center', slot: 'status' },
+  {
+    prop: 'registerAt',
+    label: '注册时间',
+    width: 170,
+    align: 'center',
+    formatter: (r) => formatDateTime(r.registerAt),
+  },
 ]
 
 // 新增用户
@@ -213,6 +233,7 @@ onMounted(fetchList)
       :page="query.page"
       :page-size="query.pageSize"
       :total="total"
+      :operation-width="230"
       @update:page="(p) => (query.page = p)"
       @update:page-size="(s) => (query.pageSize = s)"
     >
@@ -222,6 +243,18 @@ onMounted(fetchList)
 
       <template #avatar="{ row }">
         <el-avatar :size="32" :src="row.avatar">{{ (row.username || row.nickname || 'U')[0] }}</el-avatar>
+      </template>
+
+      <template #nickname="{ row }">
+        <span>{{ row.nickname || '-' }}</span>
+      </template>
+
+      <template #phone="{ row }">
+        <span>{{ row.phone || '-' }}</span>
+      </template>
+
+      <template #email="{ row }">
+        <span>{{ row.email || '-' }}</span>
       </template>
 
       <template #member="{ row }">

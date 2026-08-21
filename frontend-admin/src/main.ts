@@ -19,5 +19,14 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
+// 过滤第三方浏览器插件引起的异步通信断开误报
+window.addEventListener('unhandledrejection', (event) => {
+  if (
+    event.reason?.message?.includes('message channel closed before a response was received') ||
+    event.reason?.message?.includes('A listener indicated an asynchronous response')
+  ) {
+    event.preventDefault()
+  }
+})
 
 app.mount('#app')

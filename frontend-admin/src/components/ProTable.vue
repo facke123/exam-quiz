@@ -30,6 +30,8 @@ const props = withDefaults(
     pageSizes?: number[]
     rowKey?: string
     showPagination?: boolean
+    operationWidth?: number | string
+    operationLabel?: string
   }>(),
   {
     loading: false,
@@ -41,6 +43,8 @@ const props = withDefaults(
     pageSizes: () => [10, 20, 50, 100],
     rowKey: 'id',
     showPagination: true,
+    operationWidth: 230,
+    operationLabel: '操作',
   },
 )
 
@@ -124,7 +128,13 @@ watch(
         </template>
       </el-table-column>
 
-      <el-table-column v-if="$slots.operation" label="操作" fixed="right" :width="180" align="center">
+      <el-table-column
+        v-if="$slots.operation"
+        :label="operationLabel"
+        fixed="right"
+        :width="operationWidth"
+        align="center"
+      >
         <template #default="scope">
           <slot name="operation" v-bind="scope" />
         </template>
