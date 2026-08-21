@@ -2,7 +2,7 @@
 @forward 'element-plus/theme-chalk/src/common/var.scss' with (
   $colors: (
     'primary': (
-      'base': #2f6bff,
+      'base': #4A6CF7,
     ),
     'success': (
       'base': #22c55e,
@@ -19,23 +19,42 @@
   )
 );
 
-// 自定义全局 CSS 变量
+// 自定义全局 CSS 变量（与原型设计对齐）
 :root {
+  --primary: #4A6CF7;
+  --primary-light: #EEF2FF;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --orange: #FF7A45;
+  --purple: #8B5CF6;
+  --cyan: #06B6D4;
+  --gray-1: #FAFAFA;
+  --gray-2: #F5F5F5;
+  --gray-3: #E8E8E8;
+  --gray-4: #D9D9D9;
+  --gray-5: #BFBFBF;
+  --gray-6: #8C8C8C;
+  --gray-7: #595959;
+  --gray-8: #262626;
+  --sidebar-bg: #001529;
+  --sidebar-active: #4A6CF7;
+
   --app-sidebar-width: 220px;
   --app-sidebar-collapsed-width: 64px;
-  --app-navbar-height: 56px;
+  --app-navbar-height: 60px;
   --app-tabs-height: 40px;
-  --app-content-bg: #f5f7fa;
-  --app-border-color: #ebeef5;
-  --app-text-primary: #303133;
-  --app-text-regular: #606266;
-  --app-text-secondary: #909399;
+  --app-content-bg: #f8fafc;
+  --app-border-color: #e2e8f0;
+  --app-text-primary: #1e293b;
+  --app-text-regular: #475569;
+  --app-text-secondary: #94a3b8;
 }
 
 html.dark {
-  --app-content-bg: #141414;
-  --app-border-color: #303030;
-  --app-text-primary: #e5eaf3;
-  --app-text-regular: #cfd3dc;
-  --app-text-secondary: #a3a6ad;
+  --app-content-bg: #0f172a;
+  --app-border-color: #1e293b;
+  --app-text-primary: #f8fafc;
+  --app-text-regular: #cbd5e1;
+  --app-text-secondary: #64748b;
 }

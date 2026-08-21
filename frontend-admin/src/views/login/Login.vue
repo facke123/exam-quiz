@@ -1,3 +1,48 @@
+<template>
+  <div class="login-page">
+    <div class="login-box">
+      <div class="login-header">
+        <div class="logo-badge">📝</div>
+        <h1 class="title">软考刷题系统</h1>
+        <p class="subtitle">后台教研与运营管理控制台</p>
+      </div>
+
+      <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="handleLogin">
+        <el-form-item prop="username">
+          <el-input
+            v-model="form.username"
+            placeholder="请输入管理员账号 (默认 admin)"
+            prefix-icon="User"
+          />
+        </el-form-item>
+
+        <el-form-item prop="password">
+          <el-input
+            v-model="form.password"
+            type="password"
+            placeholder="请输入密码 (默认 admin123)"
+            prefix-icon="Lock"
+            show-password
+          />
+        </el-form-item>
+
+        <el-button
+          type="primary"
+          :loading="loading"
+          class="submit-btn"
+          @click="handleLogin"
+        >
+          立即登录
+        </el-button>
+      </el-form>
+
+      <div class="login-footer">
+        <span>默认管理员：admin / admin123</span>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -29,7 +74,7 @@ async function handleLogin() {
   loading.value = true
   try {
     await userStore.login(form)
-    ElMessage.success('登录成功')
+    ElMessage.success('登录成功，欢迎进入控制台')
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch {
@@ -40,81 +85,74 @@ async function handleLogin() {
 }
 </script>
 
-<template>
-  <div class="login">
-    <div class="login__card">
-      <div class="login__header">
-        <el-icon size="40" color="#2f6bff"><Reading /></el-icon>
-        <h1 class="login__title">软考刷题系统</h1>
-        <p class="login__subtitle">后台管理系统</p>
-      </div>
-
-      <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="handleLogin">
-        <el-form-item prop="username">
-          <el-input
-            v-model="form.username"
-            placeholder="请输入用户名"
-            :prefix-icon="'User'"
-          />
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            placeholder="请输入密码"
-            :prefix-icon="'Lock'"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="loading" style="width: 100%" @click="handleLogin">
-            登 录
-          </el-button>
-        </el-form-item>
-      </el-form>
-
-      <p class="login__footer">© 2026 软考刷题系统 · 管理后台</p>
-    </div>
-  </div>
-</template>
-
 <style scoped lang="scss">
-.login {
-  height: 100vh;
+.login-page {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #001529 100%);
+  padding: 20px;
+}
 
-  &__card {
-    width: 380px;
-    padding: 40px 32px 24px;
-    background: #fff;
+.login-box {
+  width: 100%;
+  max-width: 400px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 36px 32px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 28px;
+
+  .logo-badge {
+    width: 48px;
+    height: 48px;
+    background: var(--primary);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(74, 108, 247, 0.35);
   }
 
-  &__header {
-    text-align: center;
-    margin-bottom: 28px;
+  .title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 4px;
   }
 
-  &__title {
-    margin: 12px 0 4px;
-    font-size: 22px;
-    color: #303133;
-  }
-
-  &__subtitle {
+  .subtitle {
     font-size: 13px;
-    color: #909399;
+    color: var(--gray-5);
   }
+}
 
-  &__footer {
-    margin-top: 16px;
-    text-align: center;
-    font-size: 12px;
-    color: #c0c4cc;
+.submit-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  margin-top: 6px;
+  background: var(--primary);
+  border-color: var(--primary);
+
+  &:hover {
+    opacity: 0.9;
   }
+}
+
+.login-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--gray-5);
 }
 </style>

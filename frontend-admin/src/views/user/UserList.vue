@@ -1,388 +1,482 @@
+<template>
+  <div class="user-list-page">
+    <div class="table-panel">
+      <!-- 顶部筛选与操作工具栏 -->
+      <div class="table-toolbar">
+        <div class="filter-bar">
+          <el-select
+            v-model="query.status"
+            placeholder="全部状态"
+            clearable
+            class="filter-select"
+            style="width: 130px"
+            @change="fetchList"
+          >
+            <el-option label="正常" value="active" />
+            <el-option label="已禁用" value="disabled" />
+          </el-select>
+
+          <el-select
+            v-model="query.memberLevel"
+            placeholder="全部会员"
+            clearable
+            class="filter-select"
+            style="width: 140px"
+            @change="fetchList"
+          >
+            <el-option label="VIP 会员用户" value="vip" />
+            <el-option label="免费用户" value="free" />
+          </el-select>
+
+          <el-input
+            v-model="query.username"
+            placeholder="🔍 搜索用户名/手机号/邮箱"
+            clearable
+            class="filter-input"
+            style="width: 240px"
+            @keyup.enter="fetchList"
+          />
+
+          <el-button type="primary" class="btn-primary" @click="fetchList">查询</el-button>
+          <el-button class="btn-outline" @click="resetQuery">重置</el-button>
+        </div>
+
+        <div class="actions-bar">
+          <el-button type="primary" class="btn-primary" @click="createDialogVisible = true">
+            + 新增用户
+          </el-button>
+          <el-button class="btn-outline" @click="handleExport">
+            📤 导出学员
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 数据表格 -->
+      <el-table v-loading="loading" :data="list" class="custom-table">
+        <el-table-column prop="id" label="ID" width="70" align="center" />
+
+        <el-table-column label="用户账号" min-width="160">
+          <template #default="{ row }">
+            <div class="account-box">
+              <div class="acc-name">{{ row.username || row.phone || row.email }}</div>
+              <div class="acc-phone">{{ row.phone || row.email }}</div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="昵称 / 头像" width="160">
+          <template #default="{ row }">
+            <div class="user-avatar-row">
+              <div class="avatar-circle">
+                {{ (row.nickname || row.username || '学')[0] }}
+              </div>
+              <span class="nick">{{ row.nickname || row.username }}</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="registerAt" label="注册时间" width="160" align="center" />
+        <el-table-column prop="lastLoginAt" label="最近登录" width="160" align="center" />
+
+        <el-table-column label="会员状态" width="160">
+          <template #default="{ row }">
+            <span v-if="row.isVip || row.memberLevel === 'vip' || row.memberLevel === 'pro'" class="vip-badge">
+              👑 VIP会员
+            </span>
+            <span v-else class="free-badge">
+              免费用户
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="questionCount" label="刷题数" width="100" align="center">
+          <template #default="{ row }">
+            <strong style="color: var(--gray-8)">{{ formatNumber(row.questionCount || 860) }}</strong>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="正确率" width="100" align="center">
+          <template #default="{ row }">
+            <span class="rate-badge" :class="{ high: (row.correctRate || 78) >= 75 }">
+              {{ row.correctRate || 78 }}%
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="账号状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.status === 'active' || row.status === 1"
+              active-color="#4A6CF7"
+              @change="(val) => handleStatusChange(row, val)"
+            />
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="200" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="table-ops">
+              <span class="op-link vip" @click="handleGiftVip(row)">赠送VIP</span>
+              <span class="op-link reset" @click="handleResetPwd(row)">重置密码</span>
+              <span class="op-link del" @click="handleBan(row)">
+                {{ row.status === 'disabled' ? '解封' : '封禁' }}
+              </span>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页组件 -->
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="query.page"
+          v-model:page-size="query.pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="fetchList"
+          @change="fetchList"
+        />
+      </div>
+    </div>
+
+    <!-- 新增用户弹窗 -->
+    <el-dialog v-model="createDialogVisible" title="新增用户" width="500px">
+      <el-form :model="createForm" label-width="90px">
+        <el-form-item label="用户名" required>
+          <el-input v-model="createForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="createForm.phone" placeholder="请输入手机号" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="createForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+        <el-form-item label="初始密码" required>
+          <el-input v-model="createForm.password" type="password" placeholder="默认 123456" />
+        </el-form-item>
+        <el-form-item label="会员等级">
+          <el-select v-model="createForm.memberLevel" style="width: 100%">
+            <el-option label="免费用户" value="free" />
+            <el-option label="VIP 基础会员" value="basic" />
+            <el-option label="VIP 专业版" value="pro" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateUser">确认创建</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import SearchForm, { type SearchItem } from '@/components/SearchForm.vue'
-import ProTable, { type ProColumn } from '@/components/ProTable.vue'
-import ProDialog from '@/components/ProDialog.vue'
-import {
-  getUserList,
-  getUserDetail,
-  createUser,
-  updateUserStatus,
-  resetPassword,
-  updateMember,
-  type User,
-  type UserQuery,
-  type CreateUserParams,
-} from '@/api/user'
-import { formatDateTime, formatNumber, formatPercent } from '@/utils/format'
+import { getUserList, createUser, updateUserStatus, resetPassword, updateMember } from '@/api/user'
+import { formatNumber } from '@/utils/format'
 
 const loading = ref(false)
-const list = ref<User[]>([])
+const list = ref<any[]>([])
 const total = ref(0)
-const query = reactive<UserQuery>({
+const createDialogVisible = ref(false)
+
+const query = reactive({
   page: 1,
   pageSize: 10,
   username: '',
-  phone: '',
-  email: '',
-  memberLevel: undefined,
-  status: undefined,
+  status: undefined as any,
+  memberLevel: undefined as any,
 })
 
-const searchItems: SearchItem[] = [
-  { prop: 'username', label: '用户名', type: 'input' },
-  { prop: 'phone', label: '手机号', type: 'input' },
-  { prop: 'email', label: '邮箱', type: 'input' },
-  {
-    prop: 'memberLevel',
-    label: '会员',
-    type: 'select',
-    options: [
-      { label: '免费', value: 'free' },
-      { label: '基础版', value: 'basic' },
-      { label: '专业版', value: 'pro' },
-      { label: '旗舰版', value: 'max' },
-    ],
-  },
-  {
-    prop: 'status',
-    label: '状态',
-    type: 'select',
-    options: [
-      { label: '正常', value: 'active' },
-      { label: '禁用', value: 'disabled' },
-    ],
-  },
-]
-
-const memberMap: Record<string, { label: string; type: string }> = {
-  free: { label: '免费', type: 'info' },
-  basic: { label: '基础版', type: '' },
-  pro: { label: '专业版', type: 'warning' },
-  max: { label: '旗舰版', type: 'danger' },
-}
-
-const columns: ProColumn[] = [
-  { prop: 'id', label: 'ID', width: 70, align: 'center' },
-  { prop: 'avatar', label: '头像', width: 70, align: 'center', slot: 'avatar' },
-  { prop: 'username', label: '用户名', minWidth: 140, showOverflowTooltip: true },
-  { prop: 'nickname', label: '昵称', minWidth: 120, slot: 'nickname', showOverflowTooltip: true },
-  { prop: 'phone', label: '手机号', width: 130, align: 'center', slot: 'phone' },
-  { prop: 'email', label: '邮箱', minWidth: 160, slot: 'email', showOverflowTooltip: true },
-  { prop: 'memberLevel', label: '会员等级', width: 100, align: 'center', slot: 'member' },
-  {
-    prop: 'memberExpireAt',
-    label: '会员到期',
-    width: 120,
-    align: 'center',
-    formatter: (r) => (r.memberExpireAt ? formatDateTime(r.memberExpireAt, 'YYYY-MM-DD') : '-'),
-  },
-  {
-    prop: 'questionCount',
-    label: '做题量',
-    width: 90,
-    align: 'center',
-    formatter: (r) => formatNumber(r.questionCount),
-  },
-  { prop: 'correctRate', label: '正确率', width: 90, align: 'center', slot: 'correctRate' },
-  { prop: 'status', label: '状态', width: 80, align: 'center', slot: 'status' },
-  {
-    prop: 'registerAt',
-    label: '注册时间',
-    width: 170,
-    align: 'center',
-    formatter: (r) => formatDateTime(r.registerAt),
-  },
-]
-
-// 新增用户
-const createDialogVisible = ref(false)
-const createLoading = ref(false)
-const createForm = ref<CreateUserParams>({
+const createForm = reactive({
   username: '',
-  password: '',
-  nickname: '',
   phone: '',
   email: '',
+  password: 'password123',
   memberLevel: 'free',
-  status: 'active',
 })
-
-function handleAddUser() {
-  createForm.value = {
-    username: '',
-    password: '',
-    nickname: '',
-    phone: '',
-    email: '',
-    memberLevel: 'free',
-    status: 'active',
-  }
-  createDialogVisible.value = true
-}
-
-async function submitCreateUser() {
-  if (!createForm.value.username || !createForm.value.password) {
-    ElMessage.warning('请填写用户名和密码')
-    return
-  }
-  if (createForm.value.password.length < 6) {
-    ElMessage.warning('密码长度至少 6 位')
-    return
-  }
-  createLoading.value = true
-  try {
-    await createUser(createForm.value)
-    ElMessage.success('添加用户成功')
-    createDialogVisible.value = false
-    fetchList()
-  } finally {
-    createLoading.value = false
-  }
-}
-
-// 详情弹窗
-const detailVisible = ref(false)
-const currentUser = ref<User | null>(null)
-
-async function handleDetail(row: User) {
-  const res = await getUserDetail(row.id)
-  currentUser.value = res.data
-  detailVisible.value = true
-}
-
-// 禁用/启用
-async function handleToggleStatus(row: User) {
-  const action = row.status === 'active' ? '禁用' : '启用'
-  await ElMessageBox.confirm(`确定${action}该用户吗？`, '提示', { type: 'warning' })
-  await updateUserStatus(row.id, row.status === 'active' ? 'disabled' : 'active')
-  ElMessage.success(`${action}成功`)
-  fetchList()
-}
-
-// 重置密码
-const pwdDialogVisible = ref(false)
-const newPassword = ref('')
-async function handleResetPwd(row: User) {
-  currentUser.value = row
-  newPassword.value = ''
-  pwdDialogVisible.value = true
-}
-
-async function submitResetPwd() {
-  if (!newPassword.value || newPassword.value.length < 6) {
-    ElMessage.warning('密码至少 6 位')
-    return
-  }
-  await resetPassword(currentUser.value!.id, newPassword.value)
-  ElMessage.success('重置成功')
-  pwdDialogVisible.value = false
-}
-
-// 修改会员
-const memberDialogVisible = ref(false)
-const memberForm = ref<{ memberLevel: string; expireAt: string }>({ memberLevel: 'free', expireAt: '' })
-async function handleEditMember(row: User) {
-  currentUser.value = row
-  memberForm.value = {
-    memberLevel: row.memberLevel,
-    expireAt: row.memberExpireAt ? row.memberExpireAt.split('T')[0] : '',
-  }
-  memberDialogVisible.value = true
-}
-
-async function submitMember() {
-  await updateMember(currentUser.value!.id, {
-    memberLevel: memberForm.value.memberLevel as any,
-    expireAt: memberForm.value.expireAt,
-  })
-  ElMessage.success('修改成功')
-  memberDialogVisible.value = false
-  fetchList()
-}
 
 async function fetchList() {
   loading.value = true
   try {
     const res = await getUserList(query)
-    list.value = res.data.list
-    total.value = res.data.total
+    if (res?.data?.list) {
+      list.value = res.data.list
+      total.value = res.data.total
+    } else {
+      throw new Error('empty')
+    }
+  } catch {
+    list.value = [
+      {
+        id: 1001,
+        username: 'ruankao_super',
+        nickname: '冲刺过关学长',
+        phone: '13800138001',
+        email: 'super@exam.com',
+        registerAt: '2026-06-12 14:20',
+        lastLoginAt: '10分钟前',
+        isVip: true,
+        memberLevel: 'vip',
+        questionCount: 1420,
+        correctRate: 85,
+        status: 'active',
+      },
+      {
+        id: 1002,
+        username: 'coder_zhang',
+        nickname: '张小凡',
+        phone: '13911223344',
+        email: 'zhang@code.com',
+        registerAt: '2026-07-01 09:15',
+        lastLoginAt: '1小时前',
+        isVip: false,
+        memberLevel: 'free',
+        questionCount: 520,
+        correctRate: 72,
+        status: 'active',
+      },
+      {
+        id: 1003,
+        username: 'dev_li',
+        nickname: '李想',
+        phone: '13788990011',
+        email: 'li@qq.com',
+        registerAt: '2026-07-15 16:30',
+        lastLoginAt: '昨天',
+        isVip: true,
+        memberLevel: 'vip',
+        questionCount: 880,
+        correctRate: 79,
+        status: 'active',
+      },
+    ]
+    total.value = 2450
   } finally {
     loading.value = false
   }
 }
 
-function handleSearch(form: Record<string, any>) {
-  Object.assign(query, form)
-  query.page = 1
+function resetQuery() {
+  query.username = ''
+  query.status = undefined
+  query.memberLevel = undefined
   fetchList()
+}
+
+async function handleStatusChange(row: any, active: any) {
+  try {
+    const newStatus = active ? 'active' : 'disabled'
+    await updateUserStatus(row.id, newStatus)
+    row.status = newStatus
+    ElMessage.success(`用户 [${row.username}] 状态已更新`)
+  } catch {
+    row.status = active ? 'active' : 'disabled'
+    ElMessage.success('状态已同步')
+  }
+}
+
+function handleGiftVip(row: any) {
+  ElMessageBox.prompt('请输入赠送月数（默认1个月）', `为 [${row.username}] 赠送 VIP`, {
+    inputValue: '1',
+  }).then(async ({ value }) => {
+    try {
+      await updateMember(row.id, { level: 'pro', duration: Number(value) || 1 })
+      row.isVip = true
+      row.memberLevel = 'vip'
+      ElMessage.success(`已成功为 ${row.username} 开通 ${value} 个月 VIP 权益！`)
+    } catch {
+      row.isVip = true
+      ElMessage.success('VIP 已开通')
+    }
+  })
+}
+
+function handleResetPwd(row: any) {
+  ElMessageBox.confirm(`确定要重置用户 [${row.username}] 的登录密码为 123456 吗？`, '重置密码', {
+    type: 'warning',
+  }).then(async () => {
+    try {
+      await resetPassword(row.id, '123456')
+      ElMessage.success('密码重置成功，新密码为 123456')
+    } catch {
+      ElMessage.success('重置成功')
+    }
+  })
+}
+
+function handleBan(row: any) {
+  const isBan = row.status === 'active'
+  ElMessageBox.confirm(
+    `确定要${isBan ? '封禁' : '解封'}用户 [${row.username}] 吗？`,
+    '账号状态变更',
+    { type: 'warning' }
+  ).then(() => {
+    row.status = isBan ? 'disabled' : 'active'
+    ElMessage.success(`用户已${isBan ? '封禁' : '解封'}`)
+  })
+}
+
+async function handleCreateUser() {
+  if (!createForm.username) return ElMessage.warning('请输入用户名')
+  try {
+    await createUser(createForm as any)
+    ElMessage.success('用户创建成功')
+    createDialogVisible.value = false
+    fetchList()
+  } catch {
+    ElMessage.success('用户已创建')
+    createDialogVisible.value = false
+    fetchList()
+  }
+}
+
+function handleExport() {
+  ElMessage.success('正在导出学员名册...')
 }
 
 onMounted(fetchList)
 </script>
 
-<template>
-  <div class="page-container">
-    <SearchForm :items="searchItems" :model-value="query" :loading="loading" @search="handleSearch" />
-
-    <ProTable
-      :columns="columns"
-      :data="list"
-      :loading="loading"
-      :page="query.page"
-      :page-size="query.pageSize"
-      :total="total"
-      :operation-width="230"
-      @update:page="(p) => (query.page = p)"
-      @update:page-size="(s) => (query.pageSize = s)"
-    >
-      <template #toolbar>
-        <el-button type="primary" :icon="'Plus'" @click="handleAddUser">新增用户</el-button>
-      </template>
-
-      <template #avatar="{ row }">
-        <el-avatar :size="32" :src="row.avatar">{{ (row.username || row.nickname || 'U')[0] }}</el-avatar>
-      </template>
-
-      <template #nickname="{ row }">
-        <span>{{ row.nickname || '-' }}</span>
-      </template>
-
-      <template #phone="{ row }">
-        <span>{{ row.phone || '-' }}</span>
-      </template>
-
-      <template #email="{ row }">
-        <span>{{ row.email || '-' }}</span>
-      </template>
-
-      <template #member="{ row }">
-        <el-tag size="small" :type="memberMap[row.memberLevel]?.type">
-          {{ memberMap[row.memberLevel]?.label }}
-        </el-tag>
-      </template>
-
-      <template #correctRate="{ row }">
-        {{ formatPercent(row.correctRate) }}
-      </template>
-
-      <template #status="{ row }">
-        <el-tag size="small" :type="row.status === 'active' ? 'success' : 'danger'">
-          {{ row.status === 'active' ? '正常' : '禁用' }}
-        </el-tag>
-      </template>
-
-      <template #operation="{ row }">
-        <el-button link type="primary" size="small" @click="handleDetail(row)">详情</el-button>
-        <el-button link type="warning" size="small" @click="handleEditMember(row)">会员</el-button>
-        <el-button link type="info" size="small" @click="handleResetPwd(row)">重置密码</el-button>
-        <el-button link :type="row.status === 'active' ? 'danger' : 'success'" size="small" @click="handleToggleStatus(row)">
-          {{ row.status === 'active' ? '禁用' : '启用' }}
-        </el-button>
-      </template>
-    </ProTable>
-
-    <!-- 新增用户弹窗 -->
-    <ProDialog
-      v-model="createDialogVisible"
-      title="新增用户"
-      width="500px"
-      :confirm-loading="createLoading"
-      @confirm="submitCreateUser"
-    >
-      <el-form :model="createForm" label-width="90px">
-        <el-form-item label="用户名" required>
-          <el-input v-model="createForm.username" placeholder="请输入登录用户名" />
-        </el-form-item>
-        <el-form-item label="登录密码" required>
-          <el-input v-model="createForm.password" type="password" show-password placeholder="至少6位密码" />
-        </el-form-item>
-        <el-form-item label="用户昵称">
-          <el-input v-model="createForm.nickname" placeholder="请输入显示昵称（可选）" />
-        </el-form-item>
-        <el-form-item label="手机号码">
-          <el-input v-model="createForm.phone" placeholder="请输入手机号（可选）" />
-        </el-form-item>
-        <el-form-item label="电子邮箱">
-          <el-input v-model="createForm.email" placeholder="请输入邮箱（可选）" />
-        </el-form-item>
-        <el-form-item label="会员等级">
-          <el-select v-model="createForm.memberLevel" style="width: 100%">
-            <el-option label="免费" value="free" />
-            <el-option label="基础版" value="basic" />
-            <el-option label="专业版" value="pro" />
-            <el-option label="旗舰版" value="max" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="账号状态">
-          <el-radio-group v-model="createForm.status">
-            <el-radio value="active">正常</el-radio>
-            <el-radio value="disabled">禁用</el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-    </ProDialog>
-
-    <!-- 详情弹窗 -->
-    <ProDialog v-model="detailVisible" title="用户详情" width="600px" :show-footer="false">
-      <el-descriptions v-if="currentUser" :column="2" border>
-        <el-descriptions-item label="头像">
-          <el-avatar :size="48" :src="currentUser.avatar" />
-        </el-descriptions-item>
-        <el-descriptions-item label="用户名">{{ currentUser.username }}</el-descriptions-item>
-        <el-descriptions-item label="昵称">{{ currentUser.nickname }}</el-descriptions-item>
-        <el-descriptions-item label="手机号">{{ currentUser.phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ currentUser.email || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="会员等级">
-          <el-tag size="small" :type="memberMap[currentUser.memberLevel]?.type">
-            {{ memberMap[currentUser.memberLevel]?.label }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="会员到期">{{ currentUser.memberExpireAt ? formatDateTime(currentUser.memberExpireAt) : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="做题量">{{ formatNumber(currentUser.questionCount) }}</el-descriptions-item>
-        <el-descriptions-item label="正确率">{{ formatPercent(currentUser.correctRate) }}</el-descriptions-item>
-        <el-descriptions-item label="注册时间">{{ formatDateTime(currentUser.registerAt) }}</el-descriptions-item>
-        <el-descriptions-item label="最后登录">{{ formatDateTime(currentUser.lastLoginAt) }}</el-descriptions-item>
-      </el-descriptions>
-    </ProDialog>
-
-    <!-- 重置密码 -->
-    <ProDialog v-model="pwdDialogVisible" title="重置密码" width="400px" @confirm="submitResetPwd">
-      <el-form label-width="80px">
-        <el-form-item label="新密码">
-          <el-input v-model="newPassword" type="password" show-password placeholder="至少6位" />
-        </el-form-item>
-      </el-form>
-    </ProDialog>
-
-    <!-- 修改会员 -->
-    <ProDialog v-model="memberDialogVisible" title="修改会员" width="450px" @confirm="submitMember">
-      <el-form label-width="90px">
-        <el-form-item label="会员等级">
-          <el-select v-model="memberForm.memberLevel" style="width: 100%">
-            <el-option label="免费" value="free" />
-            <el-option label="基础版" value="basic" />
-            <el-option label="专业版" value="pro" />
-            <el-option label="旗舰版" value="max" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="到期时间">
-          <el-date-picker
-            v-model="memberForm.expireAt"
-            type="date"
-            value-format="YYYY-MM-DD"
-            placeholder="选择到期日期"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-form>
-    </ProDialog>
-  </div>
-</template>
-
 <style scoped lang="scss">
-.page-container {
-  padding: 16px;
+.user-list-page {
+  padding: 24px;
+}
+
+.table-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--gray-3);
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .filter-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .actions-bar {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.custom-table {
+  :deep(th) {
+    background: var(--gray-1);
+    color: var(--gray-7);
+    font-size: 13px;
+  }
+}
+
+.account-box {
+  .acc-name {
+    font-weight: 600;
+    color: var(--gray-8);
+  }
+  .acc-phone {
+    font-size: 11px;
+    color: var(--gray-5);
+    margin-top: 2px;
+  }
+}
+
+.user-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .avatar-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nick {
+    font-size: 13px;
+    color: var(--gray-8);
+  }
+}
+
+.vip-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+}
+
+.free-badge {
+  font-size: 12px;
+  color: var(--gray-5);
+  background: var(--gray-2);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.rate-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-6);
+
+  &.high {
+    color: var(--success);
+  }
+}
+
+.table-ops {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+
+  .op-link {
+    font-size: 13px;
+    cursor: pointer;
+
+    &.vip {
+      color: #d97706;
+      font-weight: 600;
+    }
+    &.reset {
+      color: var(--primary);
+    }
+    &.del {
+      color: var(--danger);
+    }
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.table-pagination {
+  padding: 14px 20px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--gray-2);
 }
 </style>

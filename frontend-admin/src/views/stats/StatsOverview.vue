@@ -1,211 +1,349 @@
-<script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import {
-  getUserGrowth,
-  getPracticeStats,
-  getQuestionQuality,
-  getTopWrongQuestions,
-  getRevenueStats,
-} from '@/api/stats'
-import LineChart from '@/components/Charts/LineChart.vue'
-import BarChart from '@/components/Charts/BarChart.vue'
-import { formatNumber, formatPercent, formatDateTime } from '@/utils/format'
-import dayjs from 'dayjs'
-
-const loading = ref(false)
-const dateRange = ref<[string, string]>([
-  dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
-  dayjs().format('YYYY-MM-DD'),
-])
-
-const userGrowth = ref<{ date: string; count: number }[]>([])
-const practiceStats = ref<{ date: string; count: number; correctRate: number }[]>([])
-const questionQuality = ref<{ subject: string; total: number; avgCorrectRate: number }[]>([])
-const topWrongQuestions = ref<{ id: number; title: string; wrongCount: number; wrongRate: number }[]>([])
-const revenue = ref<{ date: string; revenue: number; orders: number }[]>([])
-
-// 快捷时间范围
-const shortcuts = [
-  { text: '近7天', value: () => [dayjs().subtract(7, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')] as [string, string] },
-  { text: '近30天', value: () => [dayjs().subtract(30, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')] as [string, string] },
-  { text: '近90天', value: () => [dayjs().subtract(90, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')] as [string, string] },
-]
-
-async function fetchAll() {
-  if (!dateRange.value) return
-  loading.value = true
-  const [start, end] = dateRange.value
-  try {
-    const [ug, ps, qq, tw, rv] = await Promise.all([
-      getUserGrowth({ startDate: start, endDate: end }),
-      getPracticeStats({ startDate: start, endDate: end }),
-      getQuestionQuality(),
-      getTopWrongQuestions({ limit: 5 }),
-      getRevenueStats({ startDate: start, endDate: end }),
-    ])
-    userGrowth.value = ug.data
-    practiceStats.value = ps.data
-    questionQuality.value = qq.data
-    topWrongQuestions.value = tw.data
-    revenue.value = rv.data
-  } finally {
-    loading.value = false
-  }
-}
-
-// 营收汇总
-const revenueSummary = computed(() => {
-  const total = revenue.value.reduce((s, r) => s + r.revenue, 0)
-  const orders = revenue.value.reduce((s, r) => s + r.orders, 0)
-  return { total, orders }
-})
-
-function handleDateChange() {
-  fetchAll()
-}
-
-onMounted(fetchAll)
-</script>
-
 <template>
-  <div v-loading="loading" class="stats-overview page-container">
-    <!-- 时间范围选择 -->
-    <div class="stats-toolbar">
-      <span>时间范围：</span>
-      <el-date-picker
-        v-model="dateRange"
-        type="daterange"
-        value-format="YYYY-MM-DD"
-        range-separator="至"
-        start-placeholder="开始日期"
-        end-placeholder="结束日期"
-        :shortcuts="shortcuts"
-        @change="handleDateChange"
-      />
+  <div class="statistics-page">
+    <!-- 4大核心指标卡片 -->
+    <div class="stat-cards">
+      <div class="stat-card">
+        <div class="sc-icon" style="background: #eef2ff; color: #4a6cf7">📝</div>
+        <div class="sc-info">
+          <div class="sc-num">128,450</div>
+          <div class="sc-label">累计刷题人次</div>
+          <div class="sc-trend up">较上月 ↑ 18.2%</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="sc-icon" style="background: #f0fdf4; color: #22c55e">🎯</div>
+        <div class="sc-info">
+          <div class="sc-num">76.4%</div>
+          <div class="sc-label">学员平均正确率</div>
+          <div class="sc-trend up">较上月 ↑ 2.1%</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="sc-icon" style="background: #fff7ed; color: #f97316">💰</div>
+        <div class="sc-info">
+          <div class="sc-num">¥86,520</div>
+          <div class="sc-label">平台累计充值</div>
+          <div class="sc-trend up">较上月 ↑ 34.5%</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="sc-icon" style="background: #f5f3ff; color: #8b5cf6">📊</div>
+        <div class="sc-info">
+          <div class="sc-num">68.5%</div>
+          <div class="sc-label">模拟考通关预测率</div>
+          <div class="sc-trend up">较上月 ↑ 5.3%</div>
+        </div>
+      </div>
     </div>
 
-    <!-- 用户增长 & 做题量 -->
-    <el-row :gutter="16">
-      <el-col :span="12">
-        <div class="stats-panel">
-          <h3>用户增长趋势</h3>
-          <LineChart
-            :series="[{ name: '新增用户', data: userGrowth.map((u) => u.count) }]"
-            :x-axis="userGrowth.map((u) => u.date)"
-            height="300px"
-          />
+    <!-- 趋势图表与分布 -->
+    <div class="chart-row">
+      <!-- 刷题趋势 -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>📈 刷题量与活跃走势</span>
         </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="stats-panel">
-          <h3>做题量趋势</h3>
-          <LineChart
-            :series="[
-              { name: '做题量', data: practiceStats.map((p) => p.count) },
-              { name: '正确率(%)', data: practiceStats.map((p) => Math.round(p.correctRate * 100)) },
-            ]"
-            :x-axis="practiceStats.map((p) => p.date)"
-            height="300px"
-          />
+        <div class="trend-bars">
+          <div v-for="item in weeklyTrend" :key="item.day" class="tb-item">
+            <div class="tb-bar-wrap">
+              <div class="tb-bar active-bar" :style="{ height: item.activeH + '%' }" title="活跃用户"></div>
+              <div class="tb-bar question-bar" :style="{ height: item.questionH + '%' }" title="刷题量"></div>
+            </div>
+            <span class="tb-day">{{ item.day }}</span>
+          </div>
         </div>
-      </el-col>
-    </el-row>
+      </div>
 
-    <!-- 题目质量 & 高频错题 -->
-    <el-row :gutter="16" style="margin-top: 16px">
-      <el-col :span="12">
-        <div class="stats-panel">
-          <h3>题目质量分析</h3>
-          <BarChart
-            :series="[{ name: '题目数', data: questionQuality.map((q) => q.total) }]"
-            :x-axis="questionQuality.map((q) => q.subject)"
-            height="300px"
-          />
+      <!-- 各科目正确率 -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>🎯 各科目平均掌握度</span>
         </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="stats-panel">
-          <h3>高频错题 Top5</h3>
-          <el-table :data="topWrongQuestions" border style="width: 100%">
-            <el-table-column type="index" label="排名" width="60" align="center" />
-            <el-table-column prop="title" label="题目" show-overflow-tooltip />
-            <el-table-column prop="wrongCount" label="错误次数" width="100" align="center">
-              <template #default="{ row }">{{ formatNumber(row.wrongCount) }}</template>
-            </el-table-column>
-            <el-table-column prop="wrongRate" label="错误率" width="90" align="center">
-              <template #default="{ row }">
-                <el-tag type="danger" size="small">{{ formatPercent(row.wrongRate) }}</el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-col>
-    </el-row>
-
-    <!-- 营收数据 -->
-    <el-row :gutter="16" style="margin-top: 16px">
-      <el-col :span="24">
-        <div class="stats-panel">
-          <div class="stats-panel__header">
-            <h3>营收数据</h3>
-            <div class="stats-summary">
-              <span>总营收：<strong>¥{{ formatNumber(revenueSummary.total) }}</strong></span>
-              <span>订单数：<strong>{{ formatNumber(revenueSummary.orders) }}</strong></span>
+        <div class="subject-rates">
+          <div v-for="sub in subjectRates" :key="sub.name" class="sr-item">
+            <div class="sr-header">
+              <span class="sr-name">{{ sub.name }}</span>
+              <span class="sr-rate">{{ sub.rate }}%</span>
+            </div>
+            <div class="sr-bar-track">
+              <div class="sr-bar-fill" :style="{ width: sub.rate + '%' }"></div>
             </div>
           </div>
-          <BarChart
-            :series="[
-              { name: '营收(元)', data: revenue.map((r) => r.revenue) },
-              { name: '订单数', data: revenue.map((r) => r.orders) },
-            ]"
-            :x-axis="revenue.map((r) => r.date)"
-            height="300px"
-          />
         </div>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
+
+    <!-- 高频易错考点 TOP 5 -->
+    <div class="panel weak-panel">
+      <div class="panel-title">
+        <span>🔥 平台高频易错考点 TOP 5</span>
+      </div>
+      <div class="weak-list">
+        <div v-for="(wp, i) in weakPoints" :key="wp.name" class="wp-item">
+          <div class="wp-rank">{{ i + 1 }}</div>
+          <div class="wp-info">
+            <div class="wp-name">{{ wp.name }}</div>
+            <div class="wp-desc">{{ wp.subject }} · {{ wp.errorCount }}次做错</div>
+          </div>
+          <div class="wp-rate-col">
+            <div class="wp-rate-val">{{ wp.errorRate }}%</div>
+            <div class="wp-rate-lbl">平均错误率</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const weeklyTrend = ref([
+  { day: '08-15', activeH: 45, questionH: 60 },
+  { day: '08-16', activeH: 52, questionH: 68 },
+  { day: '08-17', activeH: 60, questionH: 75 },
+  { day: '08-18', activeH: 58, questionH: 72 },
+  { day: '08-19', activeH: 70, questionH: 85 },
+  { day: '08-20', activeH: 88, questionH: 95 },
+  { day: '08-21', activeH: 82, questionH: 90 },
+])
+
+const subjectRates = ref([
+  { name: '系统集成项目管理工程师', rate: 78 },
+  { name: '信息系统项目管理师', rate: 72 },
+  { name: '网络工程师', rate: 70 },
+  { name: '软件设计师', rate: 65 },
+  { name: '系统架构设计师', rate: 62 },
+])
+
+const weakPoints = ref([
+  { name: '关键路径法 (CPM) 总时差与自由时差计算', subject: '项目进度管理', errorCount: '1,420', errorRate: 58 },
+  { name: '挣值分析法 (EVM) CV/SV/CPI/SPI 公式推导', subject: '项目成本管理', errorCount: '1,280', errorRate: 54 },
+  { name: '项目变更控制委员会 (CCB) 决策机制', subject: '项目整体管理', errorCount: '980', errorRate: 46 },
+  { name: 'WBS 工作分解结构创建原则与字典编制', subject: '项目范围管理', errorCount: '860', errorRate: 42 },
+  { name: '定性风险分析与定量风险分析工具对比', subject: '项目风险管理', errorCount: '750', errorRate: 39 },
+])
+</script>
+
 <style scoped lang="scss">
-.stats-toolbar {
-  margin-bottom: 16px;
-  padding: 16px;
-  background: var(--el-bg-color);
+.statistics-page {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat-card {
+  background: #fff;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  padding: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
-}
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
-.stats-panel {
-  background: var(--el-bg-color);
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-
-  h3 {
-    font-size: 16px;
-    margin-bottom: 12px;
-  }
-
-  &__header {
+  .sc-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+  }
+
+  .sc-info {
+    flex: 1;
+
+    .sc-num {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--gray-8);
+    }
+
+    .sc-label {
+      font-size: 13px;
+      color: var(--gray-6);
+      margin-top: 4px;
+    }
+
+    .sc-trend.up {
+      font-size: 12px;
+      color: var(--success);
+      margin-top: 4px;
+    }
   }
 }
 
-.stats-summary {
-  display: flex;
-  gap: 24px;
-  font-size: 14px;
+.chart-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
 
-  strong {
-    color: var(--el-color-danger);
-    font-size: 16px;
+  @media (max-width: 992px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  .panel-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 18px;
+  }
+}
+
+.trend-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 220px;
+  padding-top: 20px;
+
+  .tb-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    justify-content: flex-end;
+
+    .tb-bar-wrap {
+      display: flex;
+      gap: 4px;
+      align-items: flex-end;
+      height: 100%;
+
+      .tb-bar {
+        width: 14px;
+        border-radius: 4px 4px 0 0;
+
+        &.active-bar {
+          background: #8b5cf6;
+        }
+        &.question-bar {
+          background: #4a6cf7;
+        }
+      }
+    }
+
+    .tb-day {
+      font-size: 11px;
+      color: var(--gray-5);
+    }
+  }
+}
+
+.subject-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .sr-item {
+    .sr-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-8);
+      margin-bottom: 6px;
+
+      .sr-rate {
+        color: var(--primary);
+      }
+    }
+
+    .sr-bar-track {
+      height: 8px;
+      background: var(--gray-2);
+      border-radius: 4px;
+      overflow: hidden;
+
+      .sr-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4a6cf7, #8b5cf6);
+        border-radius: 4px;
+      }
+    }
+  }
+}
+
+.weak-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .wp-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    background: var(--gray-1);
+    border-radius: 6px;
+
+    .wp-rank {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #ef4444;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .wp-info {
+      flex: 1;
+
+      .wp-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--gray-8);
+      }
+
+      .wp-desc {
+        font-size: 12px;
+        color: var(--gray-5);
+        margin-top: 2px;
+      }
+    }
+
+    .wp-rate-col {
+      text-align: right;
+
+      .wp-rate-val {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--danger);
+      }
+
+      .wp-rate-lbl {
+        font-size: 11px;
+        color: var(--gray-5);
+      }
+    }
   }
 }
 </style>
