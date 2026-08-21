@@ -87,8 +87,8 @@ export class ExamController {
     @Param('subjectId') subjectIdParam?: string,
     @Query('subjectId') subjectIdQuery?: string,
   ) {
-    const subId = Number(subjectIdParam || subjectIdQuery || 1);
-    return this.examService.getChapters(subId);
+    const rawSubId = subjectIdParam || subjectIdQuery || '1';
+    return this.examService.getChapters(rawSubId);
   }
 
   @Post(['exam/chapters', 'admin/chapters'])

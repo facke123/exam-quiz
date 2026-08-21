@@ -128,7 +128,22 @@ export class QuestionService {
     const qb = this.questionRepository.createQueryBuilder('q').where('q.status = :status', { status: 'published' });
 
     if (subjectId) {
-      qb.andWhere('q.subjectId = :subjectId', { subjectId });
+      let subId: number | null = null;
+      if (!isNaN(Number(subjectId))) {
+        subId = Number(subjectId);
+      } else {
+        const found = await this.subjectRepository
+          .createQueryBuilder('s')
+          .where('s.code = :str OR s.name = :str OR s.code LIKE :like OR s.name LIKE :like', {
+            str: String(subjectId),
+            like: `%${subjectId}%`,
+          })
+          .getOne();
+        if (found) subId = Number(found.id);
+      }
+      if (subId) {
+        qb.andWhere('q.subjectId = :subjectId', { subjectId: subId });
+      }
     }
     if (chapterId) {
       qb.andWhere('q.chapterId = :chapterId', { chapterId });

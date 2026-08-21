@@ -112,12 +112,48 @@ export class ExamService {
     }
   }
 
+  /**
+   * 解析 subjectId 或 code/name 为数值 id
+   */
+  async resolveSubjectId(subjectIdOrCode?: number | string): Promise<number> {
+    if (!subjectIdOrCode) {
+      const first = await this.subjectRepository.findOne({ order: { sort: 'ASC', id: 'ASC' } });
+      return first ? Number(first.id) : 1;
+    }
+
+    if (typeof subjectIdOrCode === 'number' && !isNaN(subjectIdOrCode)) {
+      return subjectIdOrCode;
+    }
+
+    const str = String(subjectIdOrCode).trim();
+    if (!isNaN(Number(str)) && Number(str) > 0) {
+      return Number(str);
+    }
+
+    // Try finding by exact code or name or LIKE code/name
+    const found = await this.subjectRepository
+      .createQueryBuilder('s')
+      .where('s.code = :str OR s.name = :str OR s.code LIKE :like OR s.name LIKE :like', {
+        str,
+        like: `%${str}%`,
+      })
+      .getOne();
+
+    if (found) {
+      return Number(found.id);
+    }
+
+    const first = await this.subjectRepository.findOne({ order: { sort: 'ASC', id: 'ASC' } });
+    return first ? Number(first.id) : 1;
+  }
+
   // ==================== 章节管理 ====================
 
   /**
    * 获取章节列表（树形结构，含知识点及题目数）
    */
-  async getChapters(subjectId: number): Promise<any[]> {
+  async getChapters(subjectIdOrCode: number | string): Promise<any[]> {
+    const subjectId = await this.resolveSubjectId(subjectIdOrCode);
     const chapters = await this.chapterRepository.find({
       where: { subjectId },
       order: { sort: 'ASC', id: 'ASC' },

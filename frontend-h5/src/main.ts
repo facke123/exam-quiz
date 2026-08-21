@@ -16,8 +16,14 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 
-// 初始化用户 store（从 localStorage 恢复 token）
-import { useUserStore } from '@/stores/user'
-useUserStore().initFromStorage()
+// 忽略 Chrome 扩展（如翻译插件、广告拦截等）消息通道关闭引发的未捕获 Promise 警告
+window.addEventListener('unhandledrejection', (event) => {
+  if (
+    event?.reason?.message?.includes('message channel closed') ||
+    event?.reason?.message?.includes('asynchronous response')
+  ) {
+    event.preventDefault()
+  }
+})
 
 app.mount('#app')
