@@ -12,11 +12,13 @@
       <div class="generate-form-grid">
         <div class="form-item">
           <span class="label">基座大模型：</span>
-          <el-select v-model="generateForm.model" style="width: 170px">
-            <el-option label="Gemini 2.5 Pro (推荐)" value="gemini-2.5-pro" />
-            <el-option label="GPT-4o" value="gpt-4o" />
-            <el-option label="Claude 3.5 Sonnet" value="claude-3.5" />
-            <el-option label="DeepSeek-V3" value="deepseek-v3" />
+          <el-select v-model="generateForm.model" style="width: 200px">
+            <el-option label="Gemini 3.7 Flash (推荐)" value="gemini-3.7-flash" />
+            <el-option label="Gemini 3.1 Pro (高阶)" value="gemini-3.1-pro" />
+            <el-option label="Gemini 3.6 Flash" value="gemini-3.6-flash" />
+            <el-option label="DeepSeek-Chat" value="deepseek-chat" />
+            <el-option label="Qwen-Plus (通义千问)" value="qwen-plus" />
+            <el-option label="GPT-4o-mini" value="gpt-4o-mini" />
           </el-select>
         </div>
 
@@ -237,7 +239,7 @@ const subjects = ref<{ label: string; value: number }[]>([])
 const chapterOptions = ref<any[]>([])
 
 const generateForm = reactive<any>({
-  model: 'gemini-2.5-pro',
+  model: 'gemini-3.7-flash',
   subjectId: 1,
   chapterId: 1,
   type: 'single',
