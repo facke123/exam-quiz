@@ -93,7 +93,7 @@ services:
     networks:
       - exam-network
 
-  # ========== H5 前台用户端 (Port 80) ==========
+  # ========== H5 前台用户端 ==========
   h5:
     build:
       context: ..
@@ -101,14 +101,14 @@ services:
     image: exam-quiz/h5:latest
     container_name: exam-h5
     restart: always
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - backend
     networks:
       - exam-network
 
-  # ========== Admin 管理后台 (Port 81) ==========
+  # ========== Admin 管理后台 ==========
   admin:
     build:
       context: ..
@@ -116,9 +116,27 @@ services:
     image: exam-quiz/admin:latest
     container_name: exam-admin
     restart: always
-    ports:
-      - "81:81"
+    expose:
+      - "81"
     depends_on:
+      - backend
+    networks:
+      - exam-network
+
+  # ========== 统一网关分流服务 (Gateway) ==========
+  gateway:
+    image: nginx:alpine
+    container_name: exam-gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    volumes:
+      - ./nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - h5
+      - admin
       - backend
     networks:
       - exam-network
