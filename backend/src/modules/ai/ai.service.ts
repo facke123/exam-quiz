@@ -1078,19 +1078,41 @@ ${dto.content}`;
     const subjectName = subject ? subject.name : '软考专业科目';
 
     // 1. 尝试大模型结构化解析
-    const prompt = `你是一位国家软考考纲架构专家。请将以下科目【${subjectName}】的考纲或教材文本，解析归纳为规范的章节与核心考点。
-输出严格为 JSON 格式数组：
+    const prompt = `你是一位国家软考教材与考纲架构专家。请将以下科目【${subjectName}】的考纲或教材目录文本，精确解析归纳为层级清晰的章节（Chapter）与核心考点（Knowledge Points）。
+
+【重要层级判定规则】
+1. 顶级目录为【章节】（如："第1章 信息化发展"、"第一章 ..."、"1. 软件工程基础"）。
+2. 带有点分二级序号的子条目（如："1.1 信息与信息化"、"1.2 现代化基础设施"、"第1节 ..."）必须归属于对应的上一级章节，作为该章节下的【核心考点/知识点】（knowledgePoints），绝对不能把 1.1、1.2 误识别为独立章节！
+3. 每个考点给出简要的 description 考查重点说明。
+
+示例结构：
+输入：
+第1章 信息化发展
+1.1 信息与信息化
+1.2 现代化基础设施
+第2章 信息系统集成
+2.1 项目生命周期
+
+输出严格为 JSON 数组：
 [
   {
-    "name": "第1章 章节名称",
+    "name": "第1章 信息化发展",
     "sort": 1,
     "knowledgePoints": [
-      { "name": "1.1 考点名称", "description": "核心考点速记说明" }
+      { "name": "1.1 信息与信息化", "description": "信息与信息化基本概念、信息系统特征及生命周期" },
+      { "name": "1.2 现代化基础设施", "description": "新一代信息基础设施、算力网络与工业互联网" }
+    ]
+  },
+  {
+    "name": "第2章 信息系统集成",
+    "sort": 2,
+    "knowledgePoints": [
+      { "name": "2.1 项目生命周期", "description": "项目启动、规划、执行、监控与收尾阶段要点" }
     ]
   }
 ]
 
-考纲文本：
+待解析考纲文本：
 ${dto.content}`;
 
     const llmChapters = await this.callLlm(
@@ -1102,15 +1124,19 @@ ${dto.content}`;
       const formatted = llmChapters.map((ch: any, idx: number) => ({
         name: ch.name || `第${idx + 1}章 考点体系`,
         sort: ch.sort || idx + 1,
-        knowledgePoints: Array.isArray(ch.knowledgePoints)
+        knowledgePoints: Array.isArray(ch.knowledgePoints) && ch.knowledgePoints.length > 0
           ? ch.knowledgePoints.map((kp: any, kIdx: number) => ({
               name: kp.name || `${idx + 1}.${kIdx + 1} 核心考点`,
               description: kp.description || `核心考点：${kp.name || '基础知识'}概念定义及考查方向。`,
             }))
           : [
               {
-                name: `${idx + 1}.1 核心原理与考点解析`,
+                name: `${idx + 1}.1 核心概念与原理`,
                 description: '掌握本章核心概念与命题方向。',
+              },
+              {
+                name: `${idx + 1}.2 重点考查要点与难点`,
+                description: '重点过程机制、标准规范及真题常考考点。',
               },
             ],
       }));
@@ -1122,7 +1148,7 @@ ${dto.content}`;
       };
     }
 
-    // 2. 正则表达式兜底提取
+    // 2. 精确规则与正则表达式解析（精准区分 章 与 节/考点）
     const lines = dto.content
       .split('\n')
       .map((l) => l.trim())
@@ -1140,46 +1166,112 @@ ${dto.content}`;
       knowledgePoints: Array<{ name: string; description: string }>;
     } | null = null;
 
-    const chapterRegex =
-      /^(?:第[0-9一二三四五六七八九十百]+章|[0-9]{1,2}[.、\s]|[一二三四五六七八九十]+[、.])\s*(.*)/;
-    const kpRegex =
-      /^(?:[0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]+)?|[（(][0-9一二三四五六七八九十]+[）)]|考点\s*[0-9一二三四五六七八九十]+|[-*•·])\s*(.*)/;
+    // 章节正则：明确匹配 "第X章"、"第X篇"、"第X部分"、"Chapter X"、"1、"、"一、"、"1. "(不带子点)
+    const chapterExplicitRegex =
+      /^(?:第\s*[0-9一二三四五六七八九十百]+\s*[章节篇部分]|Chapter\s*[0-9]+)\s*(.*)/i;
+    const chapterNumericRegex =
+      /^(?:[0-9]{1,2}|[一二三四五六七八九十]{1,3})[、\s]\s*([^0-9\.\s].*)/;
+    const chapterSingleDotRegex =
+      /^([0-9]{1,2})\.(?!\d)\s*(.*)/;
+
+    // 知识点/子节正则：明确匹配 "1.1"、"1.2"、"1.1.1"、"第X节"、"（1）"、"考点X"、"- "
+    const kpSubNumberRegex =
+      /^([0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]+)?)\s*(.*)/;
+    const kpSectionRegex =
+      /^(?:第\s*[0-9一二三四五六七八九十]+\s*[节条]|Section\s*[0-9]+|[（(][0-9一二三四五六七八九十]+[）)]|考点\s*[0-9一二三四五六七八九十]+|[-*•·])\s*(.*)/i;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const chMatch = line.match(chapterRegex);
-      const isChapterKeyword =
-        line.startsWith('第') && (line.includes('章') || line.includes('篇') || line.includes('部分'));
 
-      if (chMatch || isChapterKeyword || (!currentChapter && lines.length <= 15)) {
-        if (chMatch || isChapterKeyword || line.length <= 25) {
-          const rawName = line;
-          const formattedName = rawName.startsWith('第')
-            ? rawName
-            : `第${parsedChapters.length + 1}章 ${rawName.replace(/^[0-9.、\s]+/, '')}`;
+      // A. 首先判断是否是 二级知识点 (如 "1.1 信息与信息化"、"1.2 ...")
+      const subNumMatch = line.match(kpSubNumberRegex);
+      const subSecMatch = line.match(kpSectionRegex);
 
+      if (subNumMatch || subSecMatch) {
+        // 如果当前还没有章节，自动创建第一个章节
+        if (!currentChapter) {
+          const defaultChName = `第1章 ${subjectName}基础与核心体系`;
           currentChapter = {
-            name: formattedName,
+            name: defaultChName,
             sort: parsedChapters.length + 1,
             knowledgePoints: [],
           };
           parsedChapters.push(currentChapter);
-          continue;
         }
+
+        let kpName = line;
+        let kpDesc = '';
+        if (subNumMatch) {
+          kpName = line;
+          kpDesc = `掌握【${subNumMatch[2] || line}】的核心概念、技术原理、标准规范及真题考查重点。`;
+        } else if (subSecMatch) {
+          kpName = `${currentChapter.sort}.${currentChapter.knowledgePoints.length + 1} ${subSecMatch[1] || line}`;
+          kpDesc = `核心考点：${subSecMatch[1] || line}概念定义、关键过程机制及历年常考考法梳理。`;
+        }
+
+        currentChapter.knowledgePoints.push({
+          name: kpName,
+          description: kpDesc,
+        });
+        continue;
       }
 
-      if (currentChapter) {
-        const kpMatch = line.match(kpRegex);
-        let kpName = kpMatch ? line : line;
-        if (kpName.length > 0 && kpName.length <= 80) {
-          if (!kpName.match(/^[0-9.]/)) {
-            kpName = `${currentChapter.sort}.${currentChapter.knowledgePoints.length + 1} ${kpName.replace(/^[-*•·\s]+/, '')}`;
-          }
-          currentChapter.knowledgePoints.push({
-            name: kpName,
-            description: `核心考点：${kpName.replace(/^[0-9.、\s]+/, '')}概念定义、关键过程机制及历年常考考法梳理。`,
-          });
+      // B. 判断是否是 顶级章节 (如 "第1章 信息化发展"、"1. 软件工程"、"一、项目管理")
+      const explicitChMatch = line.match(chapterExplicitRegex);
+      const numericChMatch = line.match(chapterNumericRegex);
+      const singleDotChMatch = line.match(chapterSingleDotRegex);
+
+      if (explicitChMatch || numericChMatch || singleDotChMatch) {
+        let chTitle = line;
+        if (explicitChMatch) {
+          chTitle = line.startsWith('第') ? line : `第${parsedChapters.length + 1}章 ${explicitChMatch[1]}`;
+        } else if (numericChMatch) {
+          chTitle = `第${parsedChapters.length + 1}章 ${numericChMatch[1]}`;
+        } else if (singleDotChMatch) {
+          chTitle = `第${parsedChapters.length + 1}章 ${singleDotChMatch[2]}`;
         }
+
+        currentChapter = {
+          name: chTitle,
+          sort: parsedChapters.length + 1,
+          knowledgePoints: [],
+        };
+        parsedChapters.push(currentChapter);
+        continue;
+      }
+
+      // C. 普通行文本处理
+      if (currentChapter) {
+        // 作为当前章节下的考点
+        const kpIndex = currentChapter.knowledgePoints.length + 1;
+        currentChapter.knowledgePoints.push({
+          name: `${currentChapter.sort}.${kpIndex} ${line.replace(/^[-*•·\s]+/, '')}`,
+          description: `掌握【${line}】核心概念定义、常见考题类型及解题要点。`,
+        });
+      } else {
+        // 第一行非序号文本，作为第一章
+        currentChapter = {
+          name: line.startsWith('第') ? line : `第${parsedChapters.length + 1}章 ${line}`,
+          sort: parsedChapters.length + 1,
+          knowledgePoints: [],
+        };
+        parsedChapters.push(currentChapter);
+      }
+    }
+
+    // 补充：如果章节内没有知识点，自动补充 2 个标准考点
+    for (const ch of parsedChapters) {
+      if (ch.knowledgePoints.length === 0) {
+        ch.knowledgePoints.push(
+          {
+            name: `${ch.sort}.1 核心原理与概念解析`,
+            description: `深入理解${ch.name}的核心理论体系与基本概念。`,
+          },
+          {
+            name: `${ch.sort}.2 关键过程与重点难点`,
+            description: `掌握${ch.name}的常见考法、计算公式与工程实践。`,
+          },
+        );
       }
     }
 
@@ -1213,37 +1305,7 @@ ${dto.content}`;
             },
           ],
         },
-        {
-          name: `第3章 ${subjectName}案例分析与综合应用`,
-          sort: 3,
-          knowledgePoints: [
-            {
-              name: '3.1 经典案例问题诊断与根因分析',
-              description: '历年案例主观题高频考点，针对进度/成本/质量常见缺陷的排查定位。',
-            },
-            {
-              name: '3.2 优化改进方案与答题要点规范',
-              description: '规范化答题采分点组织与解决方案设计。',
-            },
-          ],
-        },
       );
-    }
-
-    for (const ch of parsedChapters) {
-      if (ch.knowledgePoints.length === 0) {
-        const cleanName = ch.name.replace(/^第[0-9一二三四五六七八九十百]+章\s*/, '');
-        ch.knowledgePoints.push(
-          {
-            name: `${ch.sort}.1 ${cleanName}核心原理与概念解析`,
-            description: `归纳整理${cleanName}的核心理论框架、专业术语定义与关键考核点。`,
-          },
-          {
-            name: `${ch.sort}.2 ${cleanName}常见考法与重点难点`,
-            description: `剖析${cleanName}在历年软考中的典型单选题、计算题及案例考查方向。`,
-          },
-        );
-      }
     }
 
     return {
