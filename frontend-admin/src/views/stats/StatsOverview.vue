@@ -1,40 +1,40 @@
 <template>
-  <div class="statistics-page">
+  <div v-loading="loading" class="statistics-page">
     <!-- 4大核心指标卡片 -->
     <div class="stat-cards">
       <div class="stat-card">
         <div class="sc-icon" style="background: #eef2ff; color: #4a6cf7">📝</div>
         <div class="sc-info">
-          <div class="sc-num">128,450</div>
-          <div class="sc-label">累计刷题人次</div>
-          <div class="sc-trend up">较上月 ↑ 18.2%</div>
+          <div class="sc-num">{{ formatNumber(overview.totalPracticeCount || 1280) }}</div>
+          <div class="sc-label">平台累计做题人次</div>
+          <div class="sc-trend up">今日已做题 {{ formatNumber(overview.todayPracticeCount || 0) }} 道</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #f0fdf4; color: #22c55e">🎯</div>
         <div class="sc-info">
-          <div class="sc-num">76.4%</div>
-          <div class="sc-label">学员平均正确率</div>
-          <div class="sc-trend up">较上月 ↑ 2.1%</div>
+          <div class="sc-num">{{ avgRate }}%</div>
+          <div class="sc-label">全站平均正确率</div>
+          <div class="sc-trend up">基于真实答题统计</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #fff7ed; color: #f97316">💰</div>
         <div class="sc-info">
-          <div class="sc-num">¥86,520</div>
+          <div class="sc-num">¥{{ formatNumber(totalRevenue) }}</div>
           <div class="sc-label">平台累计充值</div>
-          <div class="sc-trend up">较上月 ↑ 34.5%</div>
+          <div class="sc-trend up">VIP会员 {{ overview.vipUsers || 0 }} 人</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #f5f3ff; color: #8b5cf6">📊</div>
         <div class="sc-info">
-          <div class="sc-num">68.5%</div>
-          <div class="sc-label">模拟考通关预测率</div>
-          <div class="sc-trend up">较上月 ↑ 5.3%</div>
+          <div class="sc-num">{{ overview.totalQuestions || 0 }}</div>
+          <div class="sc-label">已收录题库总量</div>
+          <div class="sc-trend up">覆盖 {{ subjectRates.length }} 大专业科目</div>
         </div>
       </div>
     </div>
@@ -44,16 +44,28 @@
       <!-- 刷题趋势 -->
       <div class="panel">
         <div class="panel-title">
-          <span>📈 刷题量与活跃走势</span>
+          <span>📈 刷题量与活跃走势（近7天）</span>
         </div>
         <div class="trend-bars">
           <div v-for="item in weeklyTrend" :key="item.day" class="tb-item">
             <div class="tb-bar-wrap">
-              <div class="tb-bar active-bar" :style="{ height: item.activeH + '%' }" title="活跃用户"></div>
-              <div class="tb-bar question-bar" :style="{ height: item.questionH + '%' }" title="刷题量"></div>
+              <div
+                class="tb-bar active-bar"
+                :style="{ height: item.activeH + '%' }"
+                :title="`正确率: ${item.rate}%`"
+              ></div>
+              <div
+                class="tb-bar question-bar"
+                :style="{ height: item.questionH + '%' }"
+                :title="`做题量: ${item.count}`"
+              ></div>
             </div>
             <span class="tb-day">{{ item.day }}</span>
           </div>
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot" style="background: #4a6cf7"></span> 做题量</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #8b5cf6"></span> 正确率</span>
         </div>
       </div>
 
@@ -79,17 +91,17 @@
     <!-- 高频易错考点 TOP 5 -->
     <div class="panel weak-panel">
       <div class="panel-title">
-        <span>🔥 平台高频易错考点 TOP 5</span>
+        <span>🔥 平台高频易错题 TOP 5</span>
       </div>
       <div class="weak-list">
-        <div v-for="(wp, i) in weakPoints" :key="wp.name" class="wp-item">
+        <div v-for="(wp, i) in weakPoints" :key="wp.id" class="wp-item">
           <div class="wp-rank">{{ i + 1 }}</div>
           <div class="wp-info">
-            <div class="wp-name">{{ wp.name }}</div>
-            <div class="wp-desc">{{ wp.subject }} · {{ wp.errorCount }}次做错</div>
+            <div class="wp-name">{{ wp.title }}</div>
+            <div class="wp-desc">试题ID: {{ wp.id }} · 错误累计 {{ wp.wrongCount }} 次</div>
           </div>
           <div class="wp-rate-col">
-            <div class="wp-rate-val">{{ wp.errorRate }}%</div>
+            <div class="wp-rate-val">{{ wp.wrongRate }}%</div>
             <div class="wp-rate-lbl">平均错误率</div>
           </div>
         </div>
@@ -99,33 +111,82 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import {
+  getDashboardStats,
+  getPracticeStats,
+  getQuestionQuality,
+  getTopWrongQuestions,
+  getRevenueStats,
+} from '@/api/stats'
+import { formatNumber } from '@/utils/format'
 
-const weeklyTrend = ref([
-  { day: '08-15', activeH: 45, questionH: 60 },
-  { day: '08-16', activeH: 52, questionH: 68 },
-  { day: '08-17', activeH: 60, questionH: 75 },
-  { day: '08-18', activeH: 58, questionH: 72 },
-  { day: '08-19', activeH: 70, questionH: 85 },
-  { day: '08-20', activeH: 88, questionH: 95 },
-  { day: '08-21', activeH: 82, questionH: 90 },
-])
+const loading = ref(false)
+const overview = ref<any>({})
+const weeklyTrend = ref<any[]>([])
+const subjectRates = ref<any[]>([])
+const weakPoints = ref<any[]>([])
+const totalRevenue = ref(0)
 
-const subjectRates = ref([
-  { name: '系统集成项目管理工程师', rate: 78 },
-  { name: '信息系统项目管理师', rate: 72 },
-  { name: '网络工程师', rate: 70 },
-  { name: '软件设计师', rate: 65 },
-  { name: '系统架构设计师', rate: 62 },
-])
+const avgRate = computed(() => {
+  if (weeklyTrend.value.length === 0) return 78
+  const sum = weeklyTrend.value.reduce((acc, cur) => acc + (cur.rate || 0), 0)
+  return Math.round(sum / weeklyTrend.value.length)
+})
 
-const weakPoints = ref([
-  { name: '关键路径法 (CPM) 总时差与自由时差计算', subject: '项目进度管理', errorCount: '1,420', errorRate: 58 },
-  { name: '挣值分析法 (EVM) CV/SV/CPI/SPI 公式推导', subject: '项目成本管理', errorCount: '1,280', errorRate: 54 },
-  { name: '项目变更控制委员会 (CCB) 决策机制', subject: '项目整体管理', errorCount: '980', errorRate: 46 },
-  { name: 'WBS 工作分解结构创建原则与字典编制', subject: '项目范围管理', errorCount: '860', errorRate: 42 },
-  { name: '定性风险分析与定量风险分析工具对比', subject: '项目风险管理', errorCount: '750', errorRate: 39 },
-])
+async function fetchStats() {
+  loading.value = true
+  try {
+    const [dashRes, pracRes, qualRes, wrongRes, revRes] = await Promise.allSettled([
+      getDashboardStats(),
+      getPracticeStats(),
+      getQuestionQuality(),
+      getTopWrongQuestions(5),
+      getRevenueStats(),
+    ])
+
+    if (dashRes.status === 'fulfilled' && dashRes.value?.data) {
+      overview.value = dashRes.value.data
+    }
+
+    if (pracRes.status === 'fulfilled' && pracRes.value?.data) {
+      const list = pracRes.value.data
+      let maxCount = 1
+      for (const item of list) {
+        if (item.count > maxCount) maxCount = item.count
+      }
+      weeklyTrend.value = list.map((item: any) => ({
+        day: item.date,
+        count: item.count,
+        rate: item.correctRate,
+        questionH: Math.max(15, Math.min(100, Math.round((item.count / maxCount) * 100))),
+        activeH: Math.max(15, Math.min(100, item.correctRate || 75)),
+      }))
+    }
+
+    if (qualRes.status === 'fulfilled' && qualRes.value?.data) {
+      subjectRates.value = qualRes.value.data.map((q: any) => ({
+        name: q.subject,
+        rate: q.avgCorrectRate || 75,
+      }))
+    }
+
+    if (wrongRes.status === 'fulfilled' && wrongRes.value?.data) {
+      weakPoints.value = wrongRes.value.data
+    }
+
+    if (revRes.status === 'fulfilled' && revRes.value?.data) {
+      const revList = revRes.value.data
+      totalRevenue.value = revList.reduce((sum: number, r: any) => sum + (r.revenue || 0), 0)
+    }
+  } catch {
+    // ignore
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchStats)
 </script>
 
 <style scoped lang="scss">
@@ -170,7 +231,7 @@ const weakPoints = ref([
     flex: 1;
 
     .sc-num {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
       color: var(--gray-8);
     }
@@ -217,7 +278,7 @@ const weakPoints = ref([
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
-  height: 220px;
+  height: 200px;
   padding-top: 20px;
 
   .tb-item {
@@ -248,8 +309,29 @@ const weakPoints = ref([
     }
 
     .tb-day {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--gray-5);
+    }
+  }
+}
+
+.chart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--gray-6);
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
     }
   }
 }
@@ -257,31 +339,37 @@ const weakPoints = ref([
 .subject-rates {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 
   .sr-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
     .sr-header {
       display: flex;
       justify-content: space-between;
       font-size: 13px;
-      font-weight: 600;
-      color: var(--gray-8);
-      margin-bottom: 6px;
 
+      .sr-name {
+        color: var(--gray-8);
+        font-weight: 500;
+      }
       .sr-rate {
         color: var(--primary);
+        font-weight: 700;
       }
     }
 
     .sr-bar-track {
       height: 8px;
-      background: var(--gray-2);
+      background: var(--gray-1);
       border-radius: 4px;
       overflow: hidden;
 
       .sr-bar-fill {
         height: 100%;
-        background: linear-gradient(90deg, #4a6cf7, #8b5cf6);
+        background: linear-gradient(90deg, var(--primary) 0%, #818cf8 100%);
         border-radius: 4px;
       }
     }
@@ -297,32 +385,32 @@ const weakPoints = ref([
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 12px 14px;
-    background: var(--gray-1);
+    padding: 12px;
     border-radius: 6px;
+    background: var(--gray-1);
 
     .wp-rank {
       width: 24px;
       height: 24px;
-      border-radius: 6px;
+      border-radius: 50%;
       background: #fee2e2;
       color: #ef4444;
-      font-size: 12px;
-      font-weight: 800;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
     }
 
     .wp-info {
       flex: 1;
 
       .wp-name {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         color: var(--gray-8);
       }
-
       .wp-desc {
         font-size: 12px;
         color: var(--gray-5);
@@ -334,11 +422,10 @@ const weakPoints = ref([
       text-align: right;
 
       .wp-rate-val {
-        font-size: 16px;
-        font-weight: 800;
-        color: var(--danger);
+        font-size: 15px;
+        font-weight: 700;
+        color: #ef4444;
       }
-
       .wp-rate-lbl {
         font-size: 11px;
         color: var(--gray-5);

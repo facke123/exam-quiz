@@ -5,36 +5,36 @@
       <div class="stat-card">
         <div class="sc-icon" style="background: #EEF2FF; color: #4A6CF7">📝</div>
         <div class="sc-info">
-          <div class="sc-num">{{ formatNumber(stats.totalQuestions || 12850) }}</div>
+          <div class="sc-num">{{ formatNumber(stats.todayPracticeCount || 0) }}</div>
           <div class="sc-label">今日刷题量</div>
-          <div class="sc-trend up">较昨日 ↑ 15.3%</div>
+          <div class="sc-trend up">实时动态统计</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #F0FDF4; color: #22C55E">👥</div>
         <div class="sc-info">
-          <div class="sc-num">{{ formatNumber(stats.dailyActive || 3420) }}</div>
-          <div class="sc-label">今日活跃用户</div>
-          <div class="sc-trend up">较昨日 ↑ 8.7%</div>
+          <div class="sc-num">{{ formatNumber(stats.dailyActive || 0) }}</div>
+          <div class="sc-label">今日活跃学员</div>
+          <div class="sc-trend up">总学员 {{ stats.totalUsers || 0 }} 人</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #FFF7ED; color: #FF7A45">💰</div>
         <div class="sc-info">
-          <div class="sc-num">¥{{ formatNumber(4680) }}</div>
+          <div class="sc-num">¥{{ formatNumber(stats.todayRevenue || 0) }}</div>
           <div class="sc-label">今日新增付费</div>
-          <div class="sc-trend up">较昨日 ↑ 22.4%</div>
+          <div class="sc-trend up">VIP会员 {{ stats.vipUsers || 0 }} 人</div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="sc-icon" style="background: #F5F3FF; color: #8B5CF6">📚</div>
         <div class="sc-info">
-          <div class="sc-num">{{ formatNumber(3850) }}</div>
+          <div class="sc-num">{{ formatNumber(stats.totalQuestions || 0) }}</div>
           <div class="sc-label">题库总题量</div>
-          <div class="sc-trend" style="color: var(--primary)">近7天新增 120道</div>
+          <div class="sc-trend" style="color: var(--primary)">已发布上线试题</div>
         </div>
       </div>
     </div>
@@ -44,7 +44,7 @@
       <!-- 刷题趋势图 -->
       <div class="panel">
         <div class="panel-title">
-          <span>📈 刷题量趋势</span>
+          <span>📈 刷题量近7天趋势</span>
           <div class="pt-actions">
             <span
               v-for="t in trendTabs"
@@ -58,9 +58,9 @@
           </div>
         </div>
         <div class="bar-chart">
-          <div v-for="item in chartData" :key="item.day" class="bar-item">
+          <div v-for="item in (stats.chartData || chartData)" :key="item.day" class="bar-item">
             <div class="bar" :style="{ height: item.height + '%' }">
-              <span class="bar-val">{{ item.val }}</span>
+              <span class="bar-val">{{ item.val || item.count }}</span>
             </div>
             <span class="bar-label">{{ item.day }}</span>
           </div>
@@ -76,40 +76,76 @@
           <div class="donut-svg-wrap">
             <svg viewBox="0 0 100 100" class="donut-svg">
               <circle cx="50" cy="50" r="38" fill="none" stroke="#E2E8F0" stroke-width="14" />
-              <!-- 单选题 52% -->
-              <circle cx="50" cy="50" r="38" fill="none" stroke="#4A6CF7" stroke-width="14" stroke-dasharray="124 238" stroke-dashoffset="0" />
-              <!-- 多选题 24% -->
-              <circle cx="50" cy="50" r="38" fill="none" stroke="#22C55E" stroke-width="14" stroke-dasharray="57 238" stroke-dashoffset="-124" />
-              <!-- 判断题 14% -->
-              <circle cx="50" cy="50" r="38" fill="none" stroke="#F59E0B" stroke-width="14" stroke-dasharray="33 238" stroke-dashoffset="-181" />
-              <!-- 案例题 10% -->
-              <circle cx="50" cy="50" r="38" fill="none" stroke="#8B5CF6" stroke-width="14" stroke-dasharray="24 238" stroke-dashoffset="-214" />
+              <!-- 单选题 -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="#4A6CF7"
+                stroke-width="14"
+                :stroke-dasharray="`${(qDist.singlePercent * 2.38).toFixed(1)} 238`"
+                stroke-dashoffset="0"
+              />
+              <!-- 多选题 -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="#22C55E"
+                stroke-width="14"
+                :stroke-dasharray="`${(qDist.multiplePercent * 2.38).toFixed(1)} 238`"
+                :stroke-dashoffset="`-${(qDist.singlePercent * 2.38).toFixed(1)}`"
+              />
+              <!-- 判断题 -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="#F59E0B"
+                stroke-width="14"
+                :stroke-dasharray="`${(qDist.judgePercent * 2.38).toFixed(1)} 238`"
+                :stroke-dashoffset="`-${((qDist.singlePercent + qDist.multiplePercent) * 2.38).toFixed(1)}`"
+              />
+              <!-- 案例分析 -->
+              <circle
+                cx="50"
+                cy="50"
+                r="38"
+                fill="none"
+                stroke="#8B5CF6"
+                stroke-width="14"
+                :stroke-dasharray="`${(qDist.casePercent * 2.38).toFixed(1)} 238`"
+                :stroke-dashoffset="`-${((qDist.singlePercent + qDist.multiplePercent + qDist.judgePercent) * 2.38).toFixed(1)}`"
+              />
             </svg>
             <div class="donut-center">
-              <span class="total-num">3,850</span>
+              <span class="total-num">{{ formatNumber(stats.totalQuestions || 0) }}</span>
               <span class="total-text">总题量</span>
             </div>
           </div>
           <div class="donut-info">
             <div class="di-item">
               <span class="dot" style="background: #4A6CF7"></span>
-              <span>单选题 (52%)</span>
-              <span class="num">2,002</span>
+              <span>单选题 ({{ qDist.singlePercent || 0 }}%)</span>
+              <span class="num">{{ qDist.single || 0 }} 道</span>
             </div>
             <div class="di-item">
               <span class="dot" style="background: #22C55E"></span>
-              <span>多选题 (24%)</span>
-              <span class="num">924</span>
+              <span>多选题 ({{ qDist.multiplePercent || 0 }}%)</span>
+              <span class="num">{{ qDist.multiple || 0 }} 道</span>
             </div>
             <div class="di-item">
               <span class="dot" style="background: #F59E0B"></span>
-              <span>判断题 (14%)</span>
-              <span class="num">539</span>
+              <span>判断题 ({{ qDist.judgePercent || 0 }}%)</span>
+              <span class="num">{{ qDist.judge || 0 }} 道</span>
             </div>
             <div class="di-item">
               <span class="dot" style="background: #8B5CF6"></span>
-              <span>案例分析 (10%)</span>
-              <span class="num">385</span>
+              <span>案例题 ({{ qDist.casePercent || 0 }}%)</span>
+              <span class="num">{{ qDist.case || 0 }} 道</span>
             </div>
           </div>
         </div>
@@ -121,34 +157,30 @@
       <!-- 待办处理 -->
       <div class="panel">
         <div class="panel-title">
-          <span>📋 待处理待办</span>
+          <span>📋 待处理事项</span>
         </div>
         <div class="todo-list">
-          <div class="todo-item">
-            <div class="ti-icon" style="background: #EEF2FF; color: #4A6CF7">🤖</div>
-            <div class="ti-text">
-              <div class="t">待审核 AI 生成题目（12道）</div>
-              <div class="d">由 Gemini 2.5 自动命题，等待人工复核校验入库</div>
+          <div
+            v-for="item in (stats.todoList || defaultTodoList)"
+            :key="item.id"
+            class="todo-item"
+          >
+            <div
+              class="ti-icon"
+              :style="{
+                background: item.type === 'ai_question' ? '#EEF2FF' : item.type === 'error_report' ? '#FEF2F2' : '#FFFBEB',
+                color: item.type === 'ai_question' ? '#4A6CF7' : item.type === 'error_report' ? '#EF4444' : '#F59E0B',
+              }"
+            >
+              {{ item.type === 'ai_question' ? '🤖' : item.type === 'error_report' ? '⚠️' : '🔔' }}
             </div>
-            <button class="ti-btn" @click="$router.push('/ai/generate')">去审核</button>
-          </div>
-
-          <div class="todo-item">
-            <div class="ti-icon" style="background: #FEF2F2; color: #EF4444">⚠️</div>
             <div class="ti-text">
-              <div class="t">用户纠错反馈待处理（5条）</div>
-              <div class="d">涉及“项目范围管理”第28题答案异议反馈</div>
+              <div class="t">{{ item.title }}</div>
+              <div class="d">{{ item.desc }}</div>
             </div>
-            <button class="ti-btn" @click="$router.push('/question/error-report')">去处理</button>
-          </div>
-
-          <div class="todo-item">
-            <div class="ti-icon" style="background: #FFFBEB; color: #F59E0B">🔔</div>
-            <div class="ti-text">
-              <div class="t">本周真题卷待发布（2套）</div>
-              <div class="d">2025年下半年系统集成真题解析已校对完毕</div>
-            </div>
-            <button class="ti-btn" @click="$router.push('/exam/paper')">去发布</button>
+            <button class="ti-btn" @click="$router.push(item.route)">
+              {{ item.btnText || '去处理' }}
+            </button>
           </div>
         </div>
       </div>
@@ -159,13 +191,17 @@
           <span>🔥 热门软考科目</span>
         </div>
         <div class="hot-subjects">
-          <div v-for="(sub, i) in hotSubjects" :key="sub.name" class="hs-item">
+          <div
+            v-for="(sub, i) in (stats.hotSubjects || hotSubjects)"
+            :key="sub.name"
+            class="hs-item"
+          >
             <span class="hs-rank" :class="'rank-' + (i + 1)">{{ i + 1 }}</span>
             <span class="hs-name">{{ sub.name }}</span>
             <div class="hs-bar-wrap">
-              <div class="hs-bar" :style="{ width: sub.percent + '%' }"></div>
+              <div class="hs-bar" :style="{ width: (sub.percent || 50) + '%' }"></div>
             </div>
-            <span class="hs-count">{{ sub.count }}人刷题</span>
+            <span class="hs-count">{{ sub.count }} 次刷题</span>
           </div>
         </div>
       </div>
@@ -174,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getDashboardStats } from '@/api/stats'
 import { formatNumber } from '@/utils/format'
 
@@ -189,21 +225,63 @@ const trendTabs = [
 ]
 
 const chartData = ref([
-  { day: '周一', val: '8.2k', height: 45 },
-  { day: '周二', val: '9.8k', height: 55 },
-  { day: '周三', val: '11.2k', height: 65 },
-  { day: '周四', val: '10.5k', height: 60 },
-  { day: '周五', val: '13.4k', height: 78 },
-  { day: '周六', val: '16.8k', height: 95 },
-  { day: '周日', val: '15.2k', height: 86 },
+  { day: '周一', val: '45', height: 45, count: 45 },
+  { day: '周二', val: '65', height: 65, count: 65 },
+  { day: '周三', val: '80', height: 80, count: 80 },
+  { day: '周四', val: '75', height: 75, count: 75 },
+  { day: '周五', val: '95', height: 95, count: 95 },
+  { day: '周六', val: '120', height: 100, count: 120 },
+  { day: '周日', val: '110', height: 92, count: 110 },
 ])
 
+const qDist = computed(() => {
+  if (stats.value?.questionDistribution) {
+    return stats.value.questionDistribution
+  }
+  return {
+    single: 0,
+    multiple: 0,
+    judge: 0,
+    case: 0,
+    singlePercent: 0,
+    multiplePercent: 0,
+    judgePercent: 0,
+    casePercent: 0,
+  }
+})
+
+const defaultTodoList = [
+  {
+    id: 1,
+    title: '待审核 AI 生成题目',
+    desc: '由大模型智能命题生成，等待人工复核校验入库',
+    type: 'ai_question',
+    route: '/ai/generate',
+    btnText: '去审核',
+  },
+  {
+    id: 2,
+    title: '用户纠错反馈待处理',
+    desc: '考生提交的题干疑问与解析异议反馈待核实答复',
+    type: 'error_report',
+    route: '/question/error-report',
+    btnText: '去处理',
+  },
+  {
+    id: 3,
+    title: '未发布/草稿试卷待发布',
+    desc: '真题及模拟试卷组卷完成后待审核上线',
+    type: 'paper',
+    route: '/exam/paper',
+    btnText: '去发布',
+  },
+]
+
 const hotSubjects = ref([
-  { name: '系统集成项目管理工程师 (中级)', count: '4,280', percent: 92 },
-  { name: '信息系统项目管理师 (高级)', count: '3,650', percent: 80 },
-  { name: '软件设计师 (中级)', count: '2,920', percent: 64 },
-  { name: '网络工程师 (中级)', count: '2,410', percent: 52 },
-  { name: '系统架构设计师 (高级)', count: '1,890', percent: 40 },
+  { name: '系统集成项目管理工程师 (中级)', count: 240, percent: 90 },
+  { name: '信息系统项目管理师 (高级)', count: 180, percent: 75 },
+  { name: '软件设计师 (中级)', count: 120, percent: 55 },
+  { name: '网络工程师 (中级)', count: 90, percent: 40 },
 ])
 
 async function fetchData() {
@@ -214,7 +292,7 @@ async function fetchData() {
       stats.value = res.data
     }
   } catch {
-    // mock fallback
+    // ignore
   } finally {
     loading.value = false
   }
@@ -258,7 +336,7 @@ onMounted(fetchData)
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 26px;
+    font-size: 24px;
     flex-shrink: 0;
   }
 
@@ -266,15 +344,15 @@ onMounted(fetchData)
     flex: 1;
 
     .sc-num {
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 700;
       color: var(--gray-8);
-      line-height: 1.1;
+      line-height: 1.2;
     }
 
     .sc-label {
       font-size: 13px;
-      color: var(--gray-6);
+      color: var(--gray-5);
       margin-top: 4px;
     }
 
@@ -284,9 +362,6 @@ onMounted(fetchData)
 
       &.up {
         color: var(--success);
-      }
-      &.down {
-        color: var(--danger);
       }
     }
   }
@@ -298,7 +373,7 @@ onMounted(fetchData)
   gap: 16px;
   margin-bottom: 20px;
 
-  @media (max-width: 992px) {
+  @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
 }
@@ -310,31 +385,29 @@ onMounted(fetchData)
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
   .panel-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--gray-8);
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
 
     .pt-actions {
       display: flex;
-      gap: 6px;
+      gap: 8px;
 
       .pta {
         font-size: 12px;
-        padding: 4px 10px;
+        padding: 3px 10px;
         border-radius: 4px;
-        background: var(--gray-2);
         color: var(--gray-6);
         cursor: pointer;
-        transition: all 0.2s;
+        background: var(--gray-1);
 
         &.active {
           background: var(--primary);
           color: #fff;
-          font-weight: 600;
         }
       }
     }
@@ -344,27 +417,26 @@ onMounted(fetchData)
 .bar-chart {
   display: flex;
   align-items: flex-end;
-  justify-content: space-around;
-  height: 220px;
-  gap: 12px;
-  padding: 20px 0 0;
+  justify-content: space-between;
+  height: 200px;
+  padding-top: 20px;
 
   .bar-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
     flex: 1;
     height: 100%;
     justify-content: flex-end;
+    gap: 8px;
 
     .bar {
-      width: 100%;
-      max-width: 36px;
-      background: linear-gradient(180deg, var(--primary) 0%, #a5b4fc 100%);
+      width: 28px;
+      background: linear-gradient(180deg, var(--primary) 0%, rgba(74, 108, 247, 0.3) 100%);
       border-radius: 4px 4px 0 0;
       position: relative;
       transition: height 0.3s;
+      min-height: 8px;
 
       .bar-val {
         position: absolute;
@@ -372,35 +444,31 @@ onMounted(fetchData)
         left: 50%;
         transform: translateX(-50%);
         font-size: 11px;
-        color: var(--gray-7);
-        font-weight: 600;
+        color: var(--gray-5);
         white-space: nowrap;
       }
     }
 
     .bar-label {
       font-size: 12px;
-      color: var(--gray-6);
+      color: var(--gray-5);
     }
   }
 }
 
 .donut-box {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-around;
-  padding: 10px 0;
   gap: 16px;
 
   .donut-svg-wrap {
+    width: 140px;
+    height: 140px;
     position: relative;
-    width: 130px;
-    height: 130px;
 
     .donut-svg {
       transform: rotate(-90deg);
-      width: 100%;
-      height: 100%;
     }
 
     .donut-center {
@@ -412,11 +480,10 @@ onMounted(fetchData)
       justify-content: center;
 
       .total-num {
-        font-size: 16px;
-        font-weight: 800;
+        font-size: 18px;
+        font-weight: 700;
         color: var(--gray-8);
       }
-
       .total-text {
         font-size: 11px;
         color: var(--gray-5);
@@ -425,25 +492,26 @@ onMounted(fetchData)
   }
 
   .donut-info {
+    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 
     .di-item {
       display: flex;
       align-items: center;
-      gap: 8px;
       font-size: 12px;
-      color: var(--gray-7);
+      color: var(--gray-6);
 
       .dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
+        margin-right: 8px;
       }
 
       .num {
-        margin-left: 12px;
+        margin-left: auto;
         font-weight: 600;
         color: var(--gray-8);
       }
@@ -454,19 +522,19 @@ onMounted(fetchData)
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 
   .todo-item {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
-    border-radius: 6px;
+    padding: 12px;
     background: var(--gray-1);
+    border-radius: 8px;
 
     .ti-icon {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       border-radius: 8px;
       display: flex;
       align-items: center;
@@ -483,28 +551,25 @@ onMounted(fetchData)
         font-weight: 600;
         color: var(--gray-8);
       }
-
       .d {
-        font-size: 11px;
+        font-size: 12px;
         color: var(--gray-5);
         margin-top: 2px;
       }
     }
 
     .ti-btn {
+      padding: 6px 14px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
       font-size: 12px;
-      color: var(--primary);
-      background: #fff;
       cursor: pointer;
-      padding: 4px 12px;
-      border: 1px solid var(--primary);
-      border-radius: 4px;
-      font-weight: 600;
-      transition: all 0.2s;
+      flex-shrink: 0;
 
       &:hover {
-        background: var(--primary);
-        color: #fff;
+        opacity: 0.9;
       }
     }
   }
@@ -513,12 +578,12 @@ onMounted(fetchData)
 .hot-subjects {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 
   .hs-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     font-size: 13px;
 
     .hs-rank {
@@ -530,50 +595,50 @@ onMounted(fetchData)
       justify-content: center;
       font-size: 11px;
       font-weight: 700;
-      color: var(--gray-6);
       background: var(--gray-2);
+      color: var(--gray-6);
 
       &.rank-1 {
-        background: #fee2e2;
-        color: #ef4444;
+        background: #FEE2E2;
+        color: #EF4444;
       }
       &.rank-2 {
-        background: #ffedd5;
-        color: #f97316;
+        background: #FFEDD5;
+        color: #F97316;
       }
       &.rank-3 {
-        background: #fef3c7;
-        color: #d97706;
+        background: #FEF3C7;
+        color: #F59E0B;
       }
     }
 
     .hs-name {
-      flex: 1;
-      font-weight: 500;
+      width: 180px;
       color: var(--gray-8);
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .hs-bar-wrap {
-      width: 80px;
-      height: 6px;
-      background: var(--gray-2);
-      border-radius: 3px;
+      flex: 1;
+      height: 8px;
+      background: var(--gray-1);
+      border-radius: 4px;
       overflow: hidden;
 
       .hs-bar {
         height: 100%;
-        background: var(--primary);
-        border-radius: 3px;
+        background: linear-gradient(90deg, var(--primary) 0%, #818CF8 100%);
+        border-radius: 4px;
       }
     }
 
     .hs-count {
       font-size: 12px;
       color: var(--gray-5);
-      width: 70px;
+      min-width: 65px;
       text-align: right;
     }
   }

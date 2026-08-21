@@ -11,6 +11,9 @@ import { WrongQuestion } from '@/database/entities/wrong-question.entity';
 import { Favorite } from '@/database/entities/favorite.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { Subject } from '@/database/entities/subject.entity';
+import { ErrorReport } from '@/database/entities/error-report.entity';
+import { Paper } from '@/database/entities/paper.entity';
+import { AiTask } from '@/database/entities/ai-task.entity';
 
 /**
  * 统计模块
@@ -27,6 +30,9 @@ import { Subject } from '@/database/entities/subject.entity';
       Favorite,
       Chapter,
       Subject,
+      ErrorReport,
+      Paper,
+      AiTask,
     ]),
   ],
   controllers: [StatsController],

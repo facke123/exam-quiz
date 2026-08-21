@@ -193,14 +193,8 @@ async function loadSubjects() {
         selectSubject(subjects.value[0])
       }
     }
-  } catch {
-    subjects.value = [
-      { id: 1, name: '系统集成项目管理工程师', code: 'ruankao_pm', questionCount: 385, status: 'enabled' },
-      { id: 2, name: '信息系统项目管理师', code: 'ruankao_high', questionCount: 520, status: 'enabled' },
-      { id: 3, name: '软件设计师', code: 'ruankao_soft', questionCount: 480, status: 'enabled' },
-      { id: 4, name: '网络工程师', code: 'ruankao_net', questionCount: 390, status: 'enabled' },
-    ]
-    if (!currentSubject.value) selectSubject(subjects.value[0])
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取科目列表失败')
   } finally {
     loading.value = false
   }
@@ -208,7 +202,9 @@ async function loadSubjects() {
 
 function selectSubject(sub: any) {
   currentSubject.value = sub
-  loadChapters(sub.id)
+  if (sub?.id) {
+    loadChapters(sub.id)
+  }
 }
 
 function onSubjectSelect(row: any) {
@@ -219,42 +215,11 @@ async function loadChapters(subjectId: number) {
   chaptersLoading.value = true
   try {
     const res = await getChapterTree(subjectId)
-    if (res?.data && res.data.length > 0) {
+    if (res?.data) {
       chapterTree.value = res.data
-    } else {
-      throw new Error('empty')
     }
-  } catch {
-    chapterTree.value = [
-      {
-        id: 1,
-        name: '第1章 信息化与发展',
-        questionCount: 45,
-        knowledgePoints: [
-          { id: 101, name: '1.1 国家信息化体系六要素' },
-          { id: 102, name: '1.2 战略与组织信息化' },
-        ],
-      },
-      {
-        id: 2,
-        name: '第6章 项目整体管理',
-        questionCount: 68,
-        knowledgePoints: [
-          { id: 201, name: '6.1 制定项目章程' },
-          { id: 202, name: '6.2 指导与管理项目工作' },
-          { id: 203, name: '6.3 实施整体变更控制 (CCB)' },
-        ],
-      },
-      {
-        id: 3,
-        name: '第7章 项目范围管理',
-        questionCount: 52,
-        knowledgePoints: [
-          { id: 301, name: '7.1 收集需求与创建WBS' },
-          { id: 302, name: '7.2 确认范围与控制范围' },
-        ],
-      },
-    ]
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取章节树失败')
   } finally {
     chaptersLoading.value = false
   }
@@ -282,10 +247,8 @@ async function submitSubject() {
     }
     subjectDialogVisible.value = false
     loadSubjects()
-  } catch {
-    ElMessage.success('保存成功')
-    subjectDialogVisible.value = false
-    loadSubjects()
+  } catch (err: any) {
+    ElMessage.error(err.message || '保存科目失败')
   }
 }
 

@@ -123,49 +123,12 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getErrorReportList(query)
-    if (res?.data?.list && res.data.list.length > 0) {
-      list.value = res.data.list
-      total.value = res.data.total
-    } else {
-      throw new Error('empty')
+    if (res?.data) {
+      list.value = res.data.list || []
+      total.value = res.data.total || 0
     }
-  } catch {
-    list.value = [
-      {
-        id: 501,
-        questionId: 1024,
-        questionTitle: '在项目生命周期的哪个阶段，成本和人员投入水平通常最高？',
-        errorType: 'answer',
-        errorTypeText: '答案存疑',
-        content: '官方给的选项B是执行阶段，但题目解析中第一句话写成了启动阶段，建议核查解析。',
-        username: '冲刺过关学长',
-        createdAt: '今天 09:40',
-        status: 'pending',
-      },
-      {
-        id: 502,
-        questionId: 1023,
-        questionTitle: '项目范围管理包括以下哪些核心过程？',
-        errorType: 'typo',
-        errorTypeText: '错别字',
-        content: '选项C中“创建WBS”写成了“创建WSB”，字打错了。',
-        username: '张小凡',
-        createdAt: '昨天 15:20',
-        status: 'accepted',
-      },
-      {
-        id: 503,
-        questionId: 1021,
-        questionTitle: '关键路径是项目中时间最长的活动序列...',
-        errorType: 'analysis',
-        errorTypeText: '解析不全',
-        content: '希望能补充一下总时差为负数时的特殊场景说明。',
-        username: '李想',
-        createdAt: '3天前',
-        status: 'rejected',
-      },
-    ]
-    total.value = 18
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取纠错列表失败')
   } finally {
     loading.value = false
   }

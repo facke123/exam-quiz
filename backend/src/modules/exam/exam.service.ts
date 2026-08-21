@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subject } from '@/database/entities/subject.entity';
@@ -18,7 +18,7 @@ import {
  * 考试管理服务
  */
 @Injectable()
-export class ExamService {
+export class ExamService implements OnModuleInit {
   constructor(
     @InjectRepository(Subject)
     private readonly subjectRepository: Repository<Subject>,
@@ -31,6 +31,151 @@ export class ExamService {
     @InjectRepository(Question)
     private readonly questionRepository: Repository<Question>,
   ) {}
+
+  async onModuleInit() {
+    await this.seedInitialExamData();
+  }
+
+  /**
+   * 自动初始化科目、章节及试卷体系
+   */
+  private async seedInitialExamData() {
+    const subCount = await this.subjectRepository.count();
+    if (subCount === 0) {
+      const initialSubjects = [
+        {
+          name: '系统集成项目管理工程师',
+          code: 'ruankao_soft',
+          icon: 'FolderOpened',
+          description: '全国计算机技术与软件专业技术资格（水平）考试 - 中级资格',
+          sort: 1,
+          status: 1,
+        },
+        {
+          name: '信息系统项目管理师',
+          code: 'ruankao_high',
+          icon: 'DocumentChecked',
+          description: '全国计算机技术与软件专业技术资格（水平）考试 - 高级资格',
+          sort: 2,
+          status: 1,
+        },
+        {
+          name: '软件设计师',
+          code: 'ruankao_designer',
+          icon: 'Notebook',
+          description: '计算机软件与工程设计专业技能水平认证 - 中级资格',
+          sort: 3,
+          status: 1,
+        },
+        {
+          name: '网络工程师',
+          code: 'ruankao_network',
+          icon: 'Connection',
+          description: '计算机网络系统架构设计与运维管理 - 中级资格',
+          sort: 4,
+          status: 1,
+        },
+      ];
+
+      for (const s of initialSubjects) {
+        const item = this.subjectRepository.create(s);
+        await this.subjectRepository.save(item);
+      }
+    }
+
+    const chCount = await this.chapterRepository.count();
+    if (chCount === 0) {
+      const initialChapters = [
+        { subjectId: 1, name: '第1章 信息化知识与发展', sort: 1 },
+        { subjectId: 1, name: '第2章 信息系统集成及服务管理', sort: 2 },
+        { subjectId: 1, name: '第3章 信息系统集成专业技术知识', sort: 3 },
+        { subjectId: 1, name: '第4章 项目管理一般知识与生命周期', sort: 4 },
+        { subjectId: 1, name: '第5章 项目立项管理与招投标', sort: 5 },
+        { subjectId: 1, name: '第6章 项目整体管理', sort: 6 },
+        { subjectId: 1, name: '第7章 项目范围管理', sort: 7 },
+        { subjectId: 1, name: '第8章 项目进度管理', sort: 8 },
+        { subjectId: 1, name: '第9章 项目成本管理', sort: 9 },
+        { subjectId: 1, name: '第10章 项目质量管理', sort: 10 },
+        { subjectId: 2, name: '第1章 信息化战略与企业架构', sort: 1 },
+        { subjectId: 2, name: '第2章 项目集与项目组合管理', sort: 2 },
+        { subjectId: 2, name: '第3章 高级项目范围与进度管控', sort: 3 },
+        { subjectId: 3, name: '第1章 计算机系统基础与体系结构', sort: 1 },
+        { subjectId: 3, name: '第2章 面向对象设计与设计模式', sort: 2 },
+        { subjectId: 3, name: '第3章 数据库设计与SQL编程', sort: 3 },
+        { subjectId: 4, name: '第1章 计算机网络体系结构与协议', sort: 1 },
+        { subjectId: 4, name: '第2章 交换机与路由配置技术', sort: 2 },
+      ];
+
+      for (const c of initialChapters) {
+        const chapter = this.chapterRepository.create({
+          subjectId: c.subjectId,
+          name: c.name,
+          sort: c.sort,
+          questionCount: 0,
+        });
+        await this.chapterRepository.save(chapter);
+      }
+    }
+
+    const paperCount = await this.paperRepository.count();
+    if (paperCount === 0) {
+      const initialPapers = [
+        {
+          subjectId: 1,
+          name: '2024年下半年系统集成项目管理工程师真题（上午综合知识）',
+          year: 2024,
+          type: 'real',
+          duration: 150,
+          totalScore: 75,
+          status: 'published',
+        },
+        {
+          subjectId: 1,
+          name: '2024年上半年系统集成项目管理工程师真题（上午综合知识）',
+          year: 2024,
+          type: 'real',
+          duration: 150,
+          totalScore: 75,
+          status: 'published',
+        },
+        {
+          subjectId: 1,
+          name: '2025年考前密押冲刺模拟试卷（一）',
+          year: 2025,
+          type: 'mock',
+          duration: 150,
+          totalScore: 75,
+          status: 'published',
+        },
+        {
+          subjectId: 2,
+          name: '2024年信息系统项目管理师真题试卷',
+          year: 2024,
+          type: 'real',
+          duration: 150,
+          totalScore: 75,
+          status: 'published',
+        },
+      ];
+
+      const questions = await this.questionRepository.find({ select: ['id'] });
+      const qIds = questions.map((q) => Number(q.id));
+
+      for (const p of initialPapers) {
+        const entity = this.paperRepository.create({
+          subjectId: p.subjectId,
+          name: p.name,
+          year: p.year,
+          type: p.type as any,
+          duration: p.duration,
+          totalScore: p.totalScore,
+          questionIds: qIds,
+          status: 1,
+        });
+        await this.paperRepository.save(entity);
+      }
+    }
+  }
 
   // ==================== 科目管理 ====================
 
@@ -130,7 +275,6 @@ export class ExamService {
       return Number(str);
     }
 
-    // Try finding by exact code or name or LIKE code/name
     const found = await this.subjectRepository
       .createQueryBuilder('s')
       .where('s.code = :str OR s.name = :str OR s.code LIKE :like OR s.name LIKE :like', {
@@ -143,27 +287,31 @@ export class ExamService {
       return Number(found.id);
     }
 
-    const first = await this.subjectRepository.findOne({ order: { sort: 'ASC', id: 'ASC' } });
-    return first ? Number(first.id) : 1;
+    return 1;
   }
 
   // ==================== 章节管理 ====================
 
   /**
-   * 获取章节列表（树形结构，含知识点及题目数）
+   * 别名方法：兼容 exam.controller.ts getChapters
    */
-  async getChapters(subjectIdOrCode: number | string): Promise<any[]> {
-    const subjectId = await this.resolveSubjectId(subjectIdOrCode);
+  async getChapters(subjectId?: number | string): Promise<any[]> {
+    return this.getChapterTree(subjectId);
+  }
+
+  /**
+   * 获取章节树（含题目数和知识点）
+   */
+  async getChapterTree(subjectId?: number | string): Promise<any[]> {
+    const resolvedSubjectId = await this.resolveSubjectId(subjectId);
+
     const chapters = await this.chapterRepository.find({
-      where: { subjectId },
+      where: { subjectId: resolvedSubjectId },
       order: { sort: 'ASC', id: 'ASC' },
     });
 
-    const knowledgePoints = await this.knowledgePointRepository.find({
-      order: { createdAt: 'ASC', id: 'ASC' },
-    });
+    const knowledgePoints = await this.knowledgePointRepository.find();
 
-    // 统计每章题目数
     const chapterMap = new Map<number, any>();
     for (const c of chapters) {
       const qCount = await this.questionRepository.count({
@@ -176,7 +324,6 @@ export class ExamService {
         name: c.name,
         sort: c.sort,
         questionCount: qCount,
-        correctRate: 80,
         progress: 0,
         knowledgePoints: knowledgePoints
           .filter((kp) => Number(kp.chapterId) === Number(c.id))
@@ -249,20 +396,16 @@ export class ExamService {
   async getKnowledgePoints(chapterId: number): Promise<KnowledgePoint[]> {
     return this.knowledgePointRepository.find({
       where: { chapterId },
-      order: { createdAt: 'ASC' },
+      order: { id: 'ASC' },
     });
   }
 
   /**
    * 创建知识点
    */
-  async createKnowledgePoint(dto: CreateKnowledgePointDto | any): Promise<KnowledgePoint> {
-    const kp = this.knowledgePointRepository.create({
-      chapterId: dto.chapterId,
-      name: dto.name,
-      description: dto.description || '',
-    } as any);
-    return this.knowledgePointRepository.save(kp as any);
+  async createKnowledgePoint(dto: CreateKnowledgePointDto): Promise<KnowledgePoint> {
+    const kp = this.knowledgePointRepository.create(dto);
+    return this.knowledgePointRepository.save(kp);
   }
 
   /**
@@ -270,7 +413,7 @@ export class ExamService {
    */
   async updateKnowledgePoint(
     id: number,
-    dto: Partial<CreateKnowledgePointDto> | any,
+    dto: Partial<CreateKnowledgePointDto>,
   ): Promise<KnowledgePoint> {
     const kp = await this.knowledgePointRepository.findOne({ where: { id } });
     if (!kp) {
@@ -318,7 +461,7 @@ export class ExamService {
     const formattedList = list.map((p) => ({
       id: Number(p.id),
       subjectId: Number(p.subjectId),
-      subjectName: subjectMap.get(Number(p.subjectId)) || '软考科目',
+      subjectName: subjectMap.get(Number(p.subjectId)) || '系统集成项目管理工程师',
       name: p.name,
       type: p.type,
       description: `考试时长 ${p.duration} 分钟，总分 ${p.totalScore} 分`,
@@ -327,7 +470,7 @@ export class ExamService {
       totalScore: p.totalScore,
       questionCount: (p.questionIds && p.questionIds.length) || 0,
       passScore: Math.round(p.totalScore * 0.6),
-      status: p.status,
+      status: p.status === 1 ? 1 : 0,
       createdAt: p.createdAt,
     }));
 
@@ -356,13 +499,13 @@ export class ExamService {
   async createPaper(dto: CreatePaperDto | any): Promise<Paper> {
     const questionIds = dto.questionIds || [];
     const paper = this.paperRepository.create({
-      subjectId: dto.subjectId,
+      subjectId: dto.subjectId || 1,
       name: dto.name,
       type: dto.type || 'real',
-      duration: dto.totalTime || dto.duration || 120,
+      duration: dto.totalTime || dto.duration || 150,
       totalScore: dto.totalScore || (questionIds.length > 0 ? questionIds.length : 75),
       questionIds,
-      status: dto.status || 'published',
+      status: dto.status === 0 || dto.status === 'draft' ? 0 : 1,
     });
     return this.paperRepository.save(paper);
   }
@@ -378,7 +521,7 @@ export class ExamService {
     if (dto.duration !== undefined) paper.duration = dto.duration;
     if (dto.totalScore !== undefined) paper.totalScore = dto.totalScore;
     if (dto.questionIds !== undefined) paper.questionIds = dto.questionIds;
-    if (dto.status !== undefined) paper.status = dto.status;
+    if (dto.status !== undefined) paper.status = dto.status === 0 || dto.status === 'draft' ? 0 : 1;
     return this.paperRepository.save(paper);
   }
 
@@ -425,10 +568,10 @@ export class ExamService {
       subjectId: dto.subjectId || 1,
       name: dto.name || `智能组卷_${new Date().toLocaleDateString()}`,
       type: dto.type || 'mock',
-      duration: dto.duration || dto.totalTime || 120,
-      totalScore: questionIds.length,
+      duration: dto.duration || dto.totalTime || 150,
+      totalScore: questionIds.length || 75,
       questionIds,
-      status: 'published',
+      status: 1,
     });
 
     return this.paperRepository.save(paper);

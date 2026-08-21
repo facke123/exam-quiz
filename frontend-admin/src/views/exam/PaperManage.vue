@@ -1,15 +1,14 @@
 <template>
   <div class="paper-manage-page">
     <div class="table-panel">
-      <!-- 顶部筛选与操作工具栏 -->
+      <!-- 筛选与操作栏 -->
       <div class="table-toolbar">
         <div class="filter-bar">
           <el-select
             v-model="query.subjectId"
             placeholder="全部科目"
             clearable
-            class="filter-select"
-            style="width: 200px"
+            style="width: 220px"
             @change="fetchList"
           >
             <el-option
@@ -22,86 +21,83 @@
 
           <el-select
             v-model="query.type"
-            placeholder="全部试卷类型"
+            placeholder="试卷类型"
             clearable
-            class="filter-select"
             style="width: 140px"
             @change="fetchList"
           >
             <el-option label="历年真题" value="real" />
-            <el-option label="全真模拟卷" value="mock" />
-            <el-option label="考前押题卷" value="sprint" />
+            <el-option label="全真模拟" value="mock" />
+            <el-option label="专项精练" value="practice" />
           </el-select>
 
-          <el-button type="primary" class="btn-primary" @click="fetchList">查询</el-button>
+          <el-button type="primary" @click="fetchList">查询</el-button>
+          <el-button @click="resetQuery">重置</el-button>
         </div>
 
-        <div class="actions-bar">
-          <el-button type="primary" class="btn-primary" @click="handleAddPaper">
-            + 手动组卷
+        <div class="action-bar">
+          <el-button type="primary" @click="handleAddPaper">
+            + 手动新建试卷
           </el-button>
-          <el-button type="success" class="btn-success" @click="openAutoDialog">
-            ⚡ 智能规则组卷
+          <el-button type="success" @click="openAutoDialog">
+            ⚡ 智能组卷
           </el-button>
         </div>
       </div>
 
-      <!-- 试卷列表表格 -->
+      <!-- 试卷表格 -->
       <el-table v-loading="loading" :data="list" class="custom-table">
-        <el-table-column prop="id" label="试卷ID" width="80" align="center" />
+        <el-table-column prop="id" label="ID" width="70" align="center" />
 
-        <el-table-column label="试卷名称" min-width="260">
+        <el-table-column label="试卷名称" min-width="280">
           <template #default="{ row }">
-            <div class="paper-name-row">
-              <span class="p-name">{{ row.name }}</span>
-              <span class="p-type" :class="row.paperType || 'real'">
-                {{ row.paperType === 'mock' ? '全真模拟' : '历年真题' }}
+            <div class="paper-title-cell">
+              <span class="p-type-tag" :class="row.type || row.paperType">
+                {{ formatType(row.type || row.paperType) }}
               </span>
+              <span class="p-name">{{ row.name }}</span>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="subjectName" label="科目" width="180">
-          <template #default="{ row }">
-            <span class="sub-text">{{ row.subjectName || '系统集成项目管理工程师' }}</span>
-          </template>
-        </el-table-column>
+        <el-table-column prop="subjectName" label="所属科目" min-width="160" />
 
-        <el-table-column label="题型分布" min-width="160">
+        <el-table-column label="题量与总分" width="130" align="center">
           <template #default="{ row }">
-            <div class="type-dist-bar">
-              <div class="td-seg single" style="width: 65%" title="单选 65%"></div>
-              <div class="td-seg multiple" style="width: 25%" title="多选 25%"></div>
-              <div class="td-seg case" style="width: 10%" title="案例 10%"></div>
+            <div class="score-info">
+              <span>{{ row.questionCount || (row.questionIds ? row.questionIds.length : 75) }} 题</span>
+              <span class="sep">/</span>
+              <span>{{ row.totalScore || 75 }} 分</span>
             </div>
-            <div class="td-labels">50单选 + 20多选 + 5案例</div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="questionCount" label="题量" width="80" align="center">
+        <el-table-column label="考试时长" width="110" align="center">
           <template #default="{ row }">
-            <strong>{{ row.questionCount || 75 }}</strong>
+            <span>{{ row.duration || row.totalTime || 150 }} 分钟</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="totalScore" label="总分" width="80" align="center">
+        <el-table-column label="及格线" width="100" align="center">
           <template #default="{ row }">
-            <span>{{ row.totalScore || 75 }}分</span>
+            <span class="pass-score">{{ row.passScore || 45 }} 分</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="totalTime" label="时长" width="90" align="center">
+        <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <span>{{ row.totalTime || 150 }}分钟</span>
+            <el-tag :type="row.status === 1 || row.status === 'published' ? 'success' : 'info'" size="small">
+              {{ row.status === 1 || row.status === 'published' ? '已发布' : '草稿' }}
+            </el-tag>
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
             <div class="table-ops">
-              <span class="op-link" @click="handlePreview(row)">预览试卷</span>
-              <span class="op-link" @click="handleEditPaper(row)">编辑</span>
-              <span class="op-link del" @click="handleDeletePaper(row)">删除</span>
+              <span class="op-link" @click="handlePreview(row)">预览</span>
+              <span class="op-link" @click="handleEditPaper(row)">重命名</span>
+              <span class="op-link danger" @click="handleDeletePaper(row)">删除</span>
             </div>
           </template>
         </el-table-column>
@@ -109,9 +105,14 @@
     </div>
 
     <!-- 智能组卷弹窗 -->
-    <el-dialog v-model="autoDialogVisible" title="⚡ 智能规则组卷" width="600px">
+    <el-dialog
+      v-model="autoDialogVisible"
+      title="⚡ 软考智能组卷引擎"
+      width="560px"
+      destroy-on-close
+    >
       <el-form :model="autoForm" label-width="100px">
-        <el-form-item label="所属科目" required>
+        <el-form-item label="目标科目" required>
           <el-select v-model="autoForm.subjectId" style="width: 100%">
             <el-option
               v-for="s in subjects"
@@ -121,24 +122,26 @@
             />
           </el-select>
         </el-form-item>
+
         <el-form-item label="试卷名称" required>
-          <el-input v-model="autoForm.name" placeholder="如 2026年全真模拟卷一" />
+          <el-input v-model="autoForm.name" placeholder="如：2026年系统集成全真模拟卷（一）" />
         </el-form-item>
-        <el-form-item label="考试限时">
-          <el-input-number v-model="autoForm.totalTime" :min="30" :max="240" :step="10" /> 分钟
+
+        <el-form-item label="考试时长">
+          <el-input-number v-model="autoForm.totalTime" :min="30" :max="240" :step="10" />
+          <span style="margin-left: 10px; color: var(--gray-5)">分钟</span>
         </el-form-item>
-        <el-form-item label="抽题配比">
-          <div class="ratio-inputs">
-            <div>单选题：<el-input-number v-model="autoForm.singleCount" :min="0" :max="100" /> 道</div>
-            <div style="margin-top: 8px">多选题：<el-input-number v-model="autoForm.multipleCount" :min="0" :max="100" /> 道</div>
-            <div style="margin-top: 8px">案例题：<el-input-number v-model="autoForm.caseCount" :min="0" :max="20" /> 道</div>
-          </div>
+
+        <el-form-item label="试卷题量">
+          <el-input-number v-model="autoForm.questionCount" :min="5" :max="150" :step="5" />
+          <span style="margin-left: 10px; color: var(--gray-5)">道题</span>
         </el-form-item>
       </el-form>
+
       <template #footer>
         <el-button @click="autoDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="autoLoading" @click="submitAutoPaper">
-          一键生成并发布试卷
+          开始自动组卷并生成
         </el-button>
       </template>
     </el-dialog>
@@ -148,14 +151,23 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getPaperList, createPaper, deletePaper, getAllSubjects } from '@/api/exam'
+import {
+  getPaperList,
+  createPaper,
+  updatePaper,
+  deletePaper,
+  autoGeneratePaper,
+  getAllSubjects,
+} from '@/api/exam'
 
 const loading = ref(false)
 const list = ref<any[]>([])
 const subjects = ref<{ label: string; value: number }[]>([])
 
-const query = reactive({
-  subjectId: undefined as any,
+const query = reactive<any>({
+  page: 1,
+  pageSize: 50,
+  subjectId: undefined,
   type: '',
 })
 
@@ -165,22 +177,33 @@ const autoForm = reactive({
   subjectId: 1,
   name: '2026年系统集成全真模拟卷（一）',
   totalTime: 150,
-  singleCount: 50,
-  multipleCount: 20,
-  caseCount: 5,
+  questionCount: 75,
 })
+
+function formatType(type: string) {
+  if (type === 'real') return '真题'
+  if (type === 'mock') return '模拟'
+  if (type === 'practice') return '精练'
+  return '试卷'
+}
+
+function resetQuery() {
+  query.subjectId = undefined
+  query.type = ''
+  fetchList()
+}
 
 async function loadSubjects() {
   try {
     const res = await getAllSubjects()
     if (res?.data) {
       subjects.value = res.data.map((s: any) => ({ label: s.name, value: Number(s.id) }))
+      if (subjects.value.length > 0) {
+        autoForm.subjectId = subjects.value[0].value
+      }
     }
   } catch {
-    subjects.value = [
-      { label: '系统集成项目管理工程师', value: 1 },
-      { label: '信息系统项目管理师', value: 2 },
-    ]
+    // ignore
   }
 }
 
@@ -188,58 +211,38 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getPaperList(query)
-    if (res?.data?.list && res.data.list.length > 0) {
+    if (res?.data?.list) {
       list.value = res.data.list
-    } else {
-      throw new Error('empty')
     }
-  } catch {
-    list.value = [
-      {
-        id: 1,
-        name: '2025年下半年系统集成项目管理工程师上午综合知识',
-        subjectName: '系统集成项目管理工程师',
-        paperType: 'real',
-        questionCount: 75,
-        totalScore: 75,
-        totalTime: 150,
-      },
-      {
-        id: 2,
-        name: '2025年上半年系统集成项目管理工程师上午综合知识',
-        subjectName: '系统集成项目管理工程师',
-        paperType: 'real',
-        questionCount: 75,
-        totalScore: 75,
-        totalTime: 150,
-      },
-      {
-        id: 3,
-        name: '2026全真模拟试卷（一）· 基础冲刺',
-        subjectName: '系统集成项目管理工程师',
-        paperType: 'mock',
-        questionCount: 75,
-        totalScore: 75,
-        totalTime: 150,
-      },
-      {
-        id: 4,
-        name: '2024年下半年信息系统项目管理师综合知识',
-        subjectName: '信息系统项目管理师',
-        paperType: 'real',
-        questionCount: 75,
-        totalScore: 75,
-        totalTime: 150,
-      },
-    ]
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取试卷列表失败')
   } finally {
     loading.value = false
   }
 }
 
 function handleAddPaper() {
-  ElMessageBox.prompt('请输入试卷名称', '手动创建试卷').then(({ value }) => {
-    ElMessage.success(`试卷「${value}」创建成功，请进入详情添加题目！`)
+  ElMessageBox.prompt('请输入试卷名称', '新建试卷', {
+    confirmButtonText: '创建',
+    cancelButtonText: '取消',
+    inputPattern: /\S+/,
+    inputErrorMessage: '试卷名称不能为空',
+  }).then(async ({ value }) => {
+    try {
+      await createPaper({
+        name: value,
+        subjectId: query.subjectId || (subjects.value[0]?.value || 1),
+        type: 'mock' as any,
+        totalTime: 150,
+        totalScore: 75,
+        passScore: 45,
+        status: 'published' as any,
+      })
+      ElMessage.success(`试卷「${value}」创建成功！`)
+      fetchList()
+    } catch (err: any) {
+      ElMessage.error(err.message || '创建试卷失败')
+    }
   })
 }
 
@@ -247,32 +250,66 @@ function openAutoDialog() {
   autoDialogVisible.value = true
 }
 
-function submitAutoPaper() {
+async function submitAutoPaper() {
   autoLoading.value = true
-  setTimeout(() => {
-    autoLoading.value = false
+  try {
+    await autoGeneratePaper({
+      subjectId: autoForm.subjectId,
+      name: autoForm.name,
+      totalTime: autoForm.totalTime,
+      totalScore: autoForm.questionCount,
+      passScore: Math.round(autoForm.questionCount * 0.6),
+      rules: [
+        {
+          type: 'single',
+          difficulty: 'medium',
+          chapterIds: [],
+          count: autoForm.questionCount,
+          scorePerQuestion: 1,
+        },
+      ],
+    })
+    ElMessage.success('智能组卷成功，已自动抽取题库试题完成组卷！')
     autoDialogVisible.value = false
-    ElMessage.success('智能组卷成功，已自动抽取 75 道匹配题目入卷！')
     fetchList()
-  }, 1000)
+  } catch (err: any) {
+    ElMessage.error(err.message || '智能组卷失败')
+  } finally {
+    autoLoading.value = false
+  }
 }
 
 function handlePreview(row: any) {
-  ElMessageBox.alert(`已加载试卷「${row.name}」，包含 ${row.questionCount || 75} 道试题。`, '试卷预览')
+  ElMessageBox.alert(
+    `试卷名称：${row.name}\n所属科目：${row.subjectName}\n考试时长：${row.duration || row.totalTime || 150}分钟\n试题总数：${row.questionCount || (row.questionIds ? row.questionIds.length : 75)}道\n及格分值：${row.passScore || 45}分`,
+    '试卷信息详情',
+  )
 }
 
 function handleEditPaper(row: any) {
-  ElMessageBox.prompt('修改试卷名称', '编辑试卷', { inputValue: row.name }).then(({ value }) => {
-    row.name = value
-    ElMessage.success('已保存')
+  ElMessageBox.prompt('修改试卷名称', '重命名试卷', {
+    inputValue: row.name,
+    inputPattern: /\S+/,
+    inputErrorMessage: '试卷名称不能为空',
+  }).then(async ({ value }) => {
+    try {
+      await updatePaper(row.id, { name: value })
+      ElMessage.success('已保存修改')
+      fetchList()
+    } catch (err: any) {
+      ElMessage.error(err.message || '修改失败')
+    }
   })
 }
 
 async function handleDeletePaper(row: any) {
   try {
-    await ElMessageBox.confirm(`确定要删除试卷「${row.name}」吗？`, '删除确认', { type: 'warning' })
-    list.value = list.value.filter((p) => p.id !== row.id)
+    await ElMessageBox.confirm(`确定要删除试卷「${row.name}」吗？`, '删除确认', {
+      type: 'warning',
+    })
+    await deletePaper(row.id)
     ElMessage.success('删除成功')
+    fetchList()
   } catch {
     // cancel
   }
@@ -301,88 +338,68 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--gray-3);
+  border-bottom: 1px solid var(--gray-2);
   flex-wrap: wrap;
   gap: 12px;
 
-  .filter-bar {
+  .filter-bar,
+  .action-bar {
     display: flex;
-    gap: 8px;
+    gap: 12px;
     align-items: center;
   }
-
-  .actions-bar {
-    display: flex;
-    gap: 8px;
-  }
 }
 
-.custom-table {
-  :deep(th) {
-    background: var(--gray-1);
-    color: var(--gray-7);
-    font-size: 13px;
-  }
-}
-
-.paper-name-row {
+.paper-title-cell {
   display: flex;
   align-items: center;
   gap: 8px;
 
-  .p-name {
-    font-weight: 600;
-    color: var(--gray-8);
-  }
-
-  .p-type {
-    font-size: 10px;
+  .p-type-tag {
+    font-size: 11px;
     padding: 1px 6px;
     border-radius: 4px;
-    font-weight: 700;
+    font-weight: 600;
+    flex-shrink: 0;
 
     &.real {
-      background: #f5f3ff;
-      color: #8b5cf6;
+      background: #eff6ff;
+      color: #3b82f6;
     }
     &.mock {
-      background: #eef2ff;
-      color: #4a6cf7;
+      background: #fdf2f8;
+      color: #ec4899;
     }
+    &.practice {
+      background: #f0fdf4;
+      color: #22c55e;
+    }
+  }
+
+  .p-name {
+    font-weight: 500;
+    color: var(--gray-8);
   }
 }
 
-.type-dist-bar {
-  display: flex;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--gray-2);
-  margin-bottom: 4px;
+.score-info {
+  font-size: 13px;
+  color: var(--gray-7);
 
-  .td-seg {
-    height: 100%;
-
-    &.single {
-      background: #4a6cf7;
-    }
-    &.multiple {
-      background: #8b5cf6;
-    }
-    &.case {
-      background: #ec4899;
-    }
+  .sep {
+    color: var(--gray-4);
+    margin: 0 4px;
   }
 }
 
-.td-labels {
-  font-size: 11px;
-  color: var(--gray-5);
+.pass-score {
+  font-weight: 600;
+  color: var(--success);
 }
 
 .table-ops {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
 
   .op-link {
@@ -390,7 +407,7 @@ onMounted(() => {
     color: var(--primary);
     cursor: pointer;
 
-    &.del {
+    &.danger {
       color: var(--danger);
     }
 

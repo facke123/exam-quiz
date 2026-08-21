@@ -202,58 +202,12 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getUserList(query)
-    if (res?.data?.list) {
-      list.value = res.data.list
-      total.value = res.data.total
-    } else {
-      throw new Error('empty')
+    if (res?.data) {
+      list.value = res.data.list || []
+      total.value = res.data.total || 0
     }
-  } catch {
-    list.value = [
-      {
-        id: 1001,
-        username: 'ruankao_super',
-        nickname: '冲刺过关学长',
-        phone: '13800138001',
-        email: 'super@exam.com',
-        registerAt: '2026-06-12 14:20',
-        lastLoginAt: '10分钟前',
-        isVip: true,
-        memberLevel: 'vip',
-        questionCount: 1420,
-        correctRate: 85,
-        status: 'active',
-      },
-      {
-        id: 1002,
-        username: 'coder_zhang',
-        nickname: '张小凡',
-        phone: '13911223344',
-        email: 'zhang@code.com',
-        registerAt: '2026-07-01 09:15',
-        lastLoginAt: '1小时前',
-        isVip: false,
-        memberLevel: 'free',
-        questionCount: 520,
-        correctRate: 72,
-        status: 'active',
-      },
-      {
-        id: 1003,
-        username: 'dev_li',
-        nickname: '李想',
-        phone: '13788990011',
-        email: 'li@qq.com',
-        registerAt: '2026-07-15 16:30',
-        lastLoginAt: '昨天',
-        isVip: true,
-        memberLevel: 'vip',
-        questionCount: 880,
-        correctRate: 79,
-        status: 'active',
-      },
-    ]
-    total.value = 2450
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取用户列表失败')
   } finally {
     loading.value = false
   }
@@ -272,9 +226,9 @@ async function handleStatusChange(row: any, active: any) {
     await updateUserStatus(row.id, newStatus)
     row.status = newStatus
     ElMessage.success(`用户 [${row.username}] 状态已更新`)
-  } catch {
-    row.status = active ? 'active' : 'disabled'
-    ElMessage.success('状态已同步')
+  } catch (err: any) {
+    ElMessage.error(err.message || '更新状态失败')
+    fetchList()
   }
 }
 

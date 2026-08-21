@@ -68,22 +68,220 @@ export class AdminService {
 
   async onModuleInit() {
     try {
-      let admin = await this.adminRepository.findOne({ where: { username: 'admin' } });
-      if (!admin) {
-        const hash = await CryptoUtil.hashPassword('admin123');
-        admin = this.adminRepository.create({
-          username: 'admin',
-          password: hash,
-          realName: '超级管理员',
-          role: 'super_admin',
-          status: 1,
-        });
-        await this.adminRepository.save(admin);
+      // 1. 初始化管理员
+      const adminCount = await this.adminRepository.count();
+      if (adminCount === 0) {
+        const defaultAdmins = [
+          {
+            username: 'admin',
+            realName: '超级管理员',
+            role: 'super_admin',
+            status: 1,
+          },
+          {
+            username: 'editor',
+            realName: '教研组长',
+            role: 'editor',
+            status: 1,
+          },
+          {
+            username: 'operator',
+            realName: '运营专员',
+            role: 'operator',
+            status: 1,
+          },
+        ];
+        for (const da of defaultAdmins) {
+          const hash = await CryptoUtil.hashPassword('admin123');
+          const item = this.adminRepository.create({
+            username: da.username,
+            password: hash,
+            realName: da.realName,
+            role: da.role,
+            status: da.status,
+          });
+          await this.adminRepository.save(item);
+        }
       } else {
-        const isMatch = await CryptoUtil.comparePassword('admin123', admin.password);
-        if (!isMatch) {
-          admin.password = await CryptoUtil.hashPassword('admin123');
-          await this.adminRepository.save(admin);
+        let admin = await this.adminRepository.findOne({ where: { username: 'admin' } });
+        if (admin) {
+          const isMatch = await CryptoUtil.comparePassword('admin123', admin.password);
+          if (!isMatch) {
+            admin.password = await CryptoUtil.hashPassword('admin123');
+            await this.adminRepository.save(admin);
+          }
+        }
+      }
+
+      // 2. 初始化真实用户样本
+      const userCount = await this.userRepository.count();
+      if (userCount === 0) {
+        const defaultUsers = [
+          {
+            username: 'ruankao_master',
+            nickname: '软考学霸小张',
+            phone: '13800138001',
+            email: 'master@ruankao.com',
+            vipLevel: 2,
+            vipExpireAt: new Date(Date.now() + 180 * 24 * 3600 * 1000),
+            status: 1,
+          },
+          {
+            username: 'sys_architect',
+            nickname: '架构进阶者',
+            phone: '13800138002',
+            email: 'architect@ruankao.com',
+            vipLevel: 1,
+            vipExpireAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+            status: 1,
+          },
+          {
+            username: 'pm_expert',
+            nickname: '集成项目经理',
+            phone: '13800138003',
+            email: 'pm@ruankao.com',
+            vipLevel: 1,
+            vipExpireAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
+            status: 1,
+          },
+          {
+            username: 'code_runner',
+            nickname: '程序员小李',
+            phone: '13800138004',
+            email: 'coder@ruankao.com',
+            vipLevel: 0,
+            vipExpireAt: null,
+            status: 1,
+          },
+          {
+            username: 'net_engineer',
+            nickname: '网络通关小白',
+            phone: '13800138005',
+            email: 'network@ruankao.com',
+            vipLevel: 0,
+            vipExpireAt: null,
+            status: 1,
+          },
+        ];
+
+        for (const u of defaultUsers) {
+          const hash = await CryptoUtil.hashPassword('123456');
+          const user = this.userRepository.create({
+            username: u.username,
+            password: hash,
+            nickname: u.nickname,
+            phone: u.phone,
+            email: u.email,
+            vipLevel: u.vipLevel,
+            vipExpireAt: u.vipExpireAt,
+            status: u.status,
+            avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+          });
+          const savedUser = await this.userRepository.save(user);
+
+          // 为前几位用户创建真实近7天做题记录
+          for (let day = 0; day < 7; day++) {
+            const date = new Date();
+            date.setDate(date.getDate() - day);
+            const answered = Math.floor(15 + Math.random() * 20);
+            const correct = Math.floor(answered * (0.7 + Math.random() * 0.25));
+            const record = this.recordRepository.create({
+              userId: Number(savedUser.id),
+              subjectId: 1,
+              mode: 'chapter',
+              totalQuestions: answered,
+              answeredQuestions: answered,
+              correctCount: correct,
+              score: Math.round((correct / answered) * 100),
+              duration: answered * 60,
+              status: 'completed',
+              startedAt: date,
+              submittedAt: new Date(date.getTime() + answered * 60 * 1000),
+            });
+            await this.recordRepository.save(record);
+          }
+        }
+      }
+
+      // 3. 初始化操作日志样本
+      const logCount = await this.logRepository.count();
+      if (logCount === 0) {
+        const initialLogs = [
+          {
+            adminId: 1,
+            adminName: '超级管理员',
+            action: '管理员登录',
+            module: 'auth',
+            method: 'POST',
+            ip: '127.0.0.1',
+            status: 1,
+          },
+          {
+            adminId: 1,
+            adminName: '超级管理员',
+            action: 'AI 批量智能命题',
+            module: 'ai',
+            method: 'POST',
+            ip: '127.0.0.1',
+            status: 1,
+          },
+          {
+            adminId: 1,
+            adminName: '超级管理员',
+            action: '发布 2024下半年真题试卷',
+            module: 'exam',
+            method: 'POST',
+            ip: '127.0.0.1',
+            status: 1,
+          },
+          {
+            adminId: 1,
+            adminName: '超级管理员',
+            action: '审核通过 AI 待审试题并入库',
+            module: 'question',
+            method: 'POST',
+            ip: '127.0.0.1',
+            status: 1,
+          },
+        ];
+        for (const l of initialLogs) {
+          const log = this.logRepository.create(l as any);
+          await this.logRepository.save(log);
+        }
+      }
+
+      // 4. 初始化系统配置
+      const configCount = await this.configRepository.count();
+      if (configCount === 0) {
+        const defaultConfigs = [
+          {
+            key: 'site_name',
+            value: '国家软考题库与AI备考系统',
+            description: '系统网站名称',
+            group: 'basic',
+          },
+          {
+            key: 'free_daily_limit',
+            value: '50',
+            description: '普通用户每日免费刷题上限',
+            group: 'practice',
+          },
+          {
+            key: 'ai_daily_quota',
+            value: '5000',
+            description: 'AI 每日出题与解析调用总配额',
+            group: 'ai',
+          },
+          {
+            key: 'default_vip_price',
+            value: '199',
+            description: '全科目畅学年卡会员价格',
+            group: 'member',
+          },
+        ];
+        for (const c of defaultConfigs) {
+          const cfg = this.configRepository.create(c as any);
+          await this.configRepository.save(cfg);
         }
       }
     } catch {

@@ -46,12 +46,11 @@ export class Paper {
   questionIds: number[];
 
   @Column({
-    type: 'varchar',
-    length: 20,
-    default: 'published',
-    comment: '状态: draft/published/archived',
+    type: 'tinyint',
+    default: 1,
+    comment: '状态: 0-未发布/草稿 1-已发布',
   })
-  status: string;
+  status: number;
 
   @CreateDateColumn({ comment: '创建时间' })
   createdAt: Date;

@@ -217,26 +217,26 @@ export class AdminController {
 
   // ==================== 系统配置 ====================
 
-  @Get('configs')
+  @Get(['configs', 'system/configs'])
   @ApiOperation({ summary: '系统配置列表' })
   async getConfigs() {
     const configs = await this.adminService.getConfigs();
     return { list: configs, total: configs.length };
   }
 
-  @Get('configs/:key')
+  @Get(['configs/:key', 'system/configs/:key'])
   @ApiOperation({ summary: '获取系统配置' })
   async getConfig(@Param('key') key: string) {
     return this.adminService.getConfig(key);
   }
 
-  @Post('configs')
+  @Post(['configs', 'system/configs'])
   @ApiOperation({ summary: '更新系统配置' })
   async updateConfig(@Body() dto: SystemConfigDto) {
     return this.adminService.updateConfig(dto);
   }
 
-  @Put('configs/:key')
+  @Put(['configs/:key', 'system/configs/:key'])
   @ApiOperation({ summary: '更新指定系统配置' })
   async updateConfigByKey(
     @Param('key') key: string,
@@ -247,8 +247,7 @@ export class AdminController {
 
   // ==================== 操作日志 ====================
 
-  @Get('logs')
-  @Get('operation-logs')
+  @Get(['logs', 'operation-logs', 'system/logs', 'system/operation-logs'])
   @ApiOperation({ summary: '操作日志' })
   async getOperationLogs(
     @Query('page') page?: number,

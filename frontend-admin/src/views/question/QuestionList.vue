@@ -431,60 +431,12 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getQuestionList(query)
-    if (res?.data?.list) {
-      list.value = res.data.list
-      total.value = res.data.total
-    } else {
-      throw new Error('empty')
+    if (res?.data) {
+      list.value = res.data.list || []
+      total.value = res.data.total || 0
     }
-  } catch {
-    list.value = [
-      {
-        id: 1024,
-        type: 'single',
-        content: '在项目生命周期的哪个阶段，成本和人员投入水平通常达到最高？',
-        subjectName: '系统集成项目管理工程师',
-        chapterName: '第6章 项目整体管理',
-        difficulty: 3,
-        correctRate: 68,
-        source: '2024下半年真题',
-        status: 'published',
-      },
-      {
-        id: 1023,
-        type: 'multiple',
-        content: '项目范围管理包括以下哪些核心过程？',
-        subjectName: '系统集成项目管理工程师',
-        chapterName: '第7章 项目范围管理',
-        difficulty: 4,
-        correctRate: 45,
-        source: '2024上半年真题',
-        status: 'published',
-      },
-      {
-        id: 1022,
-        type: 'case',
-        content: '阅读关于某大型政务云系统架构改造的案例，回答以下两道小问...',
-        subjectName: '信息系统项目管理师',
-        chapterName: '第15章 架构设计',
-        difficulty: 5,
-        correctRate: 52,
-        source: 'AI自动命题',
-        status: 'pending',
-      },
-      {
-        id: 1021,
-        type: 'judge',
-        content: '关键路径是项目中时间最长的活动序列，其总时差和自由时差通常均为0。',
-        subjectName: '系统集成项目管理工程师',
-        chapterName: '第8章 项目进度管理',
-        difficulty: 2,
-        correctRate: 88,
-        source: '官方模拟卷',
-        status: 'published',
-      },
-    ]
-    total.value = 3850
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取题目列表失败')
   } finally {
     loading.value = false
   }
