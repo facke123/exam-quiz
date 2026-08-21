@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { AdminLoginDto, SystemConfigDto } from './dto/admin.dto';
+import { AdminLoginDto, SystemConfigDto, CreateUserAdminDto } from './dto/admin.dto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 
@@ -86,6 +86,12 @@ export class AdminController {
       status,
       memberLevel,
     );
+  }
+
+  @Post('users')
+  @ApiOperation({ summary: '创建用户' })
+  async createUser(@Body() dto: CreateUserAdminDto) {
+    return this.adminService.createUser(dto);
   }
 
   @Get('users/:id')

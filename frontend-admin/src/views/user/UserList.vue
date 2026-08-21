@@ -7,11 +7,13 @@ import ProDialog from '@/components/ProDialog.vue'
 import {
   getUserList,
   getUserDetail,
+  createUser,
   updateUserStatus,
   resetPassword,
   updateMember,
   type User,
   type UserQuery,
+  type CreateUserParams,
 } from '@/api/user'
 import { formatDateTime, formatNumber, formatPercent } from '@/utils/format'
 
@@ -73,6 +75,52 @@ const columns: ProColumn[] = [
   { prop: 'status', label: '状态', width: 80, slot: 'status' },
   { prop: 'registerAt', label: '注册时间', width: 150, formatter: (r) => formatDateTime(r.registerAt) },
 ]
+
+// 新增用户
+const createDialogVisible = ref(false)
+const createLoading = ref(false)
+const createForm = ref<CreateUserParams>({
+  username: '',
+  password: '',
+  nickname: '',
+  phone: '',
+  email: '',
+  memberLevel: 'free',
+  status: 'active',
+})
+
+function handleAddUser() {
+  createForm.value = {
+    username: '',
+    password: '',
+    nickname: '',
+    phone: '',
+    email: '',
+    memberLevel: 'free',
+    status: 'active',
+  }
+  createDialogVisible.value = true
+}
+
+async function submitCreateUser() {
+  if (!createForm.value.username || !createForm.value.password) {
+    ElMessage.warning('请填写用户名和密码')
+    return
+  }
+  if (createForm.value.password.length < 6) {
+    ElMessage.warning('密码长度至少 6 位')
+    return
+  }
+  createLoading.value = true
+  try {
+    await createUser(createForm.value)
+    ElMessage.success('添加用户成功')
+    createDialogVisible.value = false
+    fetchList()
+  } finally {
+    createLoading.value = false
+  }
+}
 
 // 详情弹窗
 const detailVisible = ref(false)
@@ -168,6 +216,10 @@ onMounted(fetchList)
       @update:page="(p) => (query.page = p)"
       @update:page-size="(s) => (query.pageSize = s)"
     >
+      <template #toolbar>
+        <el-button type="primary" :icon="'Plus'" @click="handleAddUser">新增用户</el-button>
+      </template>
+
       <template #avatar="{ row }">
         <el-avatar :size="32" :src="row.avatar">{{ (row.username || row.nickname || 'U')[0] }}</el-avatar>
       </template>
@@ -197,6 +249,47 @@ onMounted(fetchList)
         </el-button>
       </template>
     </ProTable>
+
+    <!-- 新增用户弹窗 -->
+    <ProDialog
+      v-model="createDialogVisible"
+      title="新增用户"
+      width="500px"
+      :confirm-loading="createLoading"
+      @confirm="submitCreateUser"
+    >
+      <el-form :model="createForm" label-width="90px">
+        <el-form-item label="用户名" required>
+          <el-input v-model="createForm.username" placeholder="请输入登录用户名" />
+        </el-form-item>
+        <el-form-item label="登录密码" required>
+          <el-input v-model="createForm.password" type="password" show-password placeholder="至少6位密码" />
+        </el-form-item>
+        <el-form-item label="用户昵称">
+          <el-input v-model="createForm.nickname" placeholder="请输入显示昵称（可选）" />
+        </el-form-item>
+        <el-form-item label="手机号码">
+          <el-input v-model="createForm.phone" placeholder="请输入手机号（可选）" />
+        </el-form-item>
+        <el-form-item label="电子邮箱">
+          <el-input v-model="createForm.email" placeholder="请输入邮箱（可选）" />
+        </el-form-item>
+        <el-form-item label="会员等级">
+          <el-select v-model="createForm.memberLevel" style="width: 100%">
+            <el-option label="免费" value="free" />
+            <el-option label="基础版" value="basic" />
+            <el-option label="专业版" value="pro" />
+            <el-option label="旗舰版" value="max" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="账号状态">
+          <el-radio-group v-model="createForm.status">
+            <el-radio value="active">正常</el-radio>
+            <el-radio value="disabled">禁用</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+    </ProDialog>
 
     <!-- 详情弹窗 -->
     <ProDialog v-model="detailVisible" title="用户详情" width="600px" :show-footer="false">
@@ -254,3 +347,9 @@ onMounted(fetchList)
     </ProDialog>
   </div>
 </template>
+
+<style scoped lang="scss">
+.page-container {
+  padding: 16px;
+}
+</style>

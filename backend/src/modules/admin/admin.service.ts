@@ -13,7 +13,7 @@ import { User } from '@/database/entities/user.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
 import { OperationLog } from '@/database/entities/operation-log.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
-import { AdminLoginDto, SystemConfigDto } from './dto/admin.dto';
+import { AdminLoginDto, SystemConfigDto, CreateUserAdminDto } from './dto/admin.dto';
 import { CryptoUtil } from '@/common/utils/crypto.util';
 
 /**
@@ -192,6 +192,64 @@ export class AdminService {
 
     admin.password = await CryptoUtil.hashPassword(newPassword);
     await this.adminRepository.save(admin);
+  }
+
+  /**
+   * 后台创建用户
+   */
+  async createUser(dto: CreateUserAdminDto): Promise<any> {
+    const existing = await this.userRepository.findOne({
+      where: [{ username: dto.username }],
+    });
+    if (existing) {
+      throw new BadRequestException('该用户名已存在');
+    }
+
+    if (dto.phone) {
+      const existPhone = await this.userRepository.findOne({
+        where: { phone: dto.phone },
+      });
+      if (existPhone) {
+        throw new BadRequestException('该手机号已被使用');
+      }
+    }
+
+    if (dto.email) {
+      const existEmail = await this.userRepository.findOne({
+        where: { email: dto.email },
+      });
+      if (existEmail) {
+        throw new BadRequestException('该邮箱已被使用');
+      }
+    }
+
+    const hashedPassword = await CryptoUtil.hashPassword(dto.password);
+    const levelMap: Record<string, number> = { free: 0, basic: 1, pro: 2, max: 3 };
+    const vipLevel = dto.memberLevel ? (levelMap[dto.memberLevel] ?? 0) : 0;
+    const status = dto.status === 'disabled' || dto.status === '0' ? 0 : 1;
+
+    let vipExpireAt: Date | null = null;
+    if (vipLevel > 0) {
+      const d = new Date();
+      d.setFullYear(d.getFullYear() + 1);
+      vipExpireAt = d;
+    }
+
+    const user = this.userRepository.create({
+      username: dto.username,
+      password: hashedPassword,
+      nickname: dto.nickname || dto.username,
+      phone: dto.phone || null,
+      email: dto.email || null,
+      avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+      vipLevel,
+      vipExpireAt,
+      status,
+    });
+
+    const saved = await this.userRepository.save(user);
+    const { password: _p, ...result } = saved;
+    return result;
   }
 
   /**

@@ -33,6 +33,25 @@ export interface MemberUpdateParams {
   expireAt?: string
 }
 
+export interface CreateUserParams {
+  username: string
+  password: string
+  nickname?: string
+  phone?: string
+  email?: string
+  memberLevel?: MemberLevel
+  status?: UserStatus
+}
+
+// 创建用户
+export function createUser(data: CreateUserParams) {
+  return request<User>({
+    url: '/admin/users',
+    method: 'post',
+    data,
+  })
+}
+
 // 用户列表
 export function getUserList(params: UserQuery) {
   return request<PageResult<User>>({
