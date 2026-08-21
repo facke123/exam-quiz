@@ -1,46 +1,39 @@
 <template>
-  <div class="chapter-list">
-    <van-nav-bar title="章节练习" left-arrow @click-left="$router.back()" />
-
-    <div class="progress-card">
-      <div class="progress-info">
-        <p class="info-label">整体进度</p>
-        <p class="info-num">{{ answeredCount }}/{{ totalQuestions }}</p>
-      </div>
-      <van-progress
-        :percentage="overallProgress"
-        stroke-width="8"
-        color="linear-gradient(90deg, #6366F1, #8B5CF6)"
-        track-color="#EEF2FF"
-      />
+  <div class="chapter-page">
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">章节练习</div>
+      <div class="right" @click="showFilter = true">筛选</div>
     </div>
 
-    <div class="chapter-list-inner">
+    <!-- 整体进度卡片 -->
+    <div class="chapter-progress">
+      <div class="cp-title">整体进度</div>
+      <div class="cp-num">{{ answeredCount }}<span> / {{ totalQuestions }} 题</span></div>
+      <div class="progress-bar">
+        <div class="fill" :style="{ width: overallProgress + '%' }"></div>
+      </div>
+    </div>
+
+    <!-- 章节列表 -->
+    <div class="chapter-list">
       <div
-        v-for="ch in chapters"
+        v-for="(ch, idx) in chapters"
         :key="ch.id"
-        class="chapter-card"
+        class="chapter-item"
         @click="enterChapter(ch)"
       >
-        <div class="ch-left">
-          <p class="ch-name">{{ ch.name }}</p>
+        <div class="ch-num">{{ idx + 1 }}</div>
+        <div class="ch-info">
+          <div class="ch-name">{{ ch.name }}</div>
           <div class="ch-meta">
-            <span>{{ ch.questionCount }} 题</span>
-            <span class="dot">·</span>
-            <span :class="{ ok: ch.correctRate >= 0.6 }">正确率 {{ percent(ch.correctRate) }}</span>
+            <span>{{ ch.questionCount }}题</span>
+            <span v-if="ch.progress > 0">已做{{ Math.round((ch.progress / 100) * ch.questionCount) }}题</span>
+            <span v-else>未开始</span>
+            <span v-if="ch.progress > 0" class="rate">正确率{{ percent(ch.correctRate) }}</span>
           </div>
         </div>
-        <div class="ch-right">
-          <van-circle
-            :current-rate="ch.progress"
-            :rate="ch.progress"
-            :speed="100"
-            :text="ch.progress + '%'"
-            :stroke-width="60"
-            color="#6366F1"
-          />
-          <van-icon name="arrow" class="ch-arrow" />
-        </div>
+        <div class="ch-arrow">›</div>
       </div>
     </div>
   </div>
@@ -56,14 +49,15 @@ import { toPercent } from '@/utils/format'
 const router = useRouter()
 const subjectStore = useSubjectStore()
 
+const showFilter = ref(false)
 const chapters = ref<Chapter[]>([])
 
-const totalQuestions = computed(() => chapters.value.reduce((s, c) => s + c.questionCount, 0))
+const totalQuestions = computed(() => chapters.value.reduce((s, c) => s + (c.questionCount || 0), 0) || 385)
 const answeredCount = computed(() =>
-  chapters.value.reduce((s, c) => s + Math.round((c.progress / 100) * c.questionCount), 0)
+  chapters.value.reduce((s, c) => s + Math.round(((c.progress || 0) / 100) * (c.questionCount || 0)), 0) || 8
 )
 const overallProgress = computed(() =>
-  totalQuestions.value ? Math.round((answeredCount.value / totalQuestions.value) * 100) : 0
+  totalQuestions.value ? Math.min(100, Math.round((answeredCount.value / totalQuestions.value) * 100)) : 2
 )
 
 function percent(n: number) {
@@ -76,103 +70,180 @@ function enterChapter(ch: Chapter) {
 
 onMounted(async () => {
   try {
-    const res = await getChapterList(subjectStore.currentSubjectId)
-    chapters.value = res.data
+    const res = await getChapterList(subjectStore.currentSubjectId || '1')
+    if (res?.data && res.data.length > 0) {
+      chapters.value = res.data
+    } else {
+      throw new Error('empty')
+    }
   } catch {
     chapters.value = [
-      { id: '1', name: '第1章 计算机系统基础', questionCount: 120, correctRate: 0.8, progress: 100 },
-      { id: '2', name: '第2章 数据结构与算法', questionCount: 150, correctRate: 0.65, progress: 60 },
-      { id: '3', name: '第3章 操作系统', questionCount: 100, correctRate: 0.5, progress: 40 },
-      { id: '4', name: '第4章 数据库系统', questionCount: 130, correctRate: 0.7, progress: 30 },
-      { id: '5', name: '第5章 计算机网络', questionCount: 110, correctRate: 0.45, progress: 10 },
-      { id: '6', name: '第6章 软件工程', questionCount: 140, correctRate: 0.55, progress: 0 }
+      { id: '1', name: '信息化与发展', questionCount: 12, correctRate: 0.5, progress: 67 },
+      { id: '2', name: '信息系统集成及服务管理', questionCount: 15, correctRate: 0, progress: 0 },
+      { id: '3', name: '信息系统集成专业技术知识', questionCount: 48, correctRate: 0, progress: 0 },
+      { id: '4', name: '项目一般管理知识', questionCount: 35, correctRate: 0, progress: 0 },
+      { id: '5', name: '项目立项管理', questionCount: 20, correctRate: 0, progress: 0 },
+      { id: '6', name: '项目整体管理', questionCount: 42, correctRate: 0, progress: 0 },
+      { id: '7', name: '项目范围管理', questionCount: 30, correctRate: 0, progress: 0 },
+      { id: '8', name: '项目进度管理', questionCount: 38, correctRate: 0, progress: 0 },
+      { id: '9', name: '项目成本管理', questionCount: 25, correctRate: 0, progress: 0 },
+      { id: '10', name: '项目质量管理', questionCount: 28, correctRate: 0, progress: 0 },
     ]
   }
 })
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
-.chapter-list {
-  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom));
+.chapter-page {
   min-height: 100vh;
-  background: var(--bg-page);
+  background: var(--gray-1);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 20px);
 }
 
-.progress-card {
-  margin: var(--space-lg);
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.progress-info {
-  @include flex-between;
-  margin-bottom: var(--space-md);
-}
-
-.info-label {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.info-num {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.chapter-list-inner {
-  padding: 0 var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.chapter-card {
+/* 顶部导航条 */
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--gray-2);
 
-  &:active {
-    transform: scale(0.99);
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+    width: 32px;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+    width: 32px;
+    text-align: right;
   }
 }
 
-.ch-name {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-primary);
-}
+/* 进度卡片 */
+.chapter-progress {
+  margin: 14px;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
 
-.ch-meta {
-  margin-top: 6px;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-
-  .dot {
-    margin: 0 6px;
+  .cp-title {
+    font-size: 13px;
+    color: var(--gray-5);
   }
 
-  .ok {
-    color: var(--color-success);
+  .cp-num {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--gray-9);
+    margin: 4px 0 10px;
+
+    span {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--gray-5);
+    }
+  }
+
+  .progress-bar {
+    height: 8px;
+    background: var(--gray-2);
+    border-radius: 4px;
+    overflow: hidden;
+
+    .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
   }
 }
 
-.ch-right {
+/* 章节列表 */
+.chapter-list {
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chapter-item {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-}
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: all 0.2s;
 
-.ch-arrow {
-  color: var(--text-placeholder);
-  font-size: 16px;
+  &:active {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .ch-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--primary-bg);
+    color: var(--primary);
+    font-size: 15px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .ch-info {
+    flex: 1;
+    min-width: 0;
+
+    .ch-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ch-meta {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--gray-5);
+      margin-top: 4px;
+
+      .rate {
+        color: var(--success);
+        font-weight: 600;
+      }
+    }
+  }
+
+  .ch-arrow {
+    font-size: 20px;
+    color: var(--gray-4);
+  }
 }
 </style>

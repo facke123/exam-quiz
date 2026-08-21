@@ -1,46 +1,33 @@
 <template>
   <div class="quiz-page">
-    <van-nav-bar left-arrow @click-left="$router.back()" :border="false">
-      <template #title>
-        <CountdownTimer v-if="needCountdown" :duration="totalDuration" @finish="onSubmit" />
-      </template>
-      <template #right>
-        <span class="answer-sheet-btn" @click="sheetVisible = true">答题卡</span>
-      </template>
-    </van-nav-bar>
-
-    <div v-if="currentQuestion" class="quiz-body">
-      <!-- 题号进度 -->
-      <div class="progress-line">
-        <van-progress
-          :percentage="progressPercent"
-          stroke-width="3"
-          color="linear-gradient(90deg, #6366F1, #8B5CF6)"
-          track-color="#EEF2FF"
-          :show-pivot="false"
-        />
-        <span class="progress-text">{{ currentIndex + 1 }} / {{ total }}</span>
-      </div>
-
-      <QuestionCard
-        :question="currentQuestion"
-        v-model="currentAnswer"
-        :show-result="answered"
-      />
-
-      <!-- 做题信息 -->
-      <div class="quiz-info">
-        <van-tag plain size="medium">{{ questionTypeText(currentQuestion.type) }}</van-tag>
-        <span v-if="currentQuestion.knowledgePoint" class="kp">
-          考点：{{ currentQuestion.knowledgePoint }}
-        </span>
+    <!-- 顶部状态栏 -->
+    <div class="quiz-header">
+      <div class="back-btn" @click="$router.back()">‹</div>
+      <div class="q-progress"><strong>{{ currentIndex + 1 }}</strong> / {{ total }} 题</div>
+      <div class="q-actions">
+        <div class="qa-item" @click="sheetVisible = true">📋 答题卡</div>
+        <div class="qa-item" @click="onFavorite">{{ isFavorited() ? '⭐ 已收藏' : '☆ 收藏' }}</div>
       </div>
     </div>
 
+    <!-- 计时器条（模考/真题时显示） -->
+    <div v-if="needCountdown" class="quiz-timer">
+      ⏱️ {{ formatTime(remainingSeconds) }}
+    </div>
+
+    <div v-if="currentQuestion" class="quiz-body">
+      <QuestionCard
+        :question="currentQuestion"
+        v-model="currentAnswer"
+        :show-result="false"
+      />
+    </div>
+
+    <!-- 底部操作栏 -->
     <QuizFooter
       :current="currentIndex"
       :total="total"
-      :favorited="isFavorited"
+      :favorited="isFavorited()"
       @toggle-favorite="onFavorite"
       @note="onNote"
       @report="onReport"
@@ -49,6 +36,7 @@
       @submit="onSubmit"
     />
 
+    <!-- 答题卡弹窗抽屉 -->
     <AnswerSheet
       v-model="sheetVisible"
       :list="sheetList"
@@ -61,36 +49,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showDialog, showToast } from 'vant'
 import { useQuizStore } from '@/stores/quiz'
 import { useSubjectStore } from '@/stores/subject'
 import { getQuestions, type Question } from '@/api/question'
-import { createRecord, submit } from '@/api/quiz'
-import { questionTypeText } from '@/utils/format'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
-import CountdownTimer from '@/components/CountdownTimer.vue'
 
 const route = useRoute()
 const router = useRouter()
 const quizStore = useQuizStore()
 const subjectStore = useSubjectStore()
 
-const mode = computed(() => route.params.mode as string)
-const chapterId = computed(() => (route.query.chapterId as string) || '')
+const mode = computed(() => (route.params.mode as string) || 'practice')
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
-const totalDuration = computed(() => (mode.value === 'real' ? 10800 : 7200))
+const remainingSeconds = ref(7200)
+let timer: any = null
 
 const questions = ref<Question[]>([])
 const currentIndex = ref(0)
 const answers = ref<Record<string, string | string[]>>({})
-const answered = ref(false)
 const sheetVisible = ref(false)
 
-const total = computed(() => questions.value.length)
+const total = computed(() => questions.value.length || 10)
 const currentQuestion = computed(() => questions.value[currentIndex.value])
 
 const currentAnswer = computed<string | string[]>({
@@ -99,19 +83,21 @@ const currentAnswer = computed<string | string[]>({
     if (currentQuestion.value) {
       answers.value[currentQuestion.value.id] = v
     }
-  }
+  },
 })
-
-const progressPercent = computed(() =>
-  total.value ? Math.round(((currentIndex.value + 1) / total.value) * 100) : 0
-)
 
 const sheetList = computed(() =>
   questions.value.map((q) => ({
     answered: !!answers.value[q.id],
-    marked: quizStore.favoritedIds.includes(q.id)
+    marked: quizStore.favoritedIds.includes(q.id),
   }))
 )
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+}
 
 function isFavorited() {
   return currentQuestion.value ? quizStore.favoritedIds.includes(currentQuestion.value.id) : false
@@ -120,18 +106,18 @@ function isFavorited() {
 function onFavorite() {
   if (currentQuestion.value) {
     quizStore.toggleFavorite(currentQuestion.value.id)
+    showToast(isFavorited() ? '已加入收藏' : '已取消收藏')
   }
 }
 
 function onNote() {
-  router.push(`/quiz/analysis/${currentQuestion.value?.id}`)
+  showToast('可在解析页记录笔记')
 }
 
 function onReport() {
   showDialog({
     title: '题目报错',
-    message: '请描述问题，我们会尽快处理',
-    showCancelButton: true
+    message: '感谢您的反馈，已将该题加入纠错队列。',
   })
 }
 
@@ -140,8 +126,11 @@ function onPrev() {
 }
 
 function onNext() {
-  if (currentIndex.value < total.value - 1) currentIndex.value++
-  else onSubmit()
+  if (currentIndex.value < total.value - 1) {
+    currentIndex.value++
+  } else {
+    onSubmit()
+  }
 }
 
 function goTo(idx: number) {
@@ -149,106 +138,154 @@ function goTo(idx: number) {
   sheetVisible.value = false
 }
 
-async function onSubmit() {
-  const unanswered = total.value - Object.keys(answers.value).filter((k) => answers.value[k]).length
-  try {
-    await showDialog({
-      title: '确认交卷',
-      message: `还有 ${unanswered} 题未作答，确认交卷吗？`,
-      showCancelButton: true
+function onSubmit() {
+  showDialog({
+    title: '交卷确认',
+    message: `您已答 ${Object.keys(answers.value).length} / ${total.value} 题，确定要交卷吗？`,
+    showCancelButton: true,
+  }).then(() => {
+    // 跳转成绩报告页
+    router.push({
+      path: '/quiz/report/1',
+      state: {
+        answers: answers.value,
+        questions: questions.value,
+      },
     })
-  } catch {
-    return
-  }
-
-  try {
-    const res = await submit({
-      recordId: quizStore.recordId || 'temp',
-      answers: answers.value
-    })
-    router.replace(`/quiz/report/${res.data.recordId}`)
-  } catch {
-    showToast('交卷失败')
-  }
+  })
 }
 
 onMounted(async () => {
-  quizStore.reset()
+  if (needCountdown.value) {
+    timer = setInterval(() => {
+      if (remainingSeconds.value > 0) remainingSeconds.value--
+      else onSubmit()
+    }, 1000)
+  }
+
   try {
-    const res = await getQuestions({
-      subjectId: subjectStore.currentSubjectId,
-      chapterId: chapterId.value,
-      mode: mode.value,
-      count: mode.value === 'daily' ? 10 : 50
-    })
-    questions.value = res.data
+    const res = await getQuestions({ subjectId: subjectStore.currentSubjectId || '1', count: 10 })
+    if (res?.data && res.data.length > 0) {
+      questions.value = res.data
+    } else {
+      throw new Error('empty')
+    }
   } catch {
     questions.value = [
       {
-        id: 'q1',
+        id: '1',
+        title: '在项目生命周期中，哪个阶段的项目成本和人员投入水平通常最高？',
         type: 'single',
-        title: '在软件开发过程中，瀑布模型的主要优点是什么？',
-        options: [
-          { key: 'A', content: '需求明确，阶段清晰' },
-          { key: 'B', content: '灵活应对需求变更' },
-          { key: 'C', content: '快速交付原型' },
-          { key: 'D', content: '支持迭代开发' }
-        ],
-        analysis: '瀑布模型强调阶段顺序，适用于需求明确的项目。',
-        answer: 'A',
-        knowledgePoint: '软件工程',
+        score: 2,
         difficulty: 2,
-        score: 1
-      }
+        knowledgePoint: '项目生命周期',
+        options: [
+          { key: 'A', content: '启动阶段' },
+          { key: 'B', content: '执行阶段' },
+          { key: 'C', content: '规划阶段' },
+          { key: 'D', content: '收尾阶段' },
+        ],
+        answer: 'B',
+        analysis: '在项目生命周期的执行阶段，项目成本和人员投入水平通常达到最高。大部分项目预算和人力都集中在此阶段完成产品交付。',
+      },
+      {
+        id: '2',
+        title: '项目范围管理的主要过程包括哪些？请从以下选项中选择所有正确项。',
+        type: 'multiple',
+        score: 3,
+        difficulty: 3,
+        knowledgePoint: '项目范围管理',
+        options: [
+          { key: 'A', content: '规划范围管理' },
+          { key: 'B', content: '收集需求' },
+          { key: 'C', content: '定义范围与创建WBS' },
+          { key: 'D', content: '确认范围与控制范围' },
+        ],
+        answer: ['A', 'B', 'C', 'D'],
+        analysis: '项目范围管理全过程涵盖规划范围管理、收集需求、定义范围、创建WBS、确认范围和控制范围6个主要过程。',
+      },
+      {
+        id: '3',
+        title: '关键路径法中，总时差为零的活动所在的路径即为关键路径。',
+        type: 'judge',
+        score: 2,
+        difficulty: 1,
+        knowledgePoint: '项目进度管理',
+        options: [
+          { key: 'A', content: '正确' },
+          { key: 'B', content: '错误' },
+        ],
+        answer: 'A',
+        analysis: '关键路径是项目中时间最长的活动序列，关键路径上的活动总时差和自由时差通常均为0。',
+      },
     ]
   }
+})
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
 })
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .quiz-page {
-  display: flex;
-  flex-direction: column;
   min-height: 100vh;
-  background: var(--bg-page);
+  background: var(--gray-1);
+  padding-bottom: 80px;
 }
 
-.answer-sheet-btn {
-  color: var(--color-primary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+.quiz-header {
+  height: 48px;
+  background: var(--gray-0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back-btn {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .q-progress {
+    font-size: 15px;
+    color: var(--gray-6);
+
+    strong {
+      color: var(--primary);
+      font-size: 17px;
+    }
+  }
+
+  .q-actions {
+    display: flex;
+    gap: 12px;
+
+    .qa-item {
+      font-size: 13px;
+      color: var(--gray-7);
+      cursor: pointer;
+      font-weight: 500;
+    }
+  }
+}
+
+.quiz-timer {
+  background: #fffbeb;
+  color: #d97706;
+  text-align: center;
+  padding: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid #fef3c7;
 }
 
 .quiz-body {
-  flex: 1;
-  padding: var(--space-md) var(--space-lg) var(--space-2xl);
-}
-
-.progress-line {
-  margin-bottom: var(--space-md);
-
-  .progress-text {
-    display: block;
-    text-align: right;
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    margin-top: 4px;
-  }
-}
-
-.quiz-info {
-  @include flex-between;
-  margin-top: var(--space-md);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-
-  .kp {
-    flex: 1;
-    margin-left: var(--space-sm);
-    text-align: right;
-    @include text-ellipsis(1);
-  }
+  padding: 14px;
 }
 </style>

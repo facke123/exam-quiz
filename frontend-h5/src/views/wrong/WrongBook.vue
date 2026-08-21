@@ -1,310 +1,322 @@
 <template>
   <div class="wrong-page">
-    <van-nav-bar title="错题本" :border="false" />
-
-    <div class="filter-bar">
-      <van-tabs v-model:active="activeTab" shrink color="#6366F1" line-width="24">
-        <van-tab title="全部" />
-        <van-tab title="单选题" />
-        <van-tab title="多选题" />
-        <van-tab title="判断题" />
-        <van-tab title="案例" />
-      </van-tabs>
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">错题本</div>
+      <div class="right" @click="editMode = !editMode">{{ editMode ? '完成' : '管理' }}</div>
     </div>
 
-    <div class="wrong-summary">
-      <div class="summary-item">
-        <p class="sum-num">{{ total }}</p>
-        <p class="sum-label">错题总数</p>
-      </div>
-      <div class="summary-item">
-        <p class="sum-num">{{ wrongCount }}</p>
-        <p class="sum-label">今日新增</p>
-      </div>
-      <div class="summary-item">
-        <p class="sum-num">{{ masteredCount }}</p>
-        <p class="sum-label">已掌握</p>
+    <!-- 题型过滤器 -->
+    <div class="wrong-header">
+      <div
+        v-for="(t, idx) in types"
+        :key="t"
+        class="filter-chip"
+        :class="{ active: currentTypeIndex === idx }"
+        @click="currentTypeIndex = idx"
+      >
+        {{ t }}
       </div>
     </div>
 
+    <!-- 错题统计与集中攻关 -->
+    <div class="wrong-stats">
+      <div>
+        <div class="ws-num">{{ filteredList.length }}</div>
+        <div class="ws-label">道错题待攻克</div>
+      </div>
+      <div class="ws-btn" @click="startRedo">开始重做</div>
+    </div>
+
+    <!-- 错题卡片列表 -->
     <div class="wrong-list">
-      <van-checkbox-group v-model="checkedIds">
-        <div
-          v-for="item in list"
-          :key="item.id"
-          class="wrong-card"
-          @click="goAnalysis(item.questionId)"
-        >
-          <van-checkbox
-            v-if="editMode"
-            :name="item.questionId"
-            class="card-check"
-            @click.stop
-          />
-          <div class="card-body">
-            <div class="card-head">
-              <van-tag plain :type="typeColor(item.type)" size="medium">
-                {{ questionTypeText(item.type) }}
-              </van-tag>
-              <span class="wrong-count">错 {{ item.wrongCount }} 次</span>
-            </div>
-            <p class="card-title text-ellipsis-2">{{ item.title }}</p>
-            <p class="card-chapter">{{ item.chapterName }}</p>
+      <div
+        v-for="item in filteredList"
+        :key="item.id"
+        class="wrong-card"
+        @click="goAnalysis(item.id)"
+      >
+        <div class="wc-header">
+          <div class="wc-tags">
+            <span class="wc-type">{{ item.type }}</span>
+            <span class="wc-chapter">{{ item.chapter }}</span>
           </div>
-          <van-icon name="arrow" class="card-arrow" />
+          <div class="wc-time">{{ item.time }}</div>
         </div>
-      </van-checkbox-group>
-    </div>
 
-    <!-- 底部操作栏 -->
-    <div v-if="editMode" class="edit-bar">
-      <van-checkbox v-model="allChecked" @click="toggleAll">全选</van-checkbox>
-      <div class="edit-actions">
-        <van-button type="primary" size="small" @click="onRedo">重做</van-button>
-        <van-button type="danger" size="small" plain @click="onRemove">移除</van-button>
+        <div class="wc-content">{{ item.title }}</div>
+        <div class="wc-answer">✗ 你的答案：{{ item.myAnswer }} ｜ 正确答案：{{ item.correctAnswer }}</div>
+
+        <div class="wc-footer">
+          <div class="wc-actions">
+            <div class="wca" @click.stop="goAnalysis(item.id)">📖 查看解析</div>
+            <div class="wca" @click.stop="addNote(item)">📓 添加笔记</div>
+          </div>
+          <div class="wca remove" @click.stop="remove(item.id)">移除</div>
+        </div>
       </div>
     </div>
-    <div v-else class="action-bar">
-      <van-button block round @click="editMode = true">管理</van-button>
-      <van-button block round type="primary" @click="onRedoAll">错题重做</van-button>
-    </div>
 
-    <EmptyState v-if="!list.length" text="暂无错题，继续加油！" icon="checked" />
+    <div style="height: 80px"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast, showConfirmDialog } from 'vant'
-import { getWrongList, removeWrong, redoWrong, type WrongItem } from '@/api/wrong'
-import { questionTypeText } from '@/utils/format'
-import EmptyState from '@/components/EmptyState.vue'
+import { showToast, showDialog } from 'vant'
 
 const router = useRouter()
-const activeTab = ref(0)
 const editMode = ref(false)
-const checkedIds = ref<string[]>([])
+const currentTypeIndex = ref(0)
+const types = ['全部', '单选题', '多选题', '判断题', '填空题']
 
-const list = ref<WrongItem[]>([])
-const total = ref(48)
-const wrongCount = ref(5)
-const masteredCount = ref(12)
+const wrongList = ref([
+  {
+    id: '1',
+    type: '单选题',
+    chapter: '项目整体管理',
+    time: '2天前',
+    title: '制定项目章程的输入不包括以下哪项？A.项目工作说明书 B.商业论证 C.项目范围说明书 D.协议',
+    myAnswer: 'C',
+    correctAnswer: 'B',
+  },
+  {
+    id: '2',
+    type: '多选题',
+    chapter: '项目范围管理',
+    time: '3天前',
+    title: '项目范围管理的主要过程包括哪些？请从以下选项中选择所有正确项。',
+    myAnswer: 'ABC',
+    correctAnswer: 'ABCD',
+  },
+  {
+    id: '3',
+    type: '填空题',
+    chapter: '项目进度管理',
+    time: '5天前',
+    title: '关键路径法中，总时差为零的路径称为______路径。',
+    myAnswer: '最短',
+    correctAnswer: '关键',
+  },
+])
 
-const allChecked = computed({
-  get: () => checkedIds.value.length === list.value.length && list.value.length > 0,
-  set: (v) => {
-    checkedIds.value = v ? list.value.map((i) => i.questionId) : []
-  }
+const filteredList = computed(() => {
+  if (currentTypeIndex.value === 0) return wrongList.value
+  const target = types[currentTypeIndex.value]
+  return wrongList.value.filter((i) => i.type === target)
 })
 
-function toggleAll() {
-  allChecked.value = !allChecked.value
-}
-
-function typeColor(type: string) {
-  const map: Record<string, string> = {
-    single: 'primary',
-    multiple: 'primary',
-    judge: 'success',
-    case: 'warning',
-    subjective: 'danger'
-  }
-  return (map[type] || 'primary') as any
-}
-
 function goAnalysis(id: string) {
-  if (editMode.value) return
   router.push(`/quiz/analysis/${id}`)
 }
 
-async function onRedo() {
-  if (!checkedIds.value.length) return showToast('请选择题目')
-  try {
-    const res = await redoWrong(checkedIds.value)
-    router.push(`/quiz/chapter?recordId=${res.data.recordId}`)
-  } catch {
-    showToast('操作失败')
-  }
+function startRedo() {
+  showToast('开始错题攻关！')
+  router.push('/quiz/practice')
 }
 
-async function onRedoAll() {
-  try {
-    const res = await redoWrong(list.value.map((i) => i.questionId))
-    router.push(`/quiz/chapter?recordId=${res.data.recordId}`)
-  } catch {
-    showToast('操作失败')
-  }
+function addNote(item: any) {
+  showDialog({
+    title: '为该题记录笔记',
+    message: '笔记已保存。',
+  })
 }
 
-async function onRemove() {
-  if (!checkedIds.value.length) return showToast('请选择题目')
-  try {
-    await showConfirmDialog({ title: '确认', message: '确定移除选中的错题吗？' })
-    await removeWrong(checkedIds.value)
-    list.value = list.value.filter((i) => !checkedIds.value.includes(i.questionId))
-    checkedIds.value = []
-    showToast({ type: 'success', message: '已移除' })
-  } catch {
-    // 取消
-  }
+function remove(id: string) {
+  wrongList.value = wrongList.value.filter((i) => i.id !== id)
+  showToast('已从错题本移除')
 }
-
-onMounted(async () => {
-  try {
-    const res = await getWrongList({})
-    list.value = res.data.list
-    total.value = res.data.total
-  } catch {
-    list.value = [
-      {
-        id: 'w1',
-        questionId: 'q1',
-        type: 'single',
-        title: '瀑布模型的主要优点是什么？',
-        chapterName: '第6章 软件工程',
-        wrongCount: 3,
-        lastWrongAt: '2026-08-19'
-      },
-      {
-        id: 'w2',
-        questionId: 'q2',
-        type: 'multiple',
-        title: '下列哪些属于敏捷开发方法？',
-        chapterName: '第6章 软件工程',
-        wrongCount: 2,
-        lastWrongAt: '2026-08-18'
-      }
-    ]
-  }
-})
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .wrong-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 70px);
+  background: var(--gray-1);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom));
 }
 
-.filter-bar {
-  background: var(--bg-card);
-}
-
-.wrong-summary {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
-  padding: var(--space-lg);
-  margin: var(--space-lg) var(--space-lg) 0;
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 
-.summary-item {
-  flex: 1;
-  text-align: center;
-
-  .sum-num {
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: var(--color-primary);
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
   }
 
-  .sum-label {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+  }
+}
+
+.wrong-header {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: var(--gray-0);
+  border-bottom: 1px solid var(--gray-2);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-chip {
+    padding: 6px 14px;
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--gray-6);
+    background: var(--gray-2);
+    cursor: pointer;
+    white-space: nowrap;
+    font-weight: 500;
+
+    &.active {
+      background: var(--primary-bg);
+      color: var(--primary);
+      font-weight: 700;
+    }
+  }
+}
+
+.wrong-stats {
+  margin: 14px;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+
+  .ws-num {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--danger);
+  }
+
+  .ws-label {
+    font-size: 12px;
+    color: var(--gray-5);
     margin-top: 2px;
+  }
+
+  .ws-btn {
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 18px;
+    border-radius: 18px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px var(--primary-glow);
   }
 }
 
 .wrong-list {
-  padding: var(--space-lg);
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 12px;
 }
 
 .wrong-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
 
-  &:active {
-    transform: scale(0.99);
-  }
-}
-
-.card-check {
-  flex-shrink: 0;
-}
-
-.card-body {
-  flex: 1;
-}
-
-.card-head {
-  @include flex-between;
-  margin-bottom: 6px;
-
-  .wrong-count {
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
-  }
-}
-
-.card-title {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.card-chapter {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.card-arrow {
-  color: var(--text-placeholder);
-}
-
-.action-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-card);
-  @include safe-bottom(12px);
-  @include hairline-top;
-
-  :deep(.van-button) {
-    height: 44px;
-  }
-}
-
-.edit-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  @include flex-between;
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-card);
-  @include safe-bottom(12px);
-  @include hairline-top;
-
-  .edit-actions {
+  .wc-header {
     display: flex;
-    gap: var(--space-sm);
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+
+    .wc-tags {
+      display: flex;
+      gap: 6px;
+
+      .wc-type {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--primary-bg);
+        color: var(--primary);
+      }
+
+      .wc-chapter {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--gray-2);
+        color: var(--gray-6);
+      }
+    }
+
+    .wc-time {
+      font-size: 11px;
+      color: var(--gray-4);
+    }
+  }
+
+  .wc-content {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-8);
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+
+  .wc-answer {
+    font-size: 12px;
+    color: var(--danger);
+    background: var(--danger-bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+
+  .wc-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--gray-2);
+    padding-top: 10px;
+    font-size: 12px;
+
+    .wc-actions {
+      display: flex;
+      gap: 14px;
+      color: var(--gray-6);
+    }
+
+    .wca {
+      cursor: pointer;
+
+      &.remove {
+        color: var(--gray-4);
+      }
+    }
   }
 }
 </style>

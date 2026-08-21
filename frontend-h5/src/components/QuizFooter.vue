@@ -1,49 +1,30 @@
 <template>
   <div class="quiz-footer">
-    <div class="left-actions">
-      <div class="action-btn" :class="{ active: favorited }" @click="$emit('toggle-favorite')">
-        <van-icon :name="favorited ? 'star' : 'star-o'" />
-        <span>收藏</span>
+    <div class="footer-icons">
+      <div class="footer-icon" :class="{ active: favorited }" @click="$emit('toggle-favorite')">
+        <span>{{ favorited ? '⭐' : '☆' }}</span>
+        <span>{{ favorited ? '已收藏' : '收藏' }}</span>
       </div>
-      <div class="action-btn" @click="$emit('note')">
-        <van-icon name="edit-line" />
+      <div class="footer-icon" @click="$emit('note')">
+        <span>📓</span>
         <span>笔记</span>
       </div>
-      <div class="action-btn" @click="$emit('report')">
-        <van-icon name="warning-o" />
+      <div class="footer-icon" @click="$emit('report')">
+        <span>⚠️</span>
         <span>报错</span>
       </div>
     </div>
 
-    <div class="nav-actions">
-      <van-button
-        v-if="current > 0"
-        plain
-        type="primary"
-        size="small"
-        class="nav-btn"
-        @click="$emit('prev')"
-      >
+    <div class="footer-btns">
+      <button v-if="current > 0" class="btn-prev" @click="$emit('prev')">
         上一题
-      </van-button>
-      <van-button
-        v-if="current < total - 1"
-        type="primary"
-        size="small"
-        class="nav-btn"
-        @click="$emit('next')"
-      >
+      </button>
+      <button v-if="current < total - 1" class="btn-next" @click="$emit('next')">
         下一题
-      </van-button>
-      <van-button
-        v-else
-        type="danger"
-        size="small"
-        class="nav-btn submit-btn"
-        @click="$emit('submit')"
-      >
+      </button>
+      <button v-else class="btn-submit" @click="$emit('submit')">
         交卷
-      </van-button>
+      </button>
     </div>
   </div>
 </template>
@@ -66,57 +47,87 @@ defineEmits<{
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .quiz-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--gray-0);
+  border-top: 1px solid var(--gray-2);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-sm) var(--space-lg);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: var(--backdrop-blur);
-  -webkit-backdrop-filter: var(--backdrop-blur);
-  border-top: 1px solid var(--border-light);
-  @include safe-bottom(8px);
+  padding: 0 16px;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 100;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
 }
 
-.left-actions {
+.footer-icons {
   display: flex;
-  gap: var(--space-lg);
+  gap: 16px;
 }
 
-.action-btn {
-  @include flex-col;
+.footer-icon {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 2px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--gray-5);
+  cursor: pointer;
 
-  .van-icon {
-    font-size: 20px;
+  span:first-child {
+    font-size: 18px;
   }
 
   &.active {
-    color: var(--color-primary);
-    .van-icon {
-      color: var(--color-secondary);
-    }
+    color: var(--primary);
   }
 }
 
-.nav-actions {
+.footer-btns {
   display: flex;
-  gap: var(--space-sm);
+  gap: 10px;
+}
 
-  .nav-btn {
-    border-radius: var(--radius-full);
-    height: 36px;
-    padding: 0 18px;
-  }
+.btn-prev {
+  background: var(--gray-2);
+  color: var(--gray-7);
+  border: none;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 
-  .submit-btn {
-    background: linear-gradient(135deg, #ef4444, #f97316);
-    border: none;
+  &:active {
+    background: var(--gray-3);
   }
+}
+
+.btn-next,
+.btn-submit {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 10px var(--primary-glow);
+
+  &:active {
+    background: var(--primary-dark);
+  }
+}
+
+.btn-submit {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
 }
 </style>

@@ -1,15 +1,21 @@
 <template>
   <div
     class="option-item"
-    :class="{ selected, correct: showResult && correct, wrong: showResult && selected && !correct }"
+    :class="{
+      selected,
+      correct: showResult && correct,
+      wrong: showResult && selected && !correct,
+    }"
     @click="$emit('click')"
   >
-    <div class="opt-mark">
-      <van-icon v-if="showResult && correct" name="success" />
-      <van-icon v-else-if="showResult && selected && !correct" name="cross" />
+    <div class="opt-letter">
+      <span v-if="showResult && correct">✓</span>
+      <span v-else-if="showResult && selected && !correct">✗</span>
       <span v-else>{{ option.key }}</span>
     </div>
-    <div class="opt-content" v-html="renderedContent"></div>
+    <div class="opt-text" v-html="renderedContent"></div>
+    <div v-if="showResult && correct" class="opt-icon correct">✓</div>
+    <div v-else-if="showResult && selected && !correct" class="opt-icon wrong">✗</div>
   </div>
 </template>
 
@@ -32,68 +38,100 @@ const renderedContent = computed(() => renderWithFormula(props.option.content))
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .option-item {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  border: 1.5px solid var(--border-light);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
-  background: var(--bg-card);
+  align-items: center;
+  gap: 12px;
+  background: var(--gray-0);
+  border: 1.5px solid var(--gray-3);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
 
   &:active {
     transform: scale(0.99);
   }
 
   &.selected {
-    border-color: var(--color-primary);
-    background: rgba(99, 102, 241, 0.06);
+    border-color: var(--primary);
+    background: var(--primary-bg);
+
+    .opt-letter {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .opt-text {
+      color: var(--primary-dark);
+      font-weight: 600;
+    }
   }
 
   &.correct {
-    border-color: var(--color-success);
-    background: rgba(16, 185, 129, 0.06);
-  .opt-mark {
-      background: var(--color-success);
+    border-color: var(--success);
+    background: var(--success-bg);
+
+    .opt-letter {
+      background: var(--success);
       color: #fff;
+    }
+
+    .opt-text {
+      color: #065f46;
+      font-weight: 600;
     }
   }
 
   &.wrong {
-    border-color: var(--color-danger);
-    background: rgba(239, 68, 68, 0.06);
-    .opt-mark {
-      background: var(--color-danger);
+    border-color: var(--danger);
+    background: var(--danger-bg);
+
+    .opt-letter {
+      background: var(--danger);
       color: #fff;
+    }
+
+    .opt-text {
+      color: #991b1b;
     }
   }
 }
 
-.opt-mark {
+.opt-letter {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--gray-2);
+  color: var(--gray-7);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--bg-page);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  @include flex-center;
-
-  .option-item.selected & {
-    background: var(--gradient-primary);
-    color: #fff;
-  }
+  transition: all 0.2s;
 }
 
-.opt-content {
+.opt-text {
   flex: 1;
-  font-size: var(--font-size-base);
-  line-height: 1.6;
-  color: var(--text-primary);
-  padding-top: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--gray-8);
+}
+
+.opt-icon {
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+
+  &.correct {
+    color: var(--success);
+  }
+
+  &.wrong {
+    color: var(--danger);
+  }
 }
 </style>

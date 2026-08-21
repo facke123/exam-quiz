@@ -1,33 +1,25 @@
 <template>
   <div class="subject-page">
-    <van-nav-bar title="选择科目" left-arrow @click-left="$router.back()" />
-
-    <div class="intro">
-      <h2 class="intro-title">选择你的考试科目</h2>
-      <p class="intro-desc">我们将为你推荐匹配的题库与考点</p>
-    </div>
-
-    <div class="level-tabs">
-      <van-tabs v-model:active="activeLevel" shrink color="#6366F1" @change="filterByLevel">
-        <van-tab v-for="lv in levels" :key="lv" :title="lv" />
-      </van-tabs>
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">选择考试科目</div>
+      <div class="right"></div>
     </div>
 
     <div class="subject-list">
       <div
-        v-for="item in filteredList"
-        :key="item.id"
+        v-for="sub in subjects"
+        :key="sub.id"
         class="subject-card"
-        :class="{ active: item.id === currentId }"
-        @click="onSelect(item.id)"
+        :class="{ active: sub.name === currentSubjectName }"
+        @click="onSelect(sub)"
       >
-        <span class="sub-icon">{{ item.icon }}</span>
-        <div class="sub-info">
-          <p class="sub-name">{{ item.name }}</p>
-          <p class="sub-meta">{{ item.level }} · {{ item.category }}</p>
-          <p v-if="item.examDate" class="sub-exam">考试：{{ item.examDate }}</p>
+        <div class="sc-icon" :style="{ background: sub.bg }">{{ sub.icon }}</div>
+        <div class="sc-info">
+          <div class="sc-name">{{ sub.name }}</div>
+          <div class="sc-meta">{{ sub.level }} · {{ sub.questionCount }}题</div>
         </div>
-        <van-icon v-if="item.id === currentId" name="success" class="check-icon" />
+        <div v-if="sub.name === currentSubjectName" class="sc-check">✓</div>
       </div>
     </div>
   </div>
@@ -42,111 +34,126 @@ import { useSubjectStore } from '@/stores/subject'
 const router = useRouter()
 const subjectStore = useSubjectStore()
 
-const levels = ['全部', '初级', '中级', '高级']
-const activeLevel = ref('全部')
-const currentId = ref(subjectStore.currentSubjectId)
+const currentSubjectName = computed(
+  () => subjectStore.currentSubject?.name || '系统集成项目管理工程师'
+)
 
-const filteredList = computed(() => {
-  if (activeLevel.value === '全部') return subjectStore.subjectList
-  return subjectStore.subjectList.filter((s) => s.level === activeLevel.value)
-})
+const subjects = ref([
+  { id: '1', name: '系统集成项目管理工程师', level: '中级', questionCount: 385, icon: '💻', bg: 'var(--primary-bg)' },
+  { id: '2', name: '信息系统项目管理师', level: '高级', questionCount: 520, icon: '📊', bg: 'var(--success-bg)' },
+  { id: '3', name: '信息系统监理师', level: '中级', questionCount: 320, icon: '🏗️', bg: 'var(--warning-bg)' },
+  { id: '4', name: '系统架构设计师', level: '高级', questionCount: 460, icon: '🔒', bg: 'var(--purple-bg)' },
+  { id: '5', name: '软件设计师', level: '中级', questionCount: 480, icon: '💻', bg: 'var(--primary-bg)' },
+  { id: '6', name: '网络工程师', level: '中级', questionCount: 390, icon: '🌐', bg: 'var(--cyan-bg)' },
+  { id: '7', name: '程序员', level: '初级', questionCount: 260, icon: '⌨️', bg: 'var(--gray-2)' },
+])
 
-function filterByLevel() {
-  // 仅触发响应式更新
-}
-
-function onSelect(id: string) {
-  subjectStore.switchSubject(id)
-  currentId.value = id
-  showToast({ type: 'success', message: '已切换科目' })
-  setTimeout(() => router.back(), 600)
+function onSelect(sub: any) {
+  subjectStore.switchSubject(sub.id)
+  showToast({
+    type: 'success',
+    message: `已切换至：${sub.name}`,
+  })
+  setTimeout(() => {
+    router.back()
+  }, 600)
 }
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .subject-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: var(--space-2xl);
+  background: var(--gray-1);
 }
 
-.intro {
-  text-align: center;
-  padding: var(--space-xl) var(--space-lg);
-}
-
-.intro-title {
-  font-size: var(--font-size-xl);
-  color: var(--text-primary);
-}
-
-.intro-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: var(--space-sm);
-}
-
-.level-tabs {
-  background: var(--bg-card);
-  margin-bottom: var(--space-lg);
-}
-
-.subject-list {
-  padding: 0 var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.subject-card {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border: 1.5px solid var(--border-light);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 
-  &.active {
-    border-color: var(--color-primary);
-    background: rgba(99, 102, 241, 0.06);
-    .check-icon {
-      color: var(--color-primary);
-    }
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    width: 24px;
   }
 }
 
-.sub-icon {
-  font-size: 32px;
+.subject-list {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.sub-info {
-  flex: 1;
-}
+.subject-card {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  border: 2px solid transparent;
+  transition: all 0.2s;
 
-.sub-name {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-primary);
-}
+  &.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-glow);
+  }
 
-.sub-meta {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
+  &:active {
+    box-shadow: var(--shadow-md);
+  }
 
-.sub-exam {
-  font-size: 11px;
-  color: var(--color-warning);
-  margin-top: 2px;
-}
+  .sc-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
 
-.check-icon {
-  font-size: 22px;
-  color: var(--text-placeholder);
+  .sc-info {
+    flex: 1;
+
+    .sc-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-8);
+    }
+
+    .sc-meta {
+      font-size: 12px;
+      color: var(--gray-5);
+      margin-top: 3px;
+    }
+  }
+
+  .sc-check {
+    color: var(--primary);
+    font-size: 20px;
+    font-weight: 800;
+  }
 }
 </style>

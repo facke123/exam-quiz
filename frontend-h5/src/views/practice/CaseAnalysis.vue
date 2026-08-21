@@ -1,145 +1,267 @@
 <template>
   <div class="case-page">
-    <van-nav-bar title="案例分析" left-arrow @click-left="$router.back()" />
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">案例分析</div>
+      <div class="right">{{ currentCaseIdx + 1 }}/{{ caseList.length }}</div>
+    </div>
 
-    <div class="case-banner">
-      <van-icon name="records" class="banner-icon" />
-      <div>
-        <p class="banner-title">案例专项训练</p>
-        <p class="banner-desc">下午案例题 · 实战突破</p>
+    <div class="quiz-body">
+      <span class="question-type-tag">案例分析题</span>
+      <div class="case-hint">📖 阅读以下案例材料，回答下方问题</div>
+
+      <!-- 案例背景材料 -->
+      <div class="analysis-content">
+        <div class="ac-body">
+          <p class="case-sub-title"><strong>【案例背景】</strong></p>
+          <p>{{ currentCase.background }}</p>
+          <div class="case-points">
+            <p v-for="(p, i) in currentCase.points" :key="i">{{ i + 1 }}. {{ p }}</p>
+          </div>
+          <p class="case-summary">{{ currentCase.summary }}</p>
+        </div>
+      </div>
+
+      <!-- 问答列表 -->
+      <div v-for="(q, idx) in currentCase.questions" :key="idx" class="question-box">
+        <div class="q-title">问题{{ idx + 1 }}：{{ q.title }}（{{ q.score }}分）</div>
+        <textarea
+          v-model="answers[idx]"
+          class="subjective-input"
+          placeholder="请输入你的作答要点..."
+          rows="4"
+        ></textarea>
+        <div class="subjective-hint">{{ (answers[idx] || '').length }} / 1000字</div>
       </div>
     </div>
 
-    <div class="filter-row">
-      <van-tabs v-model:active="activeTab" shrink color="#6366F1">
-        <van-tab v-for="t in topics" :key="t" :title="t" />
-      </van-tabs>
-    </div>
-
-    <div class="case-list">
-      <div
-        v-for="item in cases"
-        :key="item.id"
-        class="case-card"
-        @click="$router.push(`/quiz/case?caseId=${item.id}`)"
-      >
-        <div class="case-head">
-          <span class="case-no">案例 {{ item.no }}</span>
-          <van-tag plain type="warning" size="medium">{{ item.topic }}</van-tag>
-        </div>
-        <p class="case-title text-ellipsis-2">{{ item.title }}</p>
-        <div class="case-meta">
-          <span><van-icon name="question-o" /> {{ item.questionCount }}小题</span>
-          <span><van-icon name="clock-o" /> {{ item.duration }}分钟</span>
-          <span><van-icon name="star-o" /> {{ item.difficulty }}</span>
-        </div>
+    <!-- 底部操作栏 -->
+    <div class="quiz-footer">
+      <div class="footer-icon" :class="{ active: favorited }" @click="favorited = !favorited">
+        <span>{{ favorited ? '⭐' : '☆' }}</span>
+        <span>{{ favorited ? '已收藏' : '收藏' }}</span>
       </div>
+      <div class="footer-icon" @click="showToast('笔记已保存')">
+        <span>📓</span>
+        <span>笔记</span>
+      </div>
+      <button class="btn-submit" @click="onSubmit">提交答案</button>
     </div>
-
-    <EmptyState v-if="!cases.length" text="暂无案例题" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import EmptyState from '@/components/EmptyState.vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { showToast, showDialog } from 'vant'
 
-const activeTab = ref(0)
-const topics = ['全部', '软件工程', '数据库设计', '系统架构', '网络规划']
+const router = useRouter()
+const currentCaseIdx = ref(0)
+const favorited = ref(false)
+const answers = ref<Record<number, string>>({})
 
-const cases = ref([
-  { id: '1', no: '一', title: '某网上书店系统案例：分析需求并设计E-R图', topic: '数据库设计', questionCount: 5, duration: 30, difficulty: '中等' },
-  { id: '2', no: '二', title: '企业OA系统重构案例：采用微服务架构分析', topic: '系统架构', questionCount: 4, duration: 35, difficulty: '较难' },
-  { id: '3', no: '三', title: '校园网络规划设计案例：VLAN与路由配置', topic: '网络规划', questionCount: 3, duration: 25, difficulty: '中等' },
-  { id: '4', no: '四', title: '软件项目风险管理案例：识别与应对策略', topic: '软件工程', questionCount: 4, duration: 30, difficulty: '简单' }
+const caseList = ref([
+  {
+    id: '1',
+    background: '某公司承接了一个信息化集成项目，项目预算500万元，工期6个月。项目经理小李在项目启动后，制定了详细的项目计划，但在执行过程中发现：',
+    points: [
+      '客户频繁变更需求，导致项目范围不断扩大；',
+      '团队成员对需求理解不一致，产生严重返工；',
+      '进度已经延误2周，成本超支10%。',
+    ],
+    summary: '小李认为主要原因是需求管理不当，需要重新梳理项目范围管理流程。',
+    questions: [
+      { title: '请指出该项目在项目范围管理方面存在哪些问题？', score: 10 },
+      { title: '针对上述问题，请给出具体的改进建议。', score: 10 },
+    ],
+  },
 ])
+
+const currentCase = computed(() => caseList.value[currentCaseIdx.value])
+
+function onSubmit() {
+  showDialog({
+    title: '提交成功',
+    message: '【参考要点】1. 缺少规范的变更控制流程；2. 范围说明书定义不清晰；3. 需求跟踪矩阵缺失。已为您记录本次答卷！',
+  })
+}
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .case-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: var(--space-2xl);
+  background: var(--gray-1);
+  padding-bottom: 80px;
 }
 
-.case-banner {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  margin: var(--space-lg);
-  padding: var(--space-lg);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(139, 92, 246, 0.1));
-  border-radius: var(--radius-lg);
-}
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 
-.banner-icon {
-  font-size: 32px;
-  color: var(--color-warning);
-}
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
 
-.banner-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-}
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
 
-.banner-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.filter-row {
-  background: var(--bg-card);
-}
-
-.case-list {
-  padding: var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.case-card {
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
-
-  &:active {
-    transform: scale(0.99);
+  .right {
+    font-size: 13px;
+    color: var(--gray-5);
   }
 }
 
-.case-head {
-  @include flex-between;
-  margin-bottom: var(--space-sm);
+.quiz-body {
+  padding: 14px;
 }
 
-.case-no {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-primary);
+.question-type-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--pink-bg);
+  color: var(--pink);
 }
 
-.case-title {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-  line-height: 1.5;
+.case-hint {
+  font-size: 13px;
+  color: var(--gray-5);
+  margin: 8px 0 10px;
 }
 
-.case-meta {
-  display: flex;
-  gap: var(--space-md);
+.analysis-content {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+
+  .ac-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--gray-8);
+    background: var(--gray-1);
+    padding: 12px 14px;
+    border-radius: var(--radius-xs);
+    border-left: 3px solid var(--pink);
+
+    .case-sub-title {
+      color: var(--gray-9);
+      margin-bottom: 4px;
+    }
+
+    .case-points {
+      margin: 6px 0;
+      color: var(--gray-7);
+    }
+
+    .case-summary {
+      color: var(--gray-6);
+      font-size: 13px;
+    }
+  }
+}
+
+.question-box {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 14px;
+
+  .q-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+}
+
+.subjective-input {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--gray-3);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--gray-1);
+  box-sizing: border-box;
+  resize: vertical;
+  outline: none;
+
+  &:focus {
+    border-color: var(--primary);
+    background: var(--gray-0);
+  }
+}
+
+.subjective-hint {
   font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: var(--space-md);
+  color: var(--gray-5);
+  text-align: right;
+  margin-top: 4px;
+}
 
-  span {
-    display: inline-flex;
+.quiz-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--gray-0);
+  border-top: 1px solid var(--gray-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 100;
+
+  .footer-icon {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
+    font-size: 11px;
+    color: var(--gray-5);
+    cursor: pointer;
+
+    span:first-child {
+      font-size: 18px;
+    }
+
+    &.active {
+      color: var(--primary);
+    }
+  }
+
+  .btn-submit {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    height: 38px;
+    padding: 0 24px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 10px var(--primary-glow);
   }
 }
 </style>

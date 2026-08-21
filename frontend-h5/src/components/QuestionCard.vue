@@ -1,20 +1,20 @@
 <template>
   <div class="question-card">
     <div class="q-header">
-      <span class="q-type-tag" :class="`tag-${question.type}`">
+      <span class="question-type-tag" :class="`tag-${question.type}`">
         {{ typeText }}
       </span>
-      <span v-if="question.difficulty" class="q-difficulty">
-        {{ difficultyText(question.difficulty) }}
-      </span>
       <span v-if="question.score" class="q-score">{{ question.score }}分</span>
+      <span v-if="question.difficulty" class="q-difficulty">
+        难度: {{ difficultyText(question.difficulty) }}
+      </span>
     </div>
 
     <!-- 题干 -->
-    <div class="q-title" v-html="renderedTitle"></div>
+    <div class="question-content" v-html="renderedTitle"></div>
 
-    <!-- 选项 -->
-    <div v-if="question.options?.length" class="q-options">
+    <!-- 选项列表 -->
+    <div v-if="question.options?.length" class="options-list">
       <OptionItem
         v-for="opt in question.options"
         :key="opt.key"
@@ -27,16 +27,16 @@
       />
     </div>
 
-    <!-- 主观题输入区 -->
-    <van-field
-      v-else-if="question.type === 'subjective'"
-      v-model="subjectiveAnswer"
-      type="textarea"
-      rows="4"
-      autosize
-      placeholder="请在此作答..."
-      class="q-textarea"
-    />
+    <!-- 主观题/案例题输入 -->
+    <div v-else-if="question.type === 'subjective' || question.type === 'case'" class="subjective-wrap">
+      <textarea
+        v-model="subjectiveAnswer"
+        class="subjective-input"
+        placeholder="请输入你的作答内容..."
+        rows="5"
+      ></textarea>
+      <div class="subjective-hint">{{ subjectiveAnswer.length }} / 1000字</div>
+    </div>
   </div>
 </template>
 
@@ -68,14 +68,15 @@ const selected = computed<string | string[]>(() => props.modelValue || (isMultip
 watch(
   () => props.modelValue,
   (v) => {
-    if (props.question.type === 'subjective' && typeof v === 'string') {
+    if ((props.question.type === 'subjective' || props.question.type === 'case') && typeof v === 'string') {
       subjectiveAnswer.value = v
     }
-  }
+  },
+  { immediate: true }
 )
 
 watch(subjectiveAnswer, (v) => {
-  if (props.question.type === 'subjective') {
+  if (props.question.type === 'subjective' || props.question.type === 'case') {
     emit('update:modelValue', v)
   }
 })
@@ -98,8 +99,9 @@ function onSelect(key: string) {
   if (isMultiple.value) {
     const arr = Array.isArray(selected.value) ? [...selected.value] : []
     const idx = arr.indexOf(key)
-    if (idx > -1) arr.splice(idx, 1)
+    if (idx >= 0) arr.splice(idx, 1)
     else arr.push(key)
+    arr.sort()
     emit('update:modelValue', arr)
   } else {
     emit('update:modelValue', key)
@@ -108,57 +110,92 @@ function onSelect(key: string) {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .question-card {
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 18px;
   box-shadow: var(--shadow-sm);
 }
 
 .q-header {
-  @include flex-between;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
-.q-type-tag {
-  @include tag-primary;
-  font-weight: 500;
+.question-type-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--primary-bg);
+  color: var(--primary);
 
-  &.tag-single { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
-  &.tag-multiple { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-  &.tag-judge { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-  &.tag-case { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-  &.tag-subjective { background: rgba(236, 72, 153, 0.1); color: #ec4899; }
+  &.tag-multiple {
+    background: var(--purple-bg);
+    color: var(--purple);
+  }
+
+  &.tag-judge {
+    background: var(--cyan-bg);
+    color: var(--cyan);
+  }
+
+  &.tag-subjective {
+    background: var(--pink-bg);
+    color: var(--pink);
+  }
 }
 
-.q-difficulty,
-.q-score {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
+.q-score,
+.q-difficulty {
+  font-size: 12px;
+  color: var(--gray-5);
 }
 
-.q-title {
-  font-size: var(--font-size-md);
+.question-content {
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1.6;
-  color: var(--text-primary);
-  margin-bottom: var(--space-lg);
+  color: var(--gray-9);
+  margin-bottom: 18px;
+  word-break: break-word;
 }
 
-.q-options {
+.options-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 12px;
 }
 
-.q-textarea {
-  :deep(.van-field__control) {
-    border-radius: var(--radius-sm);
-    background: var(--bg-page);
-    padding: var(--space-md);
+.subjective-wrap {
+  margin-top: 10px;
+}
+
+.subjective-input {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--gray-3);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--gray-1);
+  box-sizing: border-box;
+  resize: vertical;
+  outline: none;
+
+  &:focus {
+    border-color: var(--primary);
+    background: var(--gray-0);
   }
+}
+
+.subjective-hint {
+  font-size: 12px;
+  color: var(--gray-5);
+  text-align: right;
+  margin-top: 6px;
 }
 </style>

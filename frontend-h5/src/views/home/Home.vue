@@ -1,513 +1,587 @@
 <template>
   <div class="home-page">
     <!-- 顶部渐变 Header -->
-    <div class="header">
-      <div class="header-bg">
-        <div class="circle c1"></div>
-        <div class="circle c2"></div>
-      </div>
-      <div class="header-content">
-        <div class="top-row">
-          <div class="subject-switch" @click="showSubject = true">
-            <span class="subject-icon">{{ subjectStore.currentSubject.icon }}</span>
-            <div class="subject-text">
-              <p class="sub-label">当前科目</p>
-              <p class="sub-name">{{ subjectStore.currentSubject.name }}</p>
-            </div>
-            <van-icon name="arrow-down" />
-          </div>
-          <div class="avatar" @click="$router.push('/mine')">
-            <van-image
-              round
-              width="40"
-              height="40"
-              :src="userStore.userInfo?.avatar || ''"
-            >
-              <template #error>
-                <van-icon name="user-o" class="avatar-default" />
-              </template>
-            </van-image>
-          </div>
+    <div class="home-header">
+      <div class="subject-bar">
+        <div class="subject-selector" @click="$router.push('/subject')">
+          <span>{{ subjectStore.currentSubject?.name || '系统集成项目管理工程师' }}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </div>
-
-        <div class="exam-countdown">
-          <div class="countdown-left">
-            <p class="cd-label">距考试还有</p>
-            <p class="cd-days"><span class="num">{{ examDays }}</span> 天</p>
+        <div class="top-actions">
+          <div class="icon-btn" @click="$router.push('/chapter')">
+            <span>🔍</span>
+            <span>题库</span>
           </div>
-          <div class="countdown-right">
-            <van-button size="mini" plain class="cd-btn" @click="$router.push('/subject')">
-              切换科目
-            </van-button>
+          <div class="icon-btn" @click="$router.push('/mine')">
+            <span>👤</span>
+            <span>我的</span>
           </div>
         </div>
       </div>
+
+      <!-- 倒计时 + 复习卡片组合 -->
+      <div class="hero-cards">
+        <div class="countdown-card">
+          <div class="label">距离考试还有</div>
+          <div class="days">{{ examDays }}<span>天</span></div>
+          <div class="sub">2026年软考统一认证</div>
+        </div>
+        <div class="review-card-mini" @click="$router.push('/review')">
+          <div class="rm-icon">🧠</div>
+          <div class="rm-num">{{ reviewCount }}</div>
+          <div class="rm-label">待复习题目</div>
+        </div>
+      </div>
+
+      <!-- 核心数据三卡片 -->
+      <div class="data-cards">
+        <div class="data-card">
+          <div class="num">{{ stats.todayDone }}<small>题</small></div>
+          <div class="label">今日刷题</div>
+        </div>
+        <div class="data-card">
+          <div class="num">{{ stats.correctRate }}<small>%</small></div>
+          <div class="label">正确率</div>
+        </div>
+        <div class="data-card">
+          <div class="num">{{ stats.totalQuestions }}<small>题</small></div>
+          <div class="label">总题数</div>
+        </div>
+      </div>
     </div>
 
-    <!-- 数据卡片 -->
-    <div class="stats-cards">
-      <div class="stat-item">
-        <p class="stat-num">{{ overview.totalAnswered }}</p>
-        <p class="stat-label">已刷题</p>
-      </div>
-      <div class="stat-item">
-        <p class="stat-num">{{ percent(overview.correctRate) }}</p>
-        <p class="stat-label">正确率</p>
-      </div>
-      <div class="stat-item">
-        <p class="stat-num">{{ overview.totalQuestions }}</p>
-        <p class="stat-label">总题数</p>
-      </div>
-      <div class="stat-item">
-        <p class="stat-num">{{ overview.streakDays }}</p>
-        <p class="stat-label">连续天数</p>
-      </div>
-    </div>
-
-    <!-- 艾宾浩斯复习提醒 -->
-    <div class="review-banner" @click="$router.push('/review')">
-      <div class="review-icon"><van-icon name="underway-o" /></div>
-      <div class="review-text">
-        <p class="review-title">艾宾浩斯复习提醒</p>
-        <p class="review-desc">有 {{ reviewCount }} 道题需要今日复习</p>
-      </div>
-      <van-icon name="arrow" />
-    </div>
-
-    <!-- 9宫格功能入口 -->
+    <!-- 核心功能网格 (8格现代风格) -->
     <div class="section-title">
-      <span>功能入口</span>
+      <h3>核心功能</h3>
+      <span class="more" @click="$router.push('/chapter')">全部题库 ›</span>
     </div>
-    <div class="grid-entrance">
-      <div
-        v-for="item in entrances"
-        :key="item.path"
-        class="grid-item"
-        @click="$router.push(item.path)"
-      >
-        <div class="grid-icon" :style="{ background: item.bg }">
-          <van-icon :name="item.icon" />
-        </div>
-        <span class="grid-text">{{ item.name }}</span>
+    <div class="function-grid">
+      <div class="func-item" @click="$router.push('/daily')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #fef3c7, #fde68a)">📝</div>
+        <span class="name">每日一练</span>
+        <span class="badge">5题</span>
+      </div>
+      <div class="func-item" @click="$router.push('/quiz/practice')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #cffafe, #a5f3fc)">🎯</div>
+        <span class="name">自主练习</span>
+      </div>
+      <div class="func-item" @click="$router.push('/chapter')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #d1fae5, #a7f3d0)">📚</div>
+        <span class="name">章节练习</span>
+      </div>
+      <div class="func-item" @click="$router.push('/real')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #fee2e2, #fecaca)">📋</div>
+        <span class="name">历年真题</span>
+      </div>
+      <div class="func-item" @click="$router.push('/review')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #fed7aa, #fdba74)">🧠</div>
+        <span class="name">艾宾浩斯</span>
+        <span class="vip-tag">VIP</span>
+      </div>
+      <div class="func-item" @click="$router.push('/mock')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #e9d5ff, #c4b5fd)">⏱️</div>
+        <span class="name">模拟考试</span>
+      </div>
+      <div class="func-item" @click="$router.push('/case')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #fbcfe8, #f9a8d4)">📊</div>
+        <span class="name">案例分析</span>
+        <span class="vip-tag">VIP</span>
+      </div>
+      <div class="func-item" @click="$router.push('/vip')">
+        <div class="func-icon" style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7)">👑</div>
+        <span class="name">会员中心</span>
+        <span class="vip-tag">VIP</span>
       </div>
     </div>
 
-    <!-- 知识雷达图预览 -->
-    <div class="section-title">
-      <span>知识掌握</span>
-      <span class="more" @click="$router.push('/stats')">查看详情</span>
-    </div>
-    <div class="radar-preview card">
-      <div class="radar-bars">
-        <div v-for="(d, i) in radarPreview" :key="i" class="radar-bar-item">
-          <div class="bar-track">
-            <div class="bar-fill" :style="{ height: d.value + '%' }"></div>
-          </div>
-          <span class="bar-label">{{ d.dimension }}</span>
+    <!-- 做题统计与能力雷达预览 -->
+    <div class="stat-section" @click="$router.push('/stats')">
+      <div class="stat-row">
+        <div>
+          <div class="stat-title">做题统计与知识图谱</div>
+          <div class="stat-desc">查看刷题走势、能力雷达与薄弱考点诊断</div>
+        </div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="radar-preview">
+        <svg class="radar-chart" viewBox="0 0 100 100">
+          <polygon
+            points="50,10 85,30 85,70 50,90 15,70 15,30"
+            fill="none"
+            stroke="#E9EBEF"
+            stroke-width="1"
+          />
+          <polygon
+            points="50,25 72,35 72,65 50,75 28,65 28,35"
+            fill="none"
+            stroke="#E9EBEF"
+            stroke-width="1"
+          />
+          <polygon
+            points="50,20 68,38 75,60 50,80 25,58 30,35"
+            fill="rgba(99,102,241,0.18)"
+            stroke="#6366F1"
+            stroke-width="1.5"
+          />
+        </svg>
+        <div class="radar-info">
+          <div class="item"><div class="dot" style="background: #6366f1"></div>项目管理基础 78%</div>
+          <div class="item"><div class="dot" style="background: #10b981"></div>项目范围管理 85%</div>
+          <div class="item"><div class="dot" style="background: #f59e0b"></div>项目进度管理 52%</div>
+          <div class="item"><div class="dot" style="background: #ef4444"></div>项目成本管理 38%</div>
         </div>
       </div>
     </div>
 
-    <!-- 每日推荐题目 -->
-    <div class="section-title">
-      <span>每日推荐</span>
-      <span class="more" @click="$router.push('/daily')">更多</span>
-    </div>
-    <div class="daily-rec card" v-if="dailyQuestion" @click="$router.push('/quiz/daily')">
-      <div class="rec-tag">推荐</div>
-      <p class="rec-title">{{ dailyQuestion }}</p>
-      <div class="rec-foot">
-        <van-tag plain type="primary" size="medium">单选题</van-tag>
-        <span class="rec-action">去练习 <van-icon name="arrow" /></span>
+    <!-- 快捷入口卡片 (笔记与记录) -->
+    <div class="note-record-section">
+      <div class="note-card" @click="$router.push('/notes')">
+        <div class="nr-icon">📓</div>
+        <div class="nr-text">
+          <div class="t">我的笔记</div>
+          <div class="d">高频知识点随记</div>
+        </div>
+      </div>
+      <div class="record-card" @click="$router.push('/records')">
+        <div class="nr-icon">📋</div>
+        <div class="nr-text">
+          <div class="t">做题记录</div>
+          <div class="d">历史答卷回溯</div>
+        </div>
       </div>
     </div>
+
+    <div style="height: 20px"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
-import { toPercent } from '@/utils/format'
-import SubjectPicker from '@/components/SubjectPicker.vue'
+import { useUserStore } from '@/stores/user'
 
-const userStore = useUserStore()
 const subjectStore = useSubjectStore()
-const showSubject = ref(false)
+const userStore = useUserStore()
 
-const examDays = ref(120)
-const reviewCount = ref(8)
+const examDays = ref(68)
+const reviewCount = ref(385)
 
-const overview = reactive({
-  totalAnswered: 326,
-  correctRate: 0.78,
-  totalQuestions: 2400,
-  streakDays: 12
+const stats = reactive({
+  todayDone: 8,
+  correctRate: 50,
+  totalQuestions: 385,
 })
-
-const radarPreview = ref([
-  { dimension: '计算机基础', value: 80 },
-  { dimension: '数据结构', value: 65 },
-  { dimension: '软件工程', value: 72 },
-  { dimension: '网络', value: 55 },
-  { dimension: '数据库', value: 70 }
-])
-
-const dailyQuestion = ref('在软件开发过程中，瀑布模型的主要优点是什么？')
-
-const entrances = [
-  { name: '每日一练', icon: 'calendar-o', path: '/daily', bg: 'rgba(99,102,241,0.1)' },
-  { name: '章节练习', icon: 'bookmark-o', path: '/chapter', bg: 'rgba(139,92,246,0.1)' },
-  { name: '历年真题', icon: 'description', path: '/real', bg: 'rgba(16,185,129,0.1)' },
-  { name: '模拟考试', icon: 'completed', path: '/mock', bg: 'rgba(245,158,11,0.1)' },
-  { name: '自主练习', icon: 'edit', path: '/quiz/chapter', bg: 'rgba(236,72,153,0.1)' },
-  { name: '案例分析', icon: 'records', path: '/case', bg: 'rgba(59,130,246,0.1)' },
-  { name: '艾宾浩斯', icon: 'underway-o', path: '/review', bg: 'rgba(168,85,247,0.1)' },
-  { name: '知识库', icon: 'search', path: '/chapter', bg: 'rgba(20,184,166,0.1)' },
-  { name: '考后估分', icon: 'chart-trending-o', path: '/stats', bg: 'rgba(244,63,94,0.1)' }
-]
-
-function percent(n: number): string {
-  return toPercent(n, 0)
-}
 
 onMounted(async () => {
   if (userStore.token && !userStore.userInfo) {
     try {
       await userStore.fetchProfile()
     } catch {
-      // ...
+      // ignore
     }
   }
 })
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .home-page {
-  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-lg));
+  min-height: 100vh;
+  background: var(--gray-1);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 16px);
 }
 
-/* Header */
-.header {
+/* Header - 沉浸式渐变背景 */
+.home-header {
+  background: linear-gradient(140deg, #6366f1 0%, #7c3aed 50%, #8b5cf6 100%);
+  padding: calc(env(safe-area-inset-top) + 12px) 18px 24px;
+  color: #fff;
   position: relative;
-  padding: calc(env(safe-area-inset-top) + var(--space-lg)) var(--space-lg) var(--space-xl);
-  background: var(--gradient-primary);
   overflow: hidden;
-}
 
-.header-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  .circle {
+  &::before {
+    content: '';
     position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 180px;
+    height: 180px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
+  }
 
-    &.c1 {
-      width: 200px;
-      height: 200px;
-      top: -60px;
-      right: -60px;
-    }
-    &.c2 {
-      width: 150px;
-      height: 150px;
-      bottom: -50px;
-      left: -40px;
-    }
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -60px;
+    left: -30px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%);
+    border-radius: 50%;
   }
 }
 
-.header-content {
-  position: relative;
-  color: #fff;
-}
-
-.top-row {
-  @include flex-between;
-  margin-bottom: var(--space-lg);
-}
-
-.subject-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.subject-icon {
-  font-size: 24px;
-}
-
-.sub-label {
-  font-size: 11px;
-  opacity: 0.8;
-}
-
-.sub-name {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  max-width: 150px;
-  @include text-ellipsis(1);
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.2);
-  @include flex-center;
-}
-
-.avatar-default {
-  font-size: 20px;
-  color: #fff;
-}
-
-.exam-countdown {
+.subject-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border-radius: var(--radius-md);
-  padding: var(--space-md) var(--space-lg);
+  padding: 6px 0 16px;
+  position: relative;
+  z-index: 1;
 }
 
-.cd-label {
-  font-size: var(--font-size-xs);
-  opacity: 0.85;
-}
+.subject-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
 
-.cd-days {
-  font-size: var(--font-size-base);
-  margin-top: 2px;
-
-  .num {
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    margin-right: 2px;
+  svg {
+    width: 16px;
+    height: 16px;
+    opacity: 0.85;
   }
 }
 
-.cd-btn {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
-  color: #fff !important;
+.top-actions {
+  display: flex;
+  gap: 16px;
+
+  .icon-btn {
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+
+    span:first-child {
+      font-size: 16px;
+    }
+
+    &:hover {
+      opacity: 1;
+    }
+  }
 }
 
-/* Stats */
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin: -var(--space-xl) var(--space-lg) 0;
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--space-lg) var(--space-sm);
+/* 倒计时 + 复习卡片组合 */
+.hero-cards {
   position: relative;
-  z-index: 2;
+  z-index: 1;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.stat-item {
+.countdown-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .label {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  .days {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.1;
+
+    span {
+      font-size: 14px;
+      font-weight: 500;
+      margin-left: 2px;
+    }
+  }
+
+  .sub {
+    font-size: 11px;
+    opacity: 0.75;
+  }
+}
+
+.review-card-mini {
+  flex: 0.85;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.9), rgba(251, 146, 60, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: transform 0.2s;
+
+  &:hover,
+  &:active {
+    transform: translateY(-2px);
+  }
+
+  .rm-icon {
+    font-size: 24px;
+  }
+
+  .rm-num {
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .rm-label {
+    font-size: 11px;
+    opacity: 0.9;
+  }
+}
+
+/* 数据卡片 */
+.data-cards {
+  display: flex;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.data-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 12px 8px;
   text-align: center;
+
+  .num {
+    font-size: 22px;
+    font-weight: 800;
+
+    small {
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
+
+  .label {
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 2px;
+  }
 }
 
-.stat-num {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.stat-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-/* Review banner */
-.review-banner {
+/* 区块标题 */
+.section-title {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  margin: var(--space-lg);
-  padding: var(--space-md) var(--space-lg);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.1));
-  border-radius: var(--radius-md);
+  justify-content: space-between;
+  padding: 18px 18px 10px;
+
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .more {
+    font-size: 13px;
+    color: var(--gray-5);
+    cursor: pointer;
+  }
 }
 
-.review-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--color-warning);
-  color: #fff;
-  @include flex-center;
+/* 功能网格 */
+.function-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px 4px;
+  background: var(--gray-0);
+  margin: 0 14px;
+  border-radius: var(--radius);
+  padding: 18px 8px;
+  box-shadow: var(--shadow-md);
+}
 
-  .van-icon {
+.func-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 4px;
+  position: relative;
+  transition: transform 0.2s;
+
+  &:active {
+    transform: translateY(-2px);
+  }
+
+  .func-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .name {
+    font-size: 12px;
+    color: var(--gray-7);
+    font-weight: 500;
+  }
+
+  .badge {
+    position: absolute;
+    top: 2px;
+    right: 50%;
+    margin-right: -24px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 10px;
+    line-height: 1.2;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+  }
+
+  .vip-tag {
+    position: absolute;
+    top: 2px;
+    right: 50%;
+    margin-right: -26px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #fff;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+  }
+}
+
+/* 统计卡片与雷达图 */
+.stat-section {
+  margin: 14px;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .stat-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .stat-desc {
+    font-size: 12px;
+    color: var(--gray-5);
+    margin-top: 4px;
+  }
+
+  .arrow {
+    color: var(--gray-4);
     font-size: 20px;
   }
 }
 
-.review-text {
-  flex: 1;
-}
-
-.review-title {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.review-desc {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-/* Section title */
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 var(--space-lg);
-  margin: var(--space-xl) 0 var(--space-md);
-
-  span:first-child {
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .more {
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
-  }
-}
-
-/* Grid */
-.grid-entrance {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-md);
-  padding: 0 var(--space-lg);
-}
-
-.grid-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-sm);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  padding: var(--space-md) 0;
-  box-shadow: var(--shadow-xs);
-
-  &:active {
-    transform: scale(0.96);
-  }
-}
-
-.grid-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  @include flex-center;
-
-  .van-icon {
-    font-size: 22px;
-    color: var(--color-primary);
-  }
-}
-
-.grid-text {
-  font-size: var(--font-size-xs);
-  color: var(--text-regular);
-}
-
-/* Radar preview */
 .radar-preview {
-  margin: 0 var(--space-lg);
-  padding: var(--space-lg);
-}
-
-.radar-bars {
-  display: flex;
-  justify-content: space-around;
-  align-items: flex-end;
-  height: 120px;
-}
-
-.radar-bar-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-sm);
-  width: 16%;
-}
-
-.bar-track {
-  width: 20px;
-  height: 80px;
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: flex-end;
-  overflow: hidden;
-}
-
-.bar-fill {
-  width: 100%;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-sm);
-  transition: height var(--transition-slow);
-}
-
-.bar-label {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-/* Daily rec */
-.daily-rec {
-  margin: 0 var(--space-lg);
-  position: relative;
-}
-
-.rec-tag {
-  position: absolute;
-  top: var(--space-md);
-  right: var(--space-lg);
-  padding: 2px 8px;
-  background: var(--gradient-primary);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.rec-title {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-  line-height: 1.6;
-  margin-bottom: var(--space-md);
-  padding-right: 40px;
-}
-
-.rec-foot {
-  @include flex-between;
-}
-
-.rec-action {
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-2);
+
+  .radar-chart {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+  }
+
+  .radar-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--gray-6);
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+    }
+  }
+}
+
+/* 笔记与记录双卡片 */
+.note-record-section {
+  margin: 0 14px;
+  display: flex;
+  gap: 12px;
+}
+
+.note-card,
+.record-card {
+  flex: 1;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+
+  .nr-icon {
+    font-size: 24px;
+  }
+
+  .nr-text {
+    .t {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-8);
+    }
+    .d {
+      font-size: 11px;
+      color: var(--gray-5);
+      margin-top: 2px;
+    }
+  }
 }
 </style>

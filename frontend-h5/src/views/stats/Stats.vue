@@ -1,333 +1,393 @@
 <template>
-  <div class="stats-page">
-    <van-nav-bar title="数据统计" :border="false" />
+  <div class="stat-page">
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">做题统计</div>
+      <div class="right" @click="onExport">导出</div>
+    </div>
 
-    <!-- 四项总览 -->
-    <div class="overview-grid">
-      <div class="ov-card" v-for="item in overviews" :key="item.label">
-        <p class="ov-num">{{ item.value }}</p>
-        <p class="ov-label">{{ item.label }}</p>
+    <!-- 数据总览 4格 -->
+    <div class="stat-overview">
+      <div class="so-grid">
+        <div class="so-item">
+          <div class="so-num">156<small>题</small></div>
+          <div class="so-label">累计刷题</div>
+        </div>
+        <div class="so-item">
+          <div class="so-num">73<small>%</small></div>
+          <div class="so-label">平均正确率</div>
+        </div>
+        <div class="so-item">
+          <div class="so-num">4.5<small>h</small></div>
+          <div class="so-label">累计时长</div>
+        </div>
+        <div class="so-item">
+          <div class="so-num">12<small>天</small></div>
+          <div class="so-label">连续打卡</div>
+        </div>
       </div>
     </div>
 
     <!-- 刷题趋势 -->
-    <div class="card section-block">
-      <div class="block-title-row">
-        <h4 class="block-title">刷题趋势</h4>
-        <van-tabs v-model:active="trendTab" shrink type="card" @change="loadTrend">
-          <van-tab title="7天" name="7" />
-          <van-tab title="30天" name="30" />
-        </van-tabs>
-      </div>
-      <div class="trend-chart">
-        <div
-          v-for="(t, i) in trendData"
-          :key="i"
-          class="trend-col"
-        >
-          <div class="trend-bar-wrap">
-            <div class="trend-bar" :style="{ height: barHeight(t.count) + '%' }"></div>
-          </div>
-          <span class="trend-label">{{ t.date.slice(5) }}</span>
-          <span class="trend-num">{{ t.count }}</span>
+    <div class="stat-card">
+      <div class="sc-title">
+        <span>📈 刷题趋势</span>
+        <div class="sc-switch">
+          <span :class="{ active: trendType === 'week' }" @click="trendType = 'week'">周</span>
+          <span :class="{ active: trendType === 'month' }" @click="trendType = 'month'">月</span>
         </div>
+      </div>
+      <div class="chart-placeholder">
+        <div class="chart-bar" style="height: 40%"><div class="bar-val">8</div></div>
+        <div class="chart-bar" style="height: 60%"><div class="bar-val">12</div></div>
+        <div class="chart-bar" style="height: 30%"><div class="bar-val">6</div></div>
+        <div class="chart-bar" style="height: 80%"><div class="bar-val">16</div></div>
+        <div class="chart-bar" style="height: 50%"><div class="bar-val">10</div></div>
+        <div class="chart-bar" style="height: 90%"><div class="bar-val">18</div></div>
+        <div class="chart-bar today" style="height: 70%"><div class="bar-val">14</div></div>
+      </div>
+      <div class="chart-labels">
+        <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>今天</span>
       </div>
     </div>
 
     <!-- 能力雷达图 -->
-    <div class="card section-block">
-      <h4 class="block-title">能力雷达</h4>
-      <div class="radar-bars">
-        <div v-for="(d, i) in radarData" :key="i" class="radar-bar-item">
-          <div class="bar-track">
-            <div class="bar-fill" :style="{ height: (d.value / d.full) * 100 + '%' }"></div>
+    <div class="stat-card">
+      <div class="sc-title">🎯 知识图谱与能力雷达</div>
+      <div class="radar-svg-wrap">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <polygon
+            points="100,20 170,60 170,140 100,180 30,140 30,60"
+            fill="none"
+            stroke="#E9EBEF"
+            stroke-width="1.5"
+          />
+          <polygon
+            points="100,50 140,75 140,125 100,150 60,125 60,75"
+            fill="none"
+            stroke="#E9EBEF"
+            stroke-width="1.5"
+          />
+          <polygon
+            points="100,80 120,90 120,110 100,120 80,110 80,90"
+            fill="none"
+            stroke="#E9EBEF"
+            stroke-width="1.5"
+          />
+          <polygon
+            points="100,35 155,72 148,130 100,165 45,135 38,68"
+            fill="rgba(99,102,241,0.2)"
+            stroke="#6366F1"
+            stroke-width="2"
+          />
+          <text x="100" y="12" text-anchor="middle" font-size="10" fill="#6B7280">项目管理</text>
+          <text x="178" y="58" text-anchor="middle" font-size="10" fill="#6B7280">范围</text>
+          <text x="178" y="148" text-anchor="middle" font-size="10" fill="#6B7280">进度</text>
+          <text x="100" y="195" text-anchor="middle" font-size="10" fill="#6B7280">成本</text>
+          <text x="22" y="148" text-anchor="middle" font-size="10" fill="#6B7280">质量</text>
+          <text x="22" y="58" text-anchor="middle" font-size="10" fill="#6B7280">风险</text>
+        </svg>
+      </div>
+
+      <div class="radar-legend-grid">
+        <div class="legend-item"><div class="dot" style="background: #6366f1"></div>项目管理 72%</div>
+        <div class="legend-item"><div class="dot" style="background: #10b981"></div>范围管理 85%</div>
+        <div class="legend-item"><div class="dot" style="background: #f59e0b"></div>进度管理 45%</div>
+        <div class="legend-item"><div class="dot" style="background: #ef4444"></div>成本管理 32%</div>
+        <div class="legend-item"><div class="dot" style="background: #a855f7"></div>质量管理 68%</div>
+        <div class="legend-item"><div class="dot" style="background: #06b6d4"></div>风险管理 55%</div>
+      </div>
+    </div>
+
+    <!-- 错题分布排行榜 -->
+    <div class="stat-card">
+      <div class="sc-title">📉 错题高频分布</div>
+      <div class="wrong-dist-list">
+        <div class="dist-item">
+          <div class="di-head">
+            <span class="name">项目成本管理</span>
+            <span class="num danger">15题</span>
           </div>
-          <span class="bar-label">{{ d.dimension }}</span>
-          <span class="bar-num">{{ Math.round((d.value / d.full) * 100) }}%</span>
+          <div class="di-track">
+            <div class="di-fill danger" style="width: 80%"></div>
+          </div>
+        </div>
+        <div class="dist-item">
+          <div class="di-head">
+            <span class="name">项目进度管理</span>
+            <span class="num danger">12题</span>
+          </div>
+          <div class="di-track">
+            <div class="di-fill danger" style="width: 65%"></div>
+          </div>
+        </div>
+        <div class="dist-item">
+          <div class="di-head">
+            <span class="name">项目风险管理</span>
+            <span class="num warning">8题</span>
+          </div>
+          <div class="di-track">
+            <div class="di-fill warning" style="width: 42%"></div>
+          </div>
+        </div>
+        <div class="dist-item">
+          <div class="di-head">
+            <span class="name">项目整体管理</span>
+            <span class="num success">4题</span>
+          </div>
+          <div class="di-track">
+            <div class="di-fill success" style="width: 20%"></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 错题分布 -->
-    <div class="card section-block">
-      <h4 class="block-title">错题分布</h4>
-      <div
-        v-for="w in wrongDist"
-        :key="w.chapter"
-        class="dist-row"
-      >
-        <span class="dist-name text-ellipsis">{{ w.chapter }}</span>
-        <van-progress
-          :percentage="Math.round((w.count / maxWrong) * 100)"
-          stroke-width="6"
-          color="#EF4444"
-          :show-pivot="false"
-        />
-        <span class="dist-num">{{ w.count }}</span>
-      </div>
-    </div>
+    <div style="height: 80px"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { getOverview, getTrend, getRadar, getWrongDistribution } from '@/api/stats'
-import { toPercent, formatDurationText } from '@/utils/format'
+import { ref } from 'vue'
+import { showToast } from 'vant'
 
-const overview = ref({ totalQuestions: 2400, totalAnswered: 326, correctRate: 0.78, duration: 10800, streakDays: 12, todayCount: 25 })
-const trendTab = ref('7')
-const trendData = ref<Array<{ date: string; count: number }>>([])
-const radarData = ref<Array<{ dimension: string; value: number; full: number }>>([])
-const wrongDist = ref<Array<{ chapter: string; count: number }>>([])
+const trendType = ref<'week' | 'month'>('week')
 
-const maxWrong = computed(() => Math.max(...wrongDist.value.map((w) => w.count), 1))
-const maxTrend = computed(() => Math.max(...trendData.value.map((t) => t.count), 1))
-
-const overviews = computed(() => [
-  { label: '总题数', value: overview.value.totalAnswered },
-  { label: '正确率', value: toPercent(overview.value.correctRate, 0) },
-  { label: '做题时长', value: formatDurationText(overview.value.duration) },
-  { label: '连续天数', value: overview.value.streakDays + '天' }
-])
-
-function barHeight(count: number) {
-  return maxTrend.value ? Math.round((count / maxTrend.value) * 100) : 0
+function onExport() {
+  showToast('统计报告已生成')
 }
-
-async function loadTrend() {
-  try {
-    const res = await getTrend({ days: Number(trendTab.value) })
-    trendData.value = res.data
-  } catch {
-    trendData.value = [
-      { date: '08-14', count: 30 },
-      { date: '08-15', count: 45 },
-      { date: '08-16', count: 20 },
-      { date: '08-17', count: 60 },
-      { date: '08-18', count: 50 },
-      { date: '08-19', count: 40 },
-      { date: '08-20', count: 25 }
-    ]
-  }
-}
-
-onMounted(async () => {
-  try {
-    const [o, r, w] = await Promise.all([getOverview(), getRadar(), getWrongDistribution()])
-    overview.value = o.data
-    radarData.value = r.data
-    wrongDist.value = w.data
-  } catch {
-    radarData.value = [
-      { dimension: '计算机基础', value: 80, full: 100 },
-      { dimension: '数据结构', value: 65, full: 100 },
-      { dimension: '操作系统', value: 72, full: 100 },
-      { dimension: '网络', value: 55, full: 100 },
-      { dimension: '数据库', value: 70, full: 100 },
-      { dimension: '软件工程', value: 85, full: 100 }
-    ]
-    wrongDist.value = [
-      { chapter: '第6章 软件工程', count: 15 },
-      { chapter: '第5章 计算机网络', count: 12 },
-      { chapter: '第3章 操作系统', count: 8 },
-      { chapter: '第2章 数据结构', count: 6 }
-    ]
-  }
-  loadTrend()
-})
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
-.stats-page {
+.stat-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding: 0 var(--space-lg) calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-lg));
+  background: var(--gray-1);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom));
 }
 
-.overview-grid {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+  }
+}
+
+.stat-overview {
+  margin: 14px;
+}
+
+.so-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-sm);
-  margin: var(--space-lg) 0;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 8px;
+  box-shadow: var(--shadow-sm);
 }
 
-.ov-card {
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+.so-item {
   text-align: center;
-  position: relative;
-  overflow: hidden;
 
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: var(--gradient-primary);
+  .so-num {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--gray-9);
+
+    small {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--gray-5);
+    }
+  }
+
+  .so-label {
+    font-size: 11px;
+    color: var(--gray-5);
+    margin-top: 4px;
   }
 }
 
-.ov-num {
-  font-size: var(--font-size-xl);
-  font-weight: 700;
-  color: var(--color-primary);
-}
+.stat-card {
+  margin: 14px;
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
 
-.ov-label {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.section-block {
-  margin-bottom: var(--space-lg);
-  padding: var(--space-lg);
-}
-
-.block-title-row {
-  @include flex-between;
-  margin-bottom: var(--space-lg);
-
-  .block-title {
-    margin: 0;
+  .sc-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 14px;
   }
 
-  :deep(.van-tabs) {
-    width: auto;
+  .sc-switch {
+    display: flex;
+    background: var(--gray-2);
+    border-radius: 12px;
+    padding: 2px;
+
+    span {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 10px;
+      color: var(--gray-6);
+      cursor: pointer;
+
+      &.active {
+        background: var(--primary);
+        color: #fff;
+        font-weight: 700;
+      }
+    }
   }
 }
 
-.block-title {
-  font-size: var(--font-size-md);
-  color: var(--text-primary);
-  margin-bottom: var(--space-lg);
-}
-
-/* Trend chart */
-.trend-chart {
+.chart-placeholder {
   display: flex;
-  justify-content: space-around;
   align-items: flex-end;
-  height: 160px;
-  gap: 4px;
+  justify-content: space-between;
+  height: 120px;
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--gray-2);
+
+  .chart-bar {
+    width: 22px;
+    background: linear-gradient(180deg, #818cf8, #6366f1);
+    border-radius: 6px 6px 0 0;
+    position: relative;
+
+    .bar-val {
+      position: absolute;
+      top: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: var(--gray-5);
+      font-weight: 600;
+    }
+
+    &.today {
+      background: linear-gradient(180deg, #f97316, #ea580c);
+    }
+  }
 }
 
-.trend-col {
-  flex: 1;
+.chart-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--gray-5);
+  padding: 8px 6px 0;
+}
+
+.radar-svg-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.radar-legend-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--gray-6);
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+  }
+}
+
+.wrong-dist-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
+  gap: 12px;
 
-.trend-bar-wrap {
-  width: 16px;
-  height: 110px;
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: flex-end;
-}
+  .dist-item {
+    .di-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 4px;
 
-.trend-bar {
-  width: 100%;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-sm);
-  min-height: 2px;
-  transition: height var(--transition-base);
-}
+      .name {
+        color: var(--gray-7);
+        font-weight: 500;
+      }
 
-.trend-label {
-  font-size: 9px;
-  color: var(--text-secondary);
-}
+      .num {
+        font-weight: 700;
 
-.trend-num {
-  font-size: 10px;
-  color: var(--color-primary);
-  font-weight: 600;
-}
+        &.danger {
+          color: var(--danger);
+        }
+        &.warning {
+          color: var(--warning);
+        }
+        &.success {
+          color: var(--success);
+        }
+      }
+    }
 
-/* Radar */
-.radar-bars {
-  display: flex;
-  justify-content: space-around;
-  align-items: flex-end;
-  height: 140px;
-}
+    .di-track {
+      height: 8px;
+      background: var(--gray-2);
+      border-radius: 4px;
+      overflow: hidden;
 
-.radar-bar-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 14%;
-}
+      .di-fill {
+        height: 100%;
+        border-radius: 4px;
 
-.bar-track {
-  width: 18px;
-  height: 100px;
-  background: var(--bg-page);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: flex-end;
-  overflow: hidden;
-}
-
-.bar-fill {
-  width: 100%;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-sm);
-  transition: height var(--transition-slow);
-}
-
-.bar-label {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-align: center;
-  @include text-ellipsis(1);
-  width: 100%;
-}
-
-.bar-num {
-  font-size: 10px;
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-/* Dist */
-.dist-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-md);
-
-  &:last-child {
-    margin: 0;
+        &.danger {
+          background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+        &.warning {
+          background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+        &.success {
+          background: linear-gradient(90deg, #10b981, #34d399);
+        }
+      }
+    }
   }
-}
-
-.dist-name {
-  width: 100px;
-  font-size: var(--font-size-sm);
-  color: var(--text-regular);
-  flex-shrink: 0;
-}
-
-.dist-row :deep(.van-progress) {
-  flex: 1;
-}
-
-.dist-num {
-  width: 30px;
-  text-align: right;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
 }
 </style>

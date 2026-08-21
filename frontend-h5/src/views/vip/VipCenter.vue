@@ -1,328 +1,375 @@
 <template>
   <div class="vip-page">
-    <div class="vip-bg">
-      <div class="circle c1"></div>
-      <div class="circle c2"></div>
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">会员中心</div>
+      <div class="right"></div>
     </div>
 
-    <van-nav-bar title="会员中心" left-arrow @click-left="$router.back()" :border="false" class="nav" />
+    <div class="vip-content">
+      <!-- 头部尊享卡片 -->
+      <div class="vip-hero">
+        <div class="crown">👑</div>
+        <div class="vh-title">软考刷题王 VIP</div>
+        <div class="vh-sub">解锁全部高级功能 · 助你高效通关</div>
+      </div>
 
-    <div class="vip-header">
-      <van-icon name="diamond" class="crown" />
-      <h1 class="title">软考 VIP 会员</h1>
-      <p class="subtitle">解锁全部题库 & AI 深度分析 & 专属客服</p>
-    </div>
-
-    <!-- 套餐 -->
-    <div class="plans">
-      <div
-        v-for="plan in plans"
-        :key="plan.id"
-        class="plan-card"
-        :class="{ popular: plan.popular, selected: selectedPlan === plan.id }"
-        @click="selectedPlan = plan.id"
-      >
-        <van-tag v-if="plan.popular" color="#fbbf24" class="popular-tag">推荐</van-tag>
-        <p class="plan-name">{{ plan.name }}</p>
-        <div class="plan-price">
-          <span class="cur">¥</span>
-          <span class="amount">{{ plan.price }}</span>
-          <span class="origin">¥{{ plan.originalPrice }}</span>
+      <!-- 会员套餐选择 -->
+      <div class="vip-plans">
+        <div
+          class="vip-plan"
+          :class="{ selected: activePlan === 'month' }"
+          @click="activePlan = 'month'"
+        >
+          <div class="vp-left">
+            <div class="vp-name">月卡会员</div>
+          </div>
+          <div class="vp-right">
+            <div class="vp-price">¥29<small>/月</small></div>
+          </div>
         </div>
-        <p class="plan-duration">{{ plan.duration }}</p>
-      </div>
-    </div>
 
-    <!-- 权益列表 -->
-    <div class="benefits card">
-      <h4 class="block-title">会员专属权益</h4>
-      <div v-for="b in benefits" :key="b.title" class="benefit-item">
-        <van-icon :name="b.icon" class="ben-icon" />
-        <div class="ben-text">
-          <p class="ben-title">{{ b.title }}</p>
-          <p class="ben-desc">{{ b.desc }}</p>
+        <div
+          class="vip-plan recommended"
+          :class="{ selected: activePlan === 'quarter' }"
+          @click="activePlan = 'quarter'"
+        >
+          <div class="vp-left">
+            <div class="vp-name">季卡会员</div>
+            <div class="vp-tag">🔥 最超值 · 立省28元</div>
+          </div>
+          <div class="vp-right">
+            <div class="vp-price">¥59<small>/季</small></div>
+            <div class="vp-original">¥87</div>
+          </div>
+        </div>
+
+        <div
+          class="vip-plan"
+          :class="{ selected: activePlan === 'year' }"
+          @click="activePlan = 'year'"
+        >
+          <div class="vp-left">
+            <div class="vp-name">年卡会员</div>
+          </div>
+          <div class="vp-right">
+            <div class="vp-price">¥199<small>/年</small></div>
+            <div class="vp-original">¥348</div>
+          </div>
         </div>
       </div>
+
+      <!-- 会员专属权益列表 -->
+      <div class="vip-benefits">
+        <div class="vb-title">会员专属权益</div>
+        <div v-for="(b, i) in benefitList" :key="i" class="vip-benefit-item">
+          <div class="vbi-icon">{{ b.icon }}</div>
+          <div class="vbi-text">
+            <div class="t">{{ b.title }}</div>
+            <div class="d">{{ b.desc }}</div>
+          </div>
+          <div class="vbi-check">✓</div>
+        </div>
+      </div>
+
+      <div style="height: 80px"></div>
     </div>
 
-    <!-- 底部购买栏 -->
-    <div class="pay-bar">
-      <div class="pay-left">
-        <p class="pay-label">应付</p>
-        <p class="pay-amount">¥{{ currentPlan?.price }}</p>
+    <!-- 底部悬浮购买栏 -->
+    <div class="vip-buy-bar">
+      <div class="price-info">
+        <div class="p">{{ currentPriceText }}</div>
+        <div class="d">{{ currentPlanHint }}</div>
       </div>
-      <van-button round class="pay-btn" @click="onPay">立即开通</van-button>
+      <button class="btn-buy" @click="onBuy">立即开通</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getPlans, createOrder, type VipPlan } from '@/api/vip'
 
 const router = useRouter()
-const plans = ref<VipPlan[]>([])
-const selectedPlan = ref<string>('')
+const activePlan = ref<'month' | 'quarter' | 'year'>('quarter')
 
-const currentPlan = computed(() => plans.value.find((p) => p.id === selectedPlan.value))
+const currentPriceText = computed(() => {
+  if (activePlan.value === 'month') return '¥29'
+  if (activePlan.value === 'quarter') return '¥59'
+  return '¥199'
+})
 
-const benefits = [
-  { icon: 'records', title: '全部题库', desc: '解锁全部章节、真题、模拟题' },
-  { icon: 'chat-o', title: 'AI 深度分析', desc: '每题 AI 解析，理解更深' },
-  { icon: 'underway-o', title: '艾宾浩斯复习', desc: '智能记忆曲线，高效复习' },
-  { icon: 'chart-trending-o', title: '知识雷达图', desc: '可视化能力分析' },
-  { icon: 'description', title: '错题智能导出', desc: 'PDF 导出错题集' },
-  { icon: 'service-o', title: '专属客服', desc: '优先响应，1对1答疑' },
-  { icon: 'gift-o', title: '考不过包赔', desc: '年卡专属，未过返会费' }
+const currentPlanHint = computed(() => {
+  if (activePlan.value === 'month') return '月度体验套餐'
+  if (activePlan.value === 'quarter') return '季卡·立省28元'
+  return '年度尊享套餐·超值首选'
+})
+
+const benefitList = [
+  { icon: '📚', title: '全部题库不限量', desc: '章节练习不限每日题量' },
+  { icon: '📖', title: '名师详细解析', desc: '含考点标注、解题思路、知识点链接' },
+  { icon: '⏱️', title: '不限次模拟考试', desc: '全真模拟考试与考后估分' },
+  { icon: '🧠', title: '艾宾浩斯智能复习', desc: '基于遗忘曲线自动安排复习' },
+  { icon: '📊', title: '案例分析与主观题', desc: '专项练习案例大题与得分点精讲' },
+  { icon: '🤖', title: 'AI出题与智能诊断', desc: 'AI智能生成同类题与薄弱点诊断' },
+  { icon: '🚫', title: '纯净免广告体验', desc: '纯净学习无干扰' },
 ]
 
-async function onPay() {
-  if (!selectedPlan.value) return showToast('请选择套餐')
-  try {
-    const res = await createOrder({ planId: selectedPlan.value, payMethod: 'wechat' })
-    showToast({ type: 'success', message: '订单已创建，即将支付' })
-    // 模拟支付跳转
-    setTimeout(() => {
-      router.back()
-    }, 1500)
-  } catch {
-    showToast('下单失败')
-  }
+function onBuy() {
+  showToast({
+    type: 'success',
+    message: 'VIP 会员开通成功！',
+  })
+  setTimeout(() => {
+    router.back()
+  }, 1200)
 }
-
-onMounted(async () => {
-  try {
-    const res = await getPlans()
-    plans.value = res.data
-    selectedPlan.value = res.data.find((p) => p.popular)?.id || res.data[0]?.id || ''
-  } catch {
-    plans.value = [
-      { id: 'month', name: '月卡', price: 19, originalPrice: 29, duration: '30天有效', features: [], popular: false },
-      { id: 'season', name: '季卡', price: 49, originalPrice: 87, duration: '90天有效', features: [], popular: true },
-      { id: 'year', name: '年卡', price: 99, originalPrice: 348, duration: '365天有效', features: [], popular: false }
-    ]
-    selectedPlan.value = 'season'
-  }
-})
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .vip-page {
-  position: relative;
   min-height: 100vh;
-  background: linear-gradient(180deg, #4c1d95 0%, #7c3aed 30%, #f8fafc 60%);
-  padding-bottom: 80px;
-  overflow: hidden;
+  background: var(--gray-1);
 }
 
-.vip-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  .circle {
-    position: absolute;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-
-    &.c1 {
-      width: 260px;
-      height: 260px;
-      top: -80px;
-      right: -100px;
-    }
-    &.c2 {
-      width: 180px;
-      height: 180px;
-      top: 120px;
-      left: -80px;
-    }
-  }
-}
-
-.nav {
-  background: transparent !important;
-
-  :deep(.van-nav-bar__title),
-  :deep(.van-nav-bar .van-icon) {
-    color: #fff;
-  }
-}
-
-.vip-header {
-  text-align: center;
-  color: #fff;
-  padding: var(--space-xl) 0;
-  position: relative;
-}
-
-.crown {
-  font-size: 48px;
-  color: #fbbf24;
-  margin-bottom: var(--space-md);
-}
-
-.title {
-  font-size: var(--font-size-2xl);
-  margin-bottom: var(--space-xs);
-}
-
-.subtitle {
-  font-size: var(--font-size-sm);
-  opacity: 0.85;
-}
-
-/* Plans */
-.plans {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-lg);
-  position: relative;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    width: 24px;
+  }
 }
 
-.plan-card {
-  flex: 1;
-  position: relative;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg) var(--space-sm);
+.vip-content {
+  padding: 14px;
+}
+
+.vip-hero {
+  background: linear-gradient(140deg, #1f2937 0%, #111827 100%);
+  border-radius: var(--radius);
+  padding: 24px 20px;
   text-align: center;
   color: #fff;
-  transition: all var(--transition-base);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
 
-  &.popular {
+  &::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.2) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .crown {
+    font-size: 36px;
+    margin-bottom: 6px;
+  }
+
+  .vh-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #fbbf24;
+    letter-spacing: 0.5px;
+  }
+
+  .vh-sub {
+    font-size: 12px;
+    color: var(--gray-4);
+    margin-top: 4px;
+  }
+}
+
+.vip-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.vip-plan {
+  background: var(--gray-0);
+  border: 2px solid var(--gray-3);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.recommended {
     border-color: #fbbf24;
-    background: rgba(251, 191, 36, 0.15);
-  transform: scale(1.04);
-  box-shadow: 0 8px 24px rgba(251, 191, 36, 0.3);
+    background: #fffdf5;
   }
 
   &.selected {
-    border-color: #fff;
+    border-color: var(--primary);
+    background: var(--primary-bg);
+    box-shadow: 0 0 0 2px var(--primary-glow);
+  }
+
+  .vp-left {
+    .vp-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-9);
+    }
+
+    .vp-tag {
+      font-size: 10px;
+      color: #d97706;
+      background: #fef3c7;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      margin-top: 4px;
+      display: inline-block;
+    }
+  }
+
+  .vp-right {
+    text-align: right;
+
+    .vp-price {
+      font-size: 22px;
+      font-weight: 800;
+      color: #d97706;
+
+      small {
+        font-size: 12px;
+        font-weight: 500;
+      }
+    }
+
+    .vp-original {
+      font-size: 11px;
+      color: var(--gray-4);
+      text-decoration: line-through;
+      margin-top: 2px;
+    }
   }
 }
 
-.popular-tag {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
+.vip-benefits {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-top: 14px;
+  box-shadow: var(--shadow-sm);
 
-.plan-name {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-}
-
-.plan-price {
-  margin: var(--space-sm) 0;
-
-  .cur {
-    font-size: var(--font-size-sm);
-    vertical-align: top;
-  }
-  .amount {
-    font-size: var(--font-size-2xl);
+  .vb-title {
+    font-size: 15px;
     font-weight: 700;
-  }
-  .origin {
-    display: block;
-    font-size: 11px;
-    opacity: 0.6;
-    text-decoration: line-through;
+    color: var(--gray-8);
+    margin-bottom: 14px;
   }
 }
 
-.plan-duration {
-  font-size: 11px;
-  opacity: 0.85;
-}
-
-/* Benefits */
-.benefits {
-  margin: var(--space-lg);
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-}
-
-.block-title {
-  font-size: var(--font-size-md);
-  margin-bottom: var(--space-lg);
-  color: var(--text-primary);
-}
-
-.benefit-item {
+.vip-benefit-item {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) 0;
-  @include hairline-bottom;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gray-2);
 
-  &:last-child::after {
-    display: none;
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .vbi-icon {
+    font-size: 22px;
+  }
+
+  .vbi-text {
+    flex: 1;
+
+    .t {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-8);
+    }
+
+    .d {
+      font-size: 11px;
+      color: var(--gray-5);
+      margin-top: 2px;
+    }
+  }
+
+  .vbi-check {
+    color: var(--success);
+    font-weight: 800;
+    font-size: 16px;
   }
 }
 
-.ben-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: var(--gradient-primary-soft);
-  color: var(--color-primary);
-  font-size: 20px;
-  @include flex-center;
-}
-
-.ben-title {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-}
-
-.ben-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-/* Pay bar */
-.pay-bar {
+.vip-buy-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
+  height: 64px;
+  background: var(--gray-0);
+  border-top: 1px solid var(--gray-2);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-card);
-  @include safe-bottom(12px);
-  @include hairline-top;
-}
+  padding: 0 18px;
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 100;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 
-.pay-label {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
+  .price-info {
+    .p {
+      font-size: 22px;
+      font-weight: 800;
+      color: #d97706;
+    }
 
-.pay-amount {
-  font-size: var(--font-size-xl);
-  font-weight: 700;
-  color: var(--color-danger);
-}
+    .d {
+      font-size: 11px;
+      color: var(--gray-5);
+    }
+  }
 
-.pay-btn {
-  height: 44px;
-  padding: 0 32px;
-  background: linear-gradient(135deg, #4c1d95, #7c3aed, #c026d3);
-  color: #fff;
-  font-weight: 600;
-  border: none;
+  .btn-buy {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1f2937;
+    border: none;
+    height: 42px;
+    padding: 0 28px;
+    border-radius: 21px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+  }
 }
 </style>

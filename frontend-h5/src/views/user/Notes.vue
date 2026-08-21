@@ -1,118 +1,187 @@
 <template>
   <div class="notes-page">
-    <van-nav-bar title="我的笔记" left-arrow @click-left="$router.back()" />
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">我的笔记</div>
+      <div class="right"></div>
+    </div>
 
-    <van-search v-model="keyword" placeholder="搜索笔记" shape="round" />
-
-    <div class="notes-list">
-      <div
-        v-for="note in list"
-        :key="note.id"
-        class="note-card"
-      >
-        <div class="note-head">
-          <van-icon name="edit-line" class="note-icon" />
-          <span class="note-time">{{ relativeTime(note.updatedAt) }}</span>
-          <van-icon name="cross" class="del-icon" @click="onDelete(note.id)" />
+    <div v-if="list.length" class="notes-list">
+      <div v-for="note in list" :key="note.id" class="note-card">
+        <div class="nc-head">
+          <span class="nc-tag">考点笔记</span>
+          <span class="nc-time">{{ note.updatedAt }}</span>
+          <span class="nc-del" @click="onDelete(note.id)">删除</span>
         </div>
-        <p class="note-title text-ellipsis">{{ note.title }}</p>
-        <p class="note-content text-ellipsis-2">{{ note.content }}</p>
+        <div class="nc-title">{{ note.title }}</div>
+        <div class="nc-content">{{ note.content }}</div>
       </div>
     </div>
 
-    <EmptyState v-if="!list.length" text="暂无笔记" icon="edit-line" action-text="去刷题" @action="$router.push('/quiz/chapter')" />
+    <div v-else class="empty-state">
+      <div class="es-icon">📓</div>
+      <div class="es-text">还没有笔记</div>
+      <div class="es-sub">做题时点击“笔记”按钮即可随时记录备考心得</div>
+      <button class="es-btn" @click="$router.push('/chapter')">去刷题记录</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
-import { getNotes, deleteNote, type Note } from '@/api/user'
-import { relativeTime } from '@/utils/format'
-import EmptyState from '@/components/EmptyState.vue'
 
-const keyword = ref('')
-const list = ref<Note[]>([])
-
-async function loadList() {
-  try {
-    const res = await getNotes({ page: 1, pageSize: 50 })
-    list.value = res.data.list
-  } catch {
-    list.value = [
-      { id: '1', questionId: 'q1', title: '瀑布模型笔记', content: '瀑布模型适用于需求明确的项目，强调阶段顺序，文档完善...', createdAt: '2026-08-19', updatedAt: '2026-08-19' },
-      { id: '2', questionId: 'q2', title: 'TCP三次握手', content: 'SYN -> SYN+ACK -> ACK，建立可靠连接', createdAt: '2026-08-18', updatedAt: '2026-08-18' }
-    ]
-  }
-}
+const list = ref([
+  {
+    id: '1',
+    title: '项目生命周期各阶段资源投入规律',
+    content: '启动阶段资源投入最低，规划阶段逐渐增加，执行阶段达到最高峰（成本与人力最集中），收尾阶段再次下降。谨防混淆重要性与资源投入量！',
+    updatedAt: '今天 10:20',
+  },
+  {
+    id: '2',
+    title: '关键路径法（CPM）总时差计算要点',
+    content: '总时差 = 最迟开始时间 (LS) - 最早开始时间 (ES) = 最迟完成时间 (LF) - 最早完成时间 (EF)。总时差为零的活动构成了关键路径。',
+    updatedAt: '昨天 16:45',
+  },
+])
 
 async function onDelete(id: string) {
   try {
-    await showConfirmDialog({ title: '删除', message: '确定删除该笔记吗？' })
-    await deleteNote(id)
+    await showConfirmDialog({ title: '删除笔记', message: '确定要删除这条笔记吗？' })
     list.value = list.value.filter((n) => n.id !== id)
-    showToast({ type: 'success', message: '已删除' })
+    showToast('已删除')
   } catch {
-    // 取消
+    // cancel
   }
 }
-
-onMounted(loadList)
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .notes-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: var(--space-2xl);
+  background: var(--gray-1);
+}
+
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    width: 24px;
+  }
 }
 
 .notes-list {
-  padding: var(--space-lg);
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 12px;
 }
 
 .note-card {
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+
+  .nc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .nc-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: #d97706;
+      background: #fef3c7;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .nc-time {
+      font-size: 11px;
+      color: var(--gray-4);
+      flex: 1;
+    }
+
+    .nc-del {
+      font-size: 12px;
+      color: var(--gray-4);
+      cursor: pointer;
+    }
+  }
+
+  .nc-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 6px;
+  }
+
+  .nc-content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--gray-6);
+    background: var(--gray-1);
+    padding: 10px 12px;
+    border-radius: var(--radius-xs);
+  }
 }
 
-.note-head {
-  @include flex-between;
-  margin-bottom: var(--space-sm);
+.empty-state {
+  padding: 80px 24px;
+  text-align: center;
 
-  .note-icon {
+  .es-icon {
+    font-size: 56px;
+    margin-bottom: 12px;
+  }
+
+  .es-text {
     font-size: 16px;
-    color: var(--color-primary);
+    font-weight: 700;
+    color: var(--gray-8);
   }
-  .note-time {
-    flex: 1;
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-left: var(--space-sm);
-  }
-  .del-icon {
-    font-size: 16px;
-    color: var(--text-placeholder);
-  }
-}
 
-.note-title {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 6px;
-}
+  .es-sub {
+    font-size: 13px;
+    color: var(--gray-5);
+    margin-top: 6px;
+  }
 
-.note-content {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  line-height: 1.5;
+  .es-btn {
+    margin-top: 24px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 12px var(--primary-glow);
+  }
 }
 </style>

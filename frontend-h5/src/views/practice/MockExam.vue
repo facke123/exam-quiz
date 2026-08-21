@@ -1,18 +1,21 @@
 <template>
-  <div class="mock-exam">
-    <van-nav-bar title="模拟考试" left-arrow @click-left="$router.back()" />
+  <div class="mock-page">
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">全真模拟考试</div>
+      <div class="right"></div>
+    </div>
 
-    <div class="mock-banner">
-      <div class="banner-bg"></div>
-      <div class="banner-content">
-        <van-icon name="medal-o" class="banner-icon" />
-        <div>
-          <p class="banner-title">全真模拟</p>
-          <p class="banner-desc">仿真出题 · 模拟实战 · 检验学习</p>
-        </div>
+    <!-- 顶部横幅 -->
+    <div class="mock-hero">
+      <div class="mh-icon">⏱️</div>
+      <div class="mh-info">
+        <div class="mh-title">全真考场模拟</div>
+        <div class="mh-desc">仿真出题 · 严格限时 · 考后精准估分</div>
       </div>
     </div>
 
+    <!-- 模拟卷列表 -->
     <div class="mock-list">
       <div
         v-for="mock in mocks"
@@ -20,38 +23,58 @@
         class="mock-card"
         @click="enterMock(mock)"
       >
-        <div class="mock-head">
-          <span class="mock-name">{{ mock.name }}</span>
-          <van-tag v-if="mock.isNew" color="#6366F1" size="medium">NEW</van-tag>
+        <div class="mc-head">
+          <div class="mc-title">{{ mock.name }}</div>
+          <span v-if="mock.isNew" class="mc-tag new">NEW</span>
         </div>
-        <p class="mock-desc">{{ mock.desc }}</p>
-        <div class="mock-meta">
-          <span><van-icon name="clock-o" /> {{ mock.duration }}分钟</span>
-          <span><van-icon name="description" /> {{ mock.questionCount }}题</span>
-          <span><van-icon name="user-o" /> {{ mock.attendCount }}人参加</span>
-        </div>
-        <div v-if="mock.done" class="mock-result">
-          <span>上次成绩</span>
-          <span class="result-score">{{ mock.score }}分</span>
+        <div class="mc-desc">{{ mock.desc }}</div>
+        <div class="mc-footer">
+          <div class="mc-meta">
+            <span>⏱️ {{ mock.duration }}分钟</span>
+            <span>📝 {{ mock.questionCount }}题</span>
+            <span>👥 {{ mock.attendCount }}人参加</span>
+          </div>
+          <button class="mc-btn">开始模考</button>
         </div>
       </div>
     </div>
-
-    <EmptyState v-if="!mocks.length" text="暂无模拟卷" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
 
 const mocks = ref([
-  { id: '1', name: '模拟卷一 · 基础篇', desc: '覆盖计算机基础、数据结构等高频考点', duration: 90, questionCount: 50, attendCount: 1280, done: false, score: 0, isNew: true },
-  { id: '2', name: '模拟卷二 · 强化篇', desc: '操作系统、数据库、网络综合考查', duration: 120, questionCount: 75, attendCount: 980, done: true, score: 72, isNew: false },
-  { id: '3', name: '模拟卷三 · 冲刺篇', desc: '软件工程、项目管理、案例分析', duration: 150, questionCount: 75, attendCount: 654, done: false, score: 0, isNew: true }
+  {
+    id: '1',
+    name: '2026全真模拟卷一 · 基础强化',
+    desc: '覆盖信息化、项目管理基础与生命周期等高频核心考点',
+    duration: 120,
+    questionCount: 75,
+    attendCount: 1280,
+    isNew: true,
+  },
+  {
+    id: '2',
+    name: '2026全真模拟卷二 · 进阶实战',
+    desc: '聚焦范围管理、进度管理、成本管理深度综合题型',
+    duration: 150,
+    questionCount: 75,
+    attendCount: 980,
+    isNew: false,
+  },
+  {
+    id: '3',
+    name: '2026全真模拟卷三 · 冲刺押题',
+    desc: '全科考点拉通，历年出题专家命题趋势仿真模拟',
+    duration: 150,
+    questionCount: 75,
+    attendCount: 654,
+    isNew: true,
+  },
 ])
 
 function enterMock(mock: any) {
@@ -60,114 +83,135 @@ function enterMock(mock: any) {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
-.mock-exam {
+.mock-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: var(--space-2xl);
+  background: var(--gray-1);
+  padding-bottom: 40px;
 }
 
-.mock-banner {
-  position: relative;
-  margin: var(--space-lg);
-  padding: var(--space-xl) var(--space-lg);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--gradient-primary);
-  color: #fff;
-}
-
-.banner-bg {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.2), transparent 60%);
-}
-
-.banner-content {
-  position: relative;
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    width: 24px;
+  }
 }
 
-.banner-icon {
-  font-size: 36px;
-}
+.mock-hero {
+  margin: 14px;
+  background: linear-gradient(140deg, #6366f1 0%, #7c3aed 100%);
+  border-radius: var(--radius);
+  padding: 20px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: var(--shadow-md);
 
-.banner-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-}
+  .mh-icon {
+    font-size: 32px;
+  }
 
-.banner-desc {
-  font-size: var(--font-size-sm);
-  opacity: 0.85;
-  margin-top: 2px;
+  .mh-title {
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .mh-desc {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 2px;
+  }
 }
 
 .mock-list {
-  padding: 0 var(--space-lg);
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 12px;
 }
 
 .mock-card {
-  padding: var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
 
-  &:active {
-    transform: scale(0.99);
-  }
-}
-
-.mock-head {
-  @include flex-between;
-  margin-bottom: 6px;
-}
-
-.mock-name {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.mock-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-bottom: var(--space-md);
-}
-
-.mock-meta {
-  display: flex;
-  gap: var(--space-md);
-  font-size: 11px;
-  color: var(--text-secondary);
-
-  span {
-    display: inline-flex;
+  .mc-head {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 2px;
+    margin-bottom: 6px;
+
+    .mc-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-8);
+    }
+
+    .mc-tag.new {
+      font-size: 10px;
+      font-weight: 800;
+      background: var(--danger);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
   }
-}
 
-.mock-result {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--border-light);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
+  .mc-desc {
+    font-size: 12px;
+    color: var(--gray-5);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
 
-.result-score {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--color-success);
+  .mc-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--gray-2);
+    padding-top: 10px;
+
+    .mc-meta {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--gray-5);
+    }
+
+    .mc-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+  }
 }
 </style>

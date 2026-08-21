@@ -1,275 +1,295 @@
 <template>
-  <div class="mine-page">
-    <div class="header">
-      <div class="header-bg">
-        <div class="circle"></div>
+  <div class="user-page">
+    <!-- 用户中心顶部卡片 -->
+    <div class="uc-header">
+      <div class="uc-avatar">
+        <img v-if="userStore.userInfo?.avatar" :src="userStore.userInfo.avatar" alt="avatar" />
+        <span v-else>👤</span>
       </div>
-      <div class="header-content">
-        <div class="user-card">
-          <van-image round width="64" height="64" :src="userStore.userInfo?.avatar || ''">
-            <template #error>
-              <div class="avatar-default"><van-icon name="user-o" /></div>
-            </template>
-          </van-image>
-          <div class="user-info">
-            <p class="username">{{ userStore.userInfo?.username || '软考学员' }}</p>
-            <p class="user-meta">
-              <van-tag v-if="userStore.isVip" type="warning" size="medium">VIP</van-tag>
-              <span>{{ subjectStore.currentSubject.name }}</span>
-            </p>
-          </div>
-          <van-icon name="setting-o" class="setting-icon" @click="$router.push('/settings')" />
+      <div class="uc-info">
+        <div class="uc-name">{{ userStore.userInfo?.nickname || userStore.userInfo?.username || '软考学员' }}</div>
+        <div class="uc-tag" :class="userStore.isVip ? 'vip' : 'free'">
+          {{ userStore.isVip ? '👑 VIP 会员' : '免费用户' }}
         </div>
+      </div>
+      <div class="setting-btn" @click="$router.push('/settings')">⚙️ 设置</div>
+    </div>
 
-        <div class="quick-stats">
-          <div class="qs-item">
-            <p class="qs-num">{{ stats.answered }}</p>
-            <p class="qs-label">已刷题</p>
-          </div>
-          <div class="qs-item">
-            <p class="qs-num">{{ toPercent(stats.correctRate, 0) }}</p>
-            <p class="qs-label">正确率</p>
-          </div>
-          <div class="qs-item">
-            <p class="qs-num">{{ stats.streak }}天</p>
-            <p class="qs-label">连续</p>
-          </div>
+    <!-- VIP 横幅 -->
+    <div class="vip-banner" @click="$router.push('/vip')">
+      <div class="vb-left">
+        <div class="vb-title">👑 {{ userStore.isVip ? 'VIP 会员尊享中' : '开通 VIP 会员' }}</div>
+        <div class="vb-desc">解锁全部题库 · AI智能解析 · 艾宾浩斯智能复习</div>
+      </div>
+      <div class="vb-btn">{{ userStore.isVip ? '立即续费' : '立即开通' }}</div>
+    </div>
+
+    <!-- 菜单功能分组 -->
+    <div class="uc-body">
+      <div class="uc-section">
+        <div class="uc-item" @click="$router.push('/stats')">
+          <div class="uci-icon" style="background: var(--primary-bg)">📊</div>
+          <div class="uci-text">做题统计</div>
+          <div class="uci-arrow">›</div>
         </div>
+        <div class="uc-item" @click="$router.push('/wrong')">
+          <div class="uci-icon" style="background: var(--danger-bg)">❌</div>
+          <div class="uci-text">错题本</div>
+          <div class="uci-value">3题</div>
+          <div class="uci-arrow">›</div>
+        </div>
+        <div class="uc-item" @click="$router.push('/notes')">
+          <div class="uci-icon" style="background: var(--warning-bg)">📓</div>
+          <div class="uci-text">我的笔记</div>
+          <div class="uci-value">0条</div>
+          <div class="uci-arrow">›</div>
+        </div>
+        <div class="uc-item" @click="$router.push('/records')">
+          <div class="uci-icon" style="background: var(--cyan-bg)">📋</div>
+          <div class="uci-text">做题记录</div>
+          <div class="uci-value">1次</div>
+          <div class="uci-arrow">›</div>
+        </div>
+      </div>
+
+      <div class="uc-section">
+        <div class="uc-item" @click="$router.push('/subject')">
+          <div class="uci-icon" style="background: var(--success-bg)">🎯</div>
+          <div class="uci-text">考试科目</div>
+          <div class="uci-value">{{ subjectStore.currentSubject?.name || '系统集成项目管理工程师' }}</div>
+          <div class="uci-arrow">›</div>
+        </div>
+        <div class="uc-item" @click="$router.push('/settings')">
+          <div class="uci-icon" style="background: var(--purple-bg)">⚙️</div>
+          <div class="uci-text">系统设置</div>
+          <div class="uci-arrow">›</div>
+        </div>
+        <div class="uc-item" @click="showToast('暂无新通知')">
+          <div class="uci-icon" style="background: var(--pink-bg)">🔔</div>
+          <div class="uci-text">消息通知</div>
+          <div class="uci-arrow">›</div>
+        </div>
+      </div>
+
+      <div class="uc-section">
+        <div class="uc-item" @click="showToast('客服微信：ruankao_helper')">
+          <div class="uci-icon" style="background: var(--cyan-bg)">❓</div>
+          <div class="uci-text">帮助与反馈</div>
+          <div class="uci-arrow">›</div>
+        </div>
+        <div class="uc-item" @click="showToast('软考刷题王 v2.0 · 高效备考一战过关')">
+          <div class="uci-icon" style="background: var(--gray-2)">ℹ️</div>
+          <div class="uci-text">关于我们</div>
+          <div class="uci-arrow">›</div>
+        </div>
+      </div>
+
+      <div class="logout-wrap">
+        <button class="logout-btn" @click="onLogout">退出登录</button>
       </div>
     </div>
 
-    <!-- VIP 推广 -->
-    <div v-if="!userStore.isVip" class="vip-banner" @click="$router.push('/vip')">
-      <div class="vip-left">
-        <van-icon name="diamond-o" class="vip-icon" />
-        <div>
-          <p class="vip-title">开通 VIP 会员</p>
-          <p class="vip-desc">解锁全部题目 & AI 深度分析</p>
-        </div>
-      </div>
-      <van-button size="small" round class="vip-btn">立即开通</van-button>
-    </div>
-
-    <!-- 功能列表 -->
-    <van-cell-group inset class="func-group">
-      <van-cell
-        title="会员中心"
-        icon="diamond-o"
-        is-link
-        @click="$router.push('/vip')"
-      />
-      <van-cell title="我的笔记" icon="edit-line" is-link @click="$router.push('/notes')" />
-      <van-cell title="做题记录" icon="records" is-link @click="$router.push('/records')" />
-    </van-cell-group>
-
-    <van-cell-group inset class="func-group">
-      <van-cell title="科目选择" icon="bookmark-o" is-link @click="$router.push('/subject')" />
-      <van-cell title="设置" icon="setting-o" is-link @click="$router.push('/settings')" />
-      <van-cell title="帮助中心" icon="question-o" is-link />
-      <van-cell title="关于我们" icon="info-o" is-link />
-    </van-cell-group>
-
-    <div class="logout">
-      <van-button block plain type="danger" @click="onLogout">退出登录</van-button>
-    </div>
+    <div style="height: 40px"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { showConfirmDialog } from 'vant'
+import { showConfirmDialog, showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
-import { toPercent } from '@/utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
 const subjectStore = useSubjectStore()
 
-const stats = reactive({
-  answered: 326,
-  correctRate: 0.78,
-  streak: 12
-})
-
 async function onLogout() {
   try {
-    await showConfirmDialog({ title: '确认退出', message: '确定要退出登录吗？' })
+    await showConfirmDialog({ title: '退出确认', message: '确定要退出当前账号吗？' })
     userStore.logout()
     router.replace('/auth/login')
   } catch {
-    // 取消
+    // cancel
   }
 }
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
-.mine-page {
+.user-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom));
+  background: var(--gray-1);
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 20px);
 }
 
-.header {
+.uc-header {
+  background: linear-gradient(140deg, #6366f1 0%, #7c3aed 50%, #8b5cf6 100%);
+  padding: calc(env(safe-area-inset-top) + 20px) 20px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #fff;
   position: relative;
-  background: var(--gradient-primary);
-  padding: calc(env(safe-area-inset-top) + var(--space-lg)) var(--space-lg) var(--space-xl);
-  overflow: hidden;
-}
 
-.header-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  .circle {
-    position: absolute;
-    width: 200px;
-    height: 200px;
+  .uc-avatar {
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    top: -80px;
-    right: -60px;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .uc-info {
+    flex: 1;
+
+    .uc-name {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .uc-tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-top: 4px;
+
+      &.free {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      &.vip {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: #fff;
+        font-weight: 700;
+      }
+    }
+  }
+
+  .setting-btn {
+    font-size: 13px;
+    opacity: 0.9;
+    cursor: pointer;
   }
 }
 
-.header-content {
-  position: relative;
-  color: #fff;
-}
-
-.user-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-xl);
-}
-
-.avatar-default {
-  width: 100%;
-  height: 100%;
-  @include flex-center;
-  background: rgba(255, 255, 255, 0.2);
-
-  .van-icon {
-    font-size: 32px;
-    color: #fff;
-  }
-}
-
-.user-info {
-  flex: 1;
-}
-
-.username {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-}
-
-.user-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-size-sm);
-  opacity: 0.85;
-  margin-top: 4px;
-}
-
-.setting-icon {
-  font-size: 22px;
-  color: #fff;
-}
-
-.quick-stats {
-  display: flex;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg) 0;
-}
-
-.qs-item {
-  flex: 1;
-  text-align: center;
-}
-
-.qs-num {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-}
-
-.qs-label {
-  font-size: 11px;
-  opacity: 0.8;
-  margin-top: 2px;
-}
-
-/* VIP banner */
 .vip-banner {
+  margin: -14px 14px 14px;
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  border-radius: var(--radius);
+  padding: 16px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--space-lg);
-  padding: var(--space-md) var(--space-lg);
-  background: linear-gradient(135deg, #4c1d95, #7c3aed);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
   color: #fff;
-}
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
 
-.vip-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
+  .vb-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fbbf24;
+  }
 
-.vip-icon {
-  font-size: 28px;
-  color: #fbbf24;
-}
+  .vb-desc {
+    font-size: 11px;
+    color: var(--gray-4);
+    margin-top: 2px;
+  }
 
-.vip-title {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-}
-
-.vip-desc {
-  font-size: 11px;
-  opacity: 0.85;
-  margin-top: 2px;
-}
-
-.vip-btn {
-  background: #fbbf24 !important;
-  color: #4c1d95 !important;
-  border: none !important;
-  font-weight: 600;
-}
-
-/* Function groups */
-.func-group {
-  margin-bottom: var(--space-lg) !important;
-
-  :deep(.van-cell) {
-    padding: 14px var(--van-cell-horizontal-padding);
-  font-size: var(--font-size-base);
-
-    .van-icon {
-      font-size: 18px;
-      color: var(--color-primary);
-    }
+  .vb-btn {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1f2937;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 14px;
   }
 }
 
-.logout {
-  padding: var(--space-lg);
-  margin-top: var(--space-xl);
+.uc-body {
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-  :deep(.van-button) {
-    border-radius: var(--radius-full);
+.uc-section {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.uc-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--gray-2);
+  cursor: pointer;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .uci-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .uci-text {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-8);
+  }
+
+  .uci-value {
+    font-size: 12px;
+    color: var(--gray-5);
+  }
+
+  .uci-arrow {
+    font-size: 18px;
+    color: var(--gray-4);
+  }
+}
+
+.logout-wrap {
+  margin-top: 8px;
+
+  .logout-btn {
+    width: 100%;
     height: 44px;
+    background: var(--gray-0);
+    border: 1.5px solid var(--danger-bg);
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: var(--radius);
+    cursor: pointer;
+
+    &:active {
+      background: var(--danger-bg);
+    }
   }
 }
 </style>

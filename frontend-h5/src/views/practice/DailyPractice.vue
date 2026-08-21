@@ -1,43 +1,51 @@
 <template>
   <div class="daily-page">
-    <van-nav-bar title="每日一练" left-arrow @click-left="$router.back()" />
-
-    <div class="daily-card">
-      <div class="date-badge">
-        <p class="date-day">{{ day }}</p>
-        <p class="date-month">{{ month }}</p>
-      </div>
-      <div class="daily-info">
-        <p class="daily-title">今日 {{ total }} 道精选题</p>
-        <p class="daily-desc">基于你的薄弱考点智能推荐</p>
-        <div class="daily-progress">
-          <van-progress :percentage="donePercent" stroke-width="6" color="#6366F1" :show-pivot="false" />
-          <span>已完成 {{ done }}/{{ total }}</span>
-        </div>
-      </div>
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">每日一练</div>
+      <div class="right"></div>
     </div>
 
-    <div class="streak-section">
-      <h4 class="block-title">坚持打卡</h4>
-      <div class="streak-grid">
-        <div
-          v-for="(d, i) in last7Days"
-          :key="i"
-          class="streak-item"
-          :class="{ done: d.done, today: i === last7Days.length - 1 }"
-        >
-          <span class="streak-day">{{ d.label }}</span>
-          <div class="streak-mark">
-            <van-icon v-if="d.done" name="success" />
-            <van-icon v-else name="clock-o" />
+    <div class="daily-content">
+      <!-- 每日一练日期与进度卡片 -->
+      <div class="daily-card">
+        <div class="date-badge">
+          <div class="date-day">{{ day }}</div>
+          <div class="date-month">{{ month }}月</div>
+        </div>
+        <div class="daily-info">
+          <div class="daily-title">今日 5 道核心考点精选题</div>
+          <div class="daily-desc">智能抽取薄弱知识点 · 碎片时间高效提分</div>
+          <div class="daily-progress">
+            <div class="dp-track">
+              <div class="dp-fill" style="width: 40%"></div>
+            </div>
+            <span class="dp-text">已完成 2/5 题</span>
           </div>
         </div>
       </div>
-    </div>
 
-    <van-button block round type="primary" class="start-btn" @click="onStart">
-      {{ done > 0 ? '继续答题' : '开始答题' }}
-    </van-button>
+      <!-- 连续打卡日历 -->
+      <div class="streak-card">
+        <div class="sc-title">🔥 连续打卡 7 天</div>
+        <div class="streak-grid">
+          <div
+            v-for="(d, i) in last7Days"
+            :key="i"
+            class="streak-item"
+            :class="{ done: d.done, today: i === last7Days.length - 1 }"
+          >
+            <span class="streak-day">{{ d.label }}</span>
+            <div class="streak-mark">
+              <span v-if="d.done">✓</span>
+              <span v-else>○</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="start-btn" @click="onStart">开始今日刷题</button>
+    </div>
   </div>
 </template>
 
@@ -46,156 +54,220 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-
 const now = new Date()
 const day = now.getDate()
-const monthArr = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
-const month = monthArr[now.getMonth()]
-
-const total = ref(10)
-const done = ref(4)
-const donePercent = ref(40)
+const month = now.getMonth() + 1
 
 const last7Days = ref([
-  { label: '一', done: true },
-  { label: '二', done: true },
-  { label: '三', done: true },
-  { label: '四', done: false },
-  { label: '五', done: true },
-  { label: '六', done: true },
-  { label: '今', done: false }
+  { label: '周一', done: true },
+  { label: '周二', done: true },
+  { label: '周三', done: true },
+  { label: '周四', done: true },
+  { label: '周五', done: true },
+  { label: '周六', done: true },
+  { label: '今天', done: false },
 ])
 
 function onStart() {
-  router.push('/quiz/daily')
+  router.push('/quiz/practice')
 }
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .daily-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding: var(--space-lg);
+  background: var(--gray-1);
+}
+
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    width: 24px;
+  }
+}
+
+.daily-content {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .daily-card {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 20px;
   display: flex;
-  gap: var(--space-lg);
-  padding: var(--space-xl);
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  margin-bottom: var(--space-xl);
-}
-
-.date-badge {
-  width: 60px;
-  height: 60px;
-  border-radius: var(--radius-md);
-  background: var(--gradient-primary);
-  color: #fff;
-  text-align: center;
-  @include flex-col;
   align-items: center;
-  justify-content: center;
-}
+  gap: 16px;
+  box-shadow: var(--shadow-sm);
 
-.date-day {
-  font-size: var(--font-size-xl);
-  font-weight: 700;
-}
+  .date-badge {
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    color: #d97706;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
 
-.date-month {
-  font-size: 10px;
-}
+    .date-day {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+    }
 
-.daily-info {
-  flex: 1;
-}
+    .date-month {
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+  }
 
-.daily-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
+  .daily-info {
+    flex: 1;
 
-.daily-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
+    .daily-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-8);
+    }
 
-.daily-progress {
-  margin-top: var(--space-md);
+    .daily-desc {
+      font-size: 11px;
+      color: var(--gray-5);
+      margin: 4px 0 8px;
+    }
 
-  span {
-    font-size: 11px;
-    color: var(--text-secondary);
-    display: block;
-    margin-top: 4px;
+    .daily-progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .dp-track {
+        flex: 1;
+        height: 6px;
+        background: var(--gray-2);
+        border-radius: 3px;
+        overflow: hidden;
+
+        .dp-fill {
+          height: 100%;
+          background: var(--primary);
+          border-radius: 3px;
+        }
+      }
+
+      .dp-text {
+        font-size: 11px;
+        color: var(--gray-5);
+      }
+    }
   }
 }
 
-.streak-section {
-  margin-bottom: var(--space-2xl);
-}
+.streak-card {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
 
-.block-title {
-  font-size: var(--font-size-md);
-  margin-bottom: var(--space-lg);
-  color: var(--text-primary);
+  .sc-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 14px;
+  }
 }
 
 .streak-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--space-sm);
-}
+  display: flex;
+  justify-content: space-between;
 
-.streak-item {
-  @include flex-col;
-  align-items: center;
-  gap: var(--space-sm);
+  .streak-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
 
-  .streak-day {
-    font-size: 11px;
-    color: var(--text-secondary);
-  }
-
-  .streak-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-full);
-    background: var(--bg-page);
-    @include flex-center;
-
-    .van-icon {
-      font-size: 18px;
-      color: var(--text-placeholder);
+    .streak-day {
+      font-size: 11px;
+      color: var(--gray-5);
     }
-  }
 
-  &.done .streak-mark {
-    background: var(--gradient-primary);
-
-    .van-icon {
-      color: #fff;
+    .streak-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--gray-2);
+      color: var(--gray-4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
     }
-  }
 
-  &.today .streak-day {
-    font-weight: 700;
-    color: var(--color-primary);
+    &.done {
+      .streak-mark {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+    }
+
+    &.today {
+      .streak-day {
+        color: var(--primary);
+        font-weight: 700;
+      }
+      .streak-mark {
+        border: 2px solid var(--primary);
+      }
+    }
   }
 }
 
 .start-btn {
-  height: 48px;
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  background: var(--gradient-primary);
+  width: 100%;
+  height: 46px;
+  border-radius: 23px;
+  background: var(--primary);
+  color: #fff;
   border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--primary-glow);
+  margin-top: 10px;
+
+  &:active {
+    background: var(--primary-dark);
+  }
 }
 </style>

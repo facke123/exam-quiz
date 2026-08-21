@@ -14,6 +14,7 @@ export interface RegisterParams {
 export interface UserInfo {
   id: string
   username: string
+  nickname?: string
   avatar: string
   phone: string
   email: string

@@ -1,172 +1,295 @@
 <template>
   <div class="review-page">
-    <van-nav-bar title="艾宾浩斯复习" left-arrow @click-left="$router.back()" />
+    <div class="nav-bar">
+      <div class="back" @click="$router.back()">‹</div>
+      <div class="title">艾宾浩斯复习</div>
+      <div class="right" @click="showExplain">说明</div>
+    </div>
 
-    <div class="intro-card">
-      <div class="intro-left">
-        <van-icon name="underway-o" class="intro-icon" />
-        <div>
-          <p class="intro-title">记忆曲线复习</p>
-          <p class="intro-desc">基于艾宾浩斯遗忘曲线智能复习</p>
-        </div>
+    <div class="review-content">
+      <!-- 遗忘曲线今日待复习横幅 -->
+      <div class="review-hero">
+        <div class="rh-label">今日待复习</div>
+        <div class="rh-num">385</div>
+        <div class="rh-desc">道题目 · 根据艾宾浩斯遗忘曲线智能安排</div>
+        <button class="rh-btn" @click="startReview">开始智能复习</button>
       </div>
-      <van-circle :current-rate="20" :rate="20" :speed="100" :stroke-width="80" color="#6366F1">
-        <template #default>
-          <div class="circle-text">{{ todayCount }}</div>
-        </template>
-      </van-circle>
-    </div>
 
-    <div class="tabs">
-      <van-tabs v-model:active="activeTab" shrink color="#6366F1">
-        <van-tab title="今日待复习" />
-        <van-tab title="即将复习" />
-        <van-tab title="已完成" />
-      </van-tabs>
-    </div>
-
-    <div class="review-list">
-      <div
-        v-for="item in list"
-        :key="item.id"
-        class="review-card"
-      >
-        <div class="review-left">
-          <p class="review-title text-ellipsis-2">{{ item.title }}</p>
-          <div class="review-meta">
-            <van-tag plain size="medium">{{ item.chapterName }}</van-tag>
-            <span v-if="item.reviewCount > 0">已复习 {{ item.reviewCount }} 次</span>
+      <!-- 复习计划分类 -->
+      <div class="plan-card">
+        <div class="card-title">📅 复习排期</div>
+        <div class="plan-list">
+          <div class="plan-item" @click="startReview">
+            <div class="pi-icon danger">🔥</div>
+            <div class="pi-info">
+              <div class="t">紧急复习</div>
+              <div class="d">已达遗忘临界点 · 建议立即复习</div>
+            </div>
+            <div class="pi-num danger">86</div>
+          </div>
+          <div class="plan-item" @click="startReview">
+            <div class="pi-icon warning">⚠️</div>
+            <div class="pi-info">
+              <div class="t">今日复习</div>
+              <div class="d">最佳记忆强化节点</div>
+            </div>
+            <div class="pi-num warning">152</div>
+          </div>
+          <div class="plan-item" @click="startReview">
+            <div class="pi-icon success">📋</div>
+            <div class="pi-info">
+              <div class="t">明日复习</div>
+              <div class="d">提前预览明日任务</div>
+            </div>
+            <div class="pi-num success">147</div>
           </div>
         </div>
-        <div class="review-right">
-          <p class="interval">{{ item.interval }}</p>
-          <van-button size="mini" type="primary" round @click="onReview(item)">复习</van-button>
+      </div>
+
+      <!-- 复习效果指标 -->
+      <div class="effect-card">
+        <div class="card-title">📈 复习巩固效果</div>
+        <div class="effect-grid">
+          <div class="eg-item">
+            <div class="eg-num success">85%</div>
+            <div class="eg-label">长效巩固率</div>
+          </div>
+          <div class="eg-item">
+            <div class="eg-num primary">320</div>
+            <div class="eg-label">已强化题目</div>
+          </div>
+          <div class="eg-item">
+            <div class="eg-num orange">2.8</div>
+            <div class="eg-label">平均复习轮次</div>
+          </div>
         </div>
       </div>
     </div>
-
-    <EmptyState v-if="!list.length" text="今日复习已完成！" icon="checked" action-text="去刷题" @action="$router.push('/quiz/chapter')" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import EmptyState from '@/components/EmptyState.vue'
+import { showToast, showDialog } from 'vant'
 
 const router = useRouter()
-const activeTab = ref(0)
-const todayCount = ref(8)
 
-const list = ref([
-  { id: '1', title: '下列关于虚拟存储器的描述，正确的是？', chapterName: '第3章 操作系统', reviewCount: 1, interval: '今日' },
-  { id: '2', title: 'TCP 三次握手的详细过程是什么？', chapterName: '第5章 网络', reviewCount: 0, interval: '今日' },
-  { id: '3', title: '数据库第三范式的定义是什么？', chapterName: '第4章 数据库', reviewCount: 2, interval: '今日' },
-  { id: '4', title: '瀑布模型的优缺点有哪些？', chapterName: '第6章 软件工程', reviewCount: 0, interval: '明日' }
-])
+function startReview() {
+  showToast('进入艾宾浩斯智能复习模式')
+  router.push('/quiz/practice')
+}
 
-function onReview(item: any) {
-  router.push(`/quiz/analysis/${item.id}`)
+function showExplain() {
+  showDialog({
+    title: '艾宾浩斯复习法原理',
+    message:
+      '系统根据德国心理学家艾宾浩斯遗忘曲线，在做错题目后的第 1、2、4、7、15 天自动推送复习，帮助您形成持久肌肉记忆，考前不忘！',
+  })
 }
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/mixins.scss' as *;
-
 .review-page {
   min-height: 100vh;
-  background: var(--bg-page);
-  padding-bottom: var(--space-2xl);
+  background: var(--gray-1);
+  padding-bottom: 40px;
 }
 
-.intro-card {
+.nav-bar {
+  height: 48px;
+  background: var(--gray-0);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--space-lg);
-  padding: var(--space-lg);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
-  border-radius: var(--radius-lg);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--gray-2);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+
+  .back {
+    font-size: 24px;
+    color: var(--gray-7);
+    cursor: pointer;
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-8);
+  }
+
+  .right {
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+  }
 }
 
-.intro-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.intro-icon {
-  font-size: 32px;
-  color: var(--color-primary);
-}
-
-.intro-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.intro-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.circle-text {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.tabs {
-  background: var(--bg-card);
-}
-
-.review-list {
-  padding: var(--space-lg);
+.review-content {
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 14px;
 }
 
-.review-card {
+.review-hero {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .rh-label {
+    font-size: 13px;
+    opacity: 0.9;
+  }
+
+  .rh-num {
+    font-size: 48px;
+    font-weight: 800;
+    margin: 8px 0 2px;
+    line-height: 1.1;
+  }
+
+  .rh-desc {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+
+  .rh-btn {
+    margin-top: 16px;
+    background: #fff;
+    color: #f97316;
+    border: none;
+    padding: 10px 32px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.plan-card,
+.effect-card {
+  background: var(--gray-0);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin-bottom: 14px;
+  }
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
+  gap: 12px;
+  cursor: pointer;
+
+  .pi-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+
+    &.danger {
+      background: var(--danger-bg);
+    }
+    &.warning {
+      background: var(--warning-bg);
+    }
+    &.success {
+      background: var(--success-bg);
+    }
+  }
+
+  .pi-info {
+    flex: 1;
+
+    .t {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-8);
+    }
+
+    .d {
+      font-size: 11px;
+      color: var(--gray-5);
+      margin-top: 2px;
+    }
+  }
+
+  .pi-num {
+    font-size: 20px;
+    font-weight: 800;
+
+    &.danger {
+      color: var(--danger);
+    }
+    &.warning {
+      color: var(--warning);
+    }
+    &.success {
+      color: var(--success);
+    }
+  }
 }
 
-.review-left {
-  flex: 1;
-}
-
-.review-title {
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.review-meta {
+.effect-grid {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 6px;
-}
-
-.review-right {
+  justify-content: space-around;
   text-align: center;
 
-  .interval {
-    font-size: 11px;
-    color: var(--color-primary);
-    font-weight: 600;
-    margin-bottom: 4px;
+  .eg-item {
+    .eg-num {
+      font-size: 24px;
+      font-weight: 800;
+
+      &.success {
+        color: var(--success);
+      }
+      &.primary {
+        color: var(--primary);
+      }
+      &.orange {
+        color: var(--orange);
+      }
+    }
+
+    .eg-label {
+      font-size: 11px;
+      color: var(--gray-5);
+      margin-top: 4px;
+    }
   }
 }
 </style>
