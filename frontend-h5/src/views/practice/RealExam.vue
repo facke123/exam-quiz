@@ -1,7 +1,7 @@
 <template>
   <div class="real-exam-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">历年真题</div>
       <div class="right"></div>
     </div>
@@ -53,6 +53,14 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 const currentYear = ref('全部')
 const yearList = ['全部', '2025年', '2024年', '2023年', '2022年']
 

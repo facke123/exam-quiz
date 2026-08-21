@@ -1,7 +1,7 @@
 <template>
   <div class="vip-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">会员中心</div>
       <div class="right"></div>
     </div>
@@ -93,6 +93,14 @@ import { showToast } from 'vant'
 
 const router = useRouter()
 const activePlan = ref<'month' | 'quarter' | 'year'>('quarter')
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const currentPriceText = computed(() => {
   if (activePlan.value === 'month') return '¥29'

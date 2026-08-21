@@ -1,7 +1,7 @@
 <template>
   <div class="review-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">艾宾浩斯复习</div>
       <div class="right" @click="showExplain">说明</div>
     </div>
@@ -73,6 +73,14 @@ import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 
 const router = useRouter()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 function startReview() {
   showToast('进入艾宾浩斯智能复习模式')

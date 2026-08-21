@@ -1,7 +1,7 @@
 <template>
   <div class="daily-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">每日一练</div>
       <div class="right"></div>
     </div>
@@ -54,6 +54,14 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 const now = new Date()
 const day = now.getDate()
 const month = now.getMonth() + 1

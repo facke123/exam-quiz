@@ -1,7 +1,7 @@
 <template>
   <div class="analysis-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">题目解析</div>
       <div class="right">{{ currentIndex + 1 }}/{{ totalCount }}</div>
     </div>
@@ -130,15 +130,24 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 import { getAnalysis } from '@/api/question'
 import { questionTypeText } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const currentIndex = ref(0)
 const totalCount = ref(10)
 const favorited = ref(false)
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const analysis = ref<any>(null)
 

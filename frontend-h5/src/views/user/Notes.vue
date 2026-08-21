@@ -1,7 +1,7 @@
 <template>
   <div class="notes-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">我的笔记</div>
       <div class="right"></div>
     </div>
@@ -29,7 +29,18 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { showConfirmDialog, showToast } from 'vant'
+
+const router = useRouter()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const list = ref([
   {

@@ -1,7 +1,7 @@
 <template>
   <div class="case-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">案例分析</div>
       <div class="right">{{ currentCaseIdx + 1 }}/{{ caseList.length }}</div>
     </div>
@@ -59,6 +59,14 @@ const router = useRouter()
 const currentCaseIdx = ref(0)
 const favorited = ref(false)
 const answers = ref<Record<number, string>>({})
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const caseList = ref([
   {

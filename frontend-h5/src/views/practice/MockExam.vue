@@ -1,7 +1,7 @@
 <template>
   <div class="mock-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">全真模拟考试</div>
       <div class="right"></div>
     </div>
@@ -46,6 +46,14 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const mocks = ref([
   {

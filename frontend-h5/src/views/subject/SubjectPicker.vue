@@ -1,7 +1,7 @@
 <template>
   <div class="subject-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">选择考试科目</div>
       <div class="right"></div>
     </div>
@@ -33,6 +33,14 @@ import { useSubjectStore } from '@/stores/subject'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const currentSubjectName = computed(
   () => subjectStore.currentSubject?.name || '系统集成项目管理工程师'

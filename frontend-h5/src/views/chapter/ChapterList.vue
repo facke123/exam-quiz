@@ -1,7 +1,7 @@
 <template>
   <div class="chapter-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
+      <div class="back" @click="onBack">‹</div>
       <div class="title">章节练习</div>
       <div class="right" @click="showFilter = true">筛选</div>
     </div>
@@ -48,6 +48,14 @@ import { toPercent } from '@/utils/format'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+
+function onBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
+}
 
 const showFilter = ref(false)
 const chapters = ref<Chapter[]>([])
