@@ -25,6 +25,7 @@ FROM nginx:alpine AS runner
 
 # 复制 nginx 站点配置
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx/admin.conf /etc/nginx/conf.d/default.conf
 
 # 复制构建产物到 nginx 静态目录
 COPY --from=builder /app/dist /usr/share/nginx/html/admin

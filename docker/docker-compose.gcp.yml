@@ -1,0 +1,129 @@
+version: "3.8"
+
+services:
+  # ========== MySQL 8.0 ==========
+  mysql:
+    image: mysql:8.0
+    container_name: exam-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: exam_quiz
+      MYSQL_CHARSET: utf8mb4
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+      - --innodb_buffer_pool_size=256M
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./mysql/data:/var/lib/mysql
+    networks:
+      - exam-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ========== Redis 7 ==========
+  redis:
+    image: redis:7-alpine
+    container_name: exam-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --requirepass
+      - redis123
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - ./redis/data:/data
+    networks:
+      - exam-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== NestJS 后端服务 ==========
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    image: exam-quiz/backend:latest
+    container_name: exam-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: root123
+      DB_DATABASE: exam_quiz
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123
+      JWT_SECRET: ruankao-exam-quiz-jwt-secret-production-2026
+      JWT_EXPIRES_IN: 7d
+      AI_PROVIDER: gemini
+      AI_MODEL: gemini-3.7-flash
+      AI_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - exam-network
+
+  # ========== H5 前台用户端 (Port 80) ==========
+  h5:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.h5
+    image: exam-quiz/h5:latest
+    container_name: exam-h5
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - exam-network
+
+  # ========== Admin 管理后台 (Port 81) ==========
+  admin:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.admin
+    image: exam-quiz/admin:latest
+    container_name: exam-admin
+    restart: always
+    ports:
+      - "81:81"
+    depends_on:
+      - backend
+    networks:
+      - exam-network
+
+networks:
+  exam-network:
+    name: exam-network
+    driver: bridge
