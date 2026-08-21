@@ -34,7 +34,7 @@ else
 fi
 
 # 3. Launch full stack with Docker Compose
-cd /opt/app/exam-quiz/code/docker
+cd /opt/app/exam-quiz/docker
 docker compose -f docker-compose.gcp.yml up -d --build
 
 echo "=== Google Cloud Deployment Completed Successfully ==="
