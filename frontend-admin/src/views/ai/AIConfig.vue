@@ -4,8 +4,8 @@
       <div class="hc-left">
         <div class="hc-title">🤖 AI 大模型接入与配置中心</div>
         <div class="hc-desc">
-          支持接入任何兼容 OpenAI 标准接口协议的大语言模型（如 DeepSeek、阿里通义千问、智谱 GLM、Moonshot Kimi、OpenAI 等）。
-          配置生效后，AI 智能出题、名师深度解析生成、考纲考点归纳等模块将自动调用真实大模型进行推理。
+          支持接入 <strong>Google Gemini (Google AI Studio)</strong> 及任何兼容 OpenAI 标准接口协议的大语言模型（如 DeepSeek、阿里通义千问、智谱 GLM、Moonshot Kimi 等）。
+          可前往 <a href="https://aistudio.google.com" target="_blank" class="doc-link">Google AI Studio (aistudio.google.com)</a> 免费获取 Gemini API 密钥。配置生效后，AI 智能出题、名师深度解析、考纲归纳等模块将自动进行模型推理。
         </div>
       </div>
       <div class="hc-status" :class="form.enabled === '1' || form.enabled === 1 ? 'on' : 'off'">
@@ -196,6 +196,21 @@ const testResult = ref<{
 
 // 预设主流模型提供商
 const providerPresets = [
+  {
+    key: 'gemini',
+    name: 'Google Gemini (AI Studio)',
+    icon: '💎',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    models: [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+    ],
+    defaultModel: 'gemini-2.5-flash',
+    docsUrl: 'https://aistudio.google.com/docs',
+  },
   {
     key: 'deepseek',
     name: 'DeepSeek (深度求索)',

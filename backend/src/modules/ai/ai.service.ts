@@ -367,7 +367,7 @@ export class AiService implements OnModuleInit {
   }
 
   /**
-   * 底层 HTTP/HTTPS OpenAI 兼容标准 Chat Completion 调用
+   * 底层 HTTP/HTTPS 大模型调用（支持 OpenAI 兼容接口与 Google Gemini 官方原生接口）
    */
   private async rawHttpChatCompletion(params: {
     baseUrl: string;
@@ -378,13 +378,49 @@ export class AiService implements OnModuleInit {
     temperature?: number;
   }): Promise<string> {
     return new Promise((resolve, reject) => {
-      let endpoint = params.baseUrl;
-      if (!endpoint.endsWith('/chat/completions')) {
-        if (endpoint.endsWith('/v1')) {
-          endpoint = `${endpoint}/chat/completions`;
-        } else {
+      const isGeminiNative =
+        params.baseUrl.includes('generativelanguage.googleapis.com') &&
+        !params.baseUrl.includes('/openai');
+
+      let endpoint = params.baseUrl.replace(/\/+$/, '');
+      let postData = '';
+      let headers: Record<string, string | number> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (isGeminiNative) {
+        // Google Gemini 原生 REST API (https://aistudio.google.com/docs)
+        const hasVersion = endpoint.includes('/v1') || endpoint.includes('/v1beta');
+        const apiPath = hasVersion ? endpoint : `${endpoint}/v1beta`;
+        endpoint = `${apiPath}/models/${params.model}:generateContent?key=${encodeURIComponent(params.apiKey)}`;
+        headers['x-goog-api-key'] = params.apiKey;
+
+        // 转换消息格式为 Gemini contents 结构
+        const contents = params.messages.map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+
+        postData = JSON.stringify({
+          contents,
+          generationConfig: {
+            maxOutputTokens: params.maxTokens || 2048,
+            temperature: params.temperature ?? 0.7,
+          },
+        });
+      } else {
+        // 标准 OpenAI 兼容接口（包括 Google Gemini OpenAI 兼容端点: https://generativelanguage.googleapis.com/v1beta/openai）
+        if (!endpoint.endsWith('/chat/completions')) {
           endpoint = `${endpoint}/chat/completions`;
         }
+        headers['Authorization'] = `Bearer ${params.apiKey}`;
+
+        postData = JSON.stringify({
+          model: params.model,
+          messages: params.messages,
+          max_tokens: params.maxTokens || 2048,
+          temperature: params.temperature ?? 0.7,
+        });
       }
 
       let parsedUrl: URL;
@@ -394,12 +430,7 @@ export class AiService implements OnModuleInit {
         return reject(new Error(`无效的 Base URL 格式: ${params.baseUrl}`));
       }
 
-      const postData = JSON.stringify({
-        model: params.model,
-        messages: params.messages,
-        max_tokens: params.maxTokens || 2048,
-        temperature: params.temperature ?? 0.7,
-      });
+      headers['Content-Length'] = Buffer.byteLength(postData);
 
       const isHttps = parsedUrl.protocol === 'https:';
       const client = isHttps ? https : http;
@@ -410,12 +441,8 @@ export class AiService implements OnModuleInit {
           port: parsedUrl.port || (isHttps ? 443 : 80),
           path: `${parsedUrl.pathname}${parsedUrl.search}`,
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${params.apiKey}`,
-            'Content-Length': Buffer.byteLength(postData),
-          },
-          timeout: 30000, // 30s 超时
+          headers,
+          timeout: 35000, // 35s 超时
         },
         (res) => {
           let responseData = '';
@@ -424,8 +451,17 @@ export class AiService implements OnModuleInit {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               try {
                 const json = JSON.parse(responseData);
-                const content = json.choices?.[0]?.message?.content || '';
-                resolve(content);
+                if (isGeminiNative) {
+                  // 解析 Gemini 原生响应
+                  const candidate = json.candidates?.[0];
+                  const parts = candidate?.content?.parts;
+                  const text = parts && parts.length > 0 ? parts.map((p: any) => p.text).join('') : '';
+                  resolve(text);
+                } else {
+                  // 解析 OpenAI 兼容响应
+                  const content = json.choices?.[0]?.message?.content || '';
+                  resolve(content);
+                }
               } catch (e) {
                 reject(new Error(`大模型返回非合法JSON: ${responseData.slice(0, 100)}`));
               }
@@ -450,7 +486,7 @@ export class AiService implements OnModuleInit {
       req.on('error', (err) => reject(err));
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('请求大模型 API 超时（30秒）'));
+        reject(new Error('请求大模型 API 超时（35秒）'));
       });
 
       req.write(postData);
