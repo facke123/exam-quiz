@@ -103,6 +103,7 @@ export const constantRoutes: RouteRecordRaw[] = [
   {
     path: '/user',
     component: () => import('@/layouts/AdminLayout.vue'),
+    redirect: '/user/list',
     children: [
       {
         path: 'list',
@@ -115,6 +116,7 @@ export const constantRoutes: RouteRecordRaw[] = [
   {
     path: '/stats',
     component: () => import('@/layouts/AdminLayout.vue'),
+    redirect: '/stats/overview',
     children: [
       {
         path: 'overview',
