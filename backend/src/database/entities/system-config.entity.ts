@@ -15,13 +15,14 @@ export class SystemConfig {
   id: number;
 
   @Index({ unique: true })
-  @Column({ length: 100, comment: '配置键' })
+  @Column({ name: 'config_key', length: 100, comment: '配置键' })
   key: string;
 
-  @Column({ type: 'text', comment: '配置值' })
+  @Column({ name: 'config_value', type: 'text', comment: '配置值' })
   value: string;
 
   @Column({
+    name: 'config_type',
     length: 30,
     nullable: true,
     comment: '值类型: string/number/boolean/json',

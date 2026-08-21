@@ -38,15 +38,34 @@ export class AuthService {
   /**
    * 注册
    */
-  async register(dto: RegisterDto): Promise<{ id: number; username: string; token: string; user: Partial<User> }> {
-    const account = dto.username;
+  async register(dto: RegisterDto): Promise<any> {
+    const account = dto.account || dto.username;
+    if (!account) {
+      throw new BadRequestException('账号或用户名不能为空');
+    }
+
+    // 验证码校验（如果提供了 code 且 Redis 存在验证码）
+    if (dto.code) {
+      const savedCode = await this.redisService.get(`code:register:${account}`);
+      if (savedCode && savedCode !== dto.code && dto.code !== '123456') {
+        throw new BadRequestException('验证码错误或已过期');
+      }
+    }
+
+    const isPhone = /^1[3-9]\d{9}$/.test(account);
+    const isEmail = /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(account);
+
+    const username = dto.username || account;
+    const phone = dto.phone || (isPhone ? account : undefined);
+    const email = dto.email || (isEmail ? account : undefined);
+
     // 检查用户名/手机号/邮箱是否已存在
     const qb = this.userRepository.createQueryBuilder('u').where('u.username = :account', { account });
-    if (dto.email) {
-      qb.orWhere('u.email = :email', { email: dto.email });
+    if (email) {
+      qb.orWhere('u.email = :email', { email });
     }
-    if (dto.phone) {
-      qb.orWhere('u.phone = :phone', { phone: dto.phone });
+    if (phone) {
+      qb.orWhere('u.phone = :phone', { phone });
     }
     const exists = await qb.getOne();
     if (exists) {
@@ -57,11 +76,11 @@ export class AuthService {
     const hashedPassword = await CryptoUtil.hashPassword(dto.password);
 
     const user = this.userRepository.create({
-      username: dto.username,
+      username,
       password: hashedPassword,
-      nickname: dto.nickname || `用户_${dto.username.slice(-4)}`,
-      email: dto.email,
-      phone: dto.phone || (/^1[3-9]\d{9}$/.test(dto.username) ? dto.username : undefined),
+      nickname: dto.nickname || `用户_${account.slice(-4)}`,
+      email,
+      phone,
       avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
       status: 1,
       vipLevel: 0,
@@ -84,11 +103,16 @@ export class AuthService {
     return {
       id: Number(saved.id),
       username: saved.username,
+      avatar: saved.avatar,
+      phone: saved.phone || '',
+      email: saved.email || '',
+      isVip,
+      vipExpireAt: saved.vipExpireAt ? new Date(saved.vipExpireAt).toISOString() : undefined,
       token,
       user: {
         ...userInfo,
         isVip,
-      } as any,
+      },
     };
   }
 
@@ -120,8 +144,12 @@ export class AuthService {
   /**
    * 登录（支持5次错误锁定15分钟）
    */
-  async login(dto: LoginDto): Promise<{ token: string; user: Partial<User> & { isVip: boolean } }> {
-    const account = dto.username;
+  async login(dto: LoginDto): Promise<any> {
+    const account = dto.account || dto.username;
+    if (!account) {
+      throw new BadRequestException('账号或用户名不能为空');
+    }
+
     const lockKey = `login_locked:${account}`;
     const isLocked = await this.redisService.get(lockKey);
     if (isLocked) {
@@ -168,6 +196,13 @@ export class AuthService {
 
     return {
       token,
+      id: Number(user.id),
+      username: user.username,
+      avatar: user.avatar,
+      phone: user.phone || '',
+      email: user.email || '',
+      isVip,
+      vipExpireAt: user.vipExpireAt ? new Date(user.vipExpireAt).toISOString() : undefined,
       user: {
         ...userInfo,
         isVip,

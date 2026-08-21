@@ -1,16 +1,19 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsOptional } from 'class-validator';
 
 /**
  * 注册 DTO
  */
 export class RegisterDto {
-  @ApiProperty({ description: '用户名', example: 'zhangsan' })
+  @ApiPropertyOptional({ description: '用户名', example: 'zhangsan' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: '用户名不能为空' })
-  @MinLength(3, { message: '用户名至少3个字符' })
-  @MaxLength(50, { message: '用户名最多50个字符' })
-  username: string;
+  username?: string;
+
+  @ApiPropertyOptional({ description: '账号（手机号/邮箱/用户名）', example: '13800138000' })
+  @IsOptional()
+  @IsString()
+  account?: string;
 
   @ApiProperty({ description: '密码', example: 'Pass1234' })
   @IsString()
@@ -19,18 +22,23 @@ export class RegisterDto {
   @MaxLength(50, { message: '密码最多50个字符' })
   password: string;
 
-  @ApiProperty({ description: '昵称', required: false, example: '张三' })
+  @ApiPropertyOptional({ description: '验证码', example: '123456' })
+  @IsOptional()
   @IsString()
-  @MaxLength(50, { message: '昵称最多50个字符' })
+  code?: string;
+
+  @ApiPropertyOptional({ description: '昵称', example: '张三' })
+  @IsOptional()
+  @IsString()
   nickname?: string;
 
-  @ApiProperty({ description: '邮箱', required: false, example: 'test@example.com' })
+  @ApiPropertyOptional({ description: '邮箱', example: 'test@example.com' })
+  @IsOptional()
   @IsString()
-  @Matches(/^[\w.+-]+@[\w-]+\.[\w.-]+$/, { message: '邮箱格式不正确' })
   email?: string;
 
-  @ApiProperty({ description: '手机号', required: false, example: '13800138000' })
+  @ApiPropertyOptional({ description: '手机号', example: '13800138000' })
+  @IsOptional()
   @IsString()
-  @Matches(/^1[3-9]\d{9}$/, { message: '手机号格式不正确' })
   phone?: string;
 }
