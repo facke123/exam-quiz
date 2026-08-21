@@ -87,12 +87,30 @@ export function rejectAIQuestion(id: number, reason: string) {
   })
 }
 
-// 批量审核
+// 批量审核通过
 export function batchApproveAIQuestions(ids: number[]) {
   return request({
     url: '/admin/ai/questions/batch-approve',
     method: 'post',
     data: { ids },
+  })
+}
+
+// 批量驳回
+export function batchRejectAIQuestions(ids: number[]) {
+  return request({
+    url: '/admin/ai/questions/batch-reject',
+    method: 'post',
+    data: { ids },
+  })
+}
+
+// 更新待审核题目
+export function updateAIQuestion(id: number, data: Partial<AIQuestion>) {
+  return request({
+    url: `/admin/ai/questions/${id}`,
+    method: 'put',
+    data,
   })
 }
 

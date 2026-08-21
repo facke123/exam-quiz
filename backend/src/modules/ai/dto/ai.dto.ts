@@ -14,15 +14,19 @@ export class AiGenerateQuestionDto {
   @IsNumber()
   chapterId?: number;
 
-  @ApiProperty({ description: '题型', example: 'single_choice' })
+  @ApiProperty({ description: '题型', example: 'single' })
   @IsString()
-  @IsIn(['single_choice', 'multiple_choice', 'true_false', 'case_analysis', 'subjective'])
-  type: string;
+  @IsOptional()
+  type?: string;
+
+  @ApiPropertyOptional({ description: '大模型型号', example: 'gemini-2.5-pro' })
+  @IsOptional()
+  @IsString()
+  model?: string;
 
   @ApiPropertyOptional({ description: '难度(1-5)', example: 3 })
   @IsOptional()
-  @IsNumber()
-  difficulty?: number;
+  difficulty?: number | string;
 
   @ApiPropertyOptional({ description: '知识点', example: '数据结构' })
   @IsOptional()
@@ -61,59 +65,66 @@ export class AiImportDto {
   @IsOptional()
   @IsNumber()
   chapterId?: number;
+
+  @ApiPropertyOptional({ description: '模型型号', example: 'gemini-2.5-pro' })
+  @IsOptional()
+  @IsString()
+  model?: string;
 }
 
 /**
  * 创建 Prompt 模板 DTO
  */
 export class CreatePromptDto {
-  @ApiProperty({ description: '模板名称' })
+  @ApiProperty({ description: '模板名称', example: '软考全题型命题' })
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ description: '类型: generate_question/generate_analysis/import' })
+  @ApiProperty({
+    description: '模板类型: generate_question/generate_analysis/import_parse',
+    example: 'generate_question',
+  })
   @IsString()
-  @IsIn(['generate_question', 'generate_analysis', 'import'])
+  @IsNotEmpty()
   type: string;
 
-  @ApiProperty({ description: 'Prompt 内容' })
+  @ApiProperty({ description: 'Prompt内容' })
   @IsString()
   @IsNotEmpty()
   content: string;
 
-  @ApiPropertyOptional({ description: '变量列表', type: [String] })
+  @ApiPropertyOptional({ description: '变量列表', type: 'array' })
   @IsOptional()
   @IsArray()
-  variables?: string[];
+  variables?: { name: string; description: string }[];
 
-  @ApiPropertyOptional({ description: '状态', example: 'active' })
+  @ApiPropertyOptional({ description: '状态: enabled/disabled', default: 'enabled' })
   @IsOptional()
   @IsString()
-  @IsIn(['active', 'inactive'])
   status?: string;
 }
 
 /**
- * AI 查询任务 DTO
+ * 查询 AI 任务 DTO
  */
 export class QueryAiTaskDto {
-  @ApiPropertyOptional({ description: '页码' })
+  @ApiPropertyOptional({ description: '页码', default: 1 })
   @IsOptional()
   @IsNumber()
   page?: number;
 
-  @ApiPropertyOptional({ description: '每页条数' })
+  @ApiPropertyOptional({ description: '每页数量', default: 20 })
   @IsOptional()
   @IsNumber()
   pageSize?: number;
 
-  @ApiPropertyOptional({ description: '类型' })
+  @ApiPropertyOptional({ description: '任务类型' })
   @IsOptional()
   @IsString()
   type?: string;
 
-  @ApiPropertyOptional({ description: '状态' })
+  @ApiPropertyOptional({ description: '任务状态' })
   @IsOptional()
   @IsString()
   status?: string;

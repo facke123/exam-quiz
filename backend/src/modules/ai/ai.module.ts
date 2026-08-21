@@ -5,12 +5,14 @@ import { AiService } from './ai.service';
 import { AiTask } from '@/database/entities/ai-task.entity';
 import { AiPrompt } from '@/database/entities/ai-prompt.entity';
 import { Question } from '@/database/entities/question.entity';
+import { Subject } from '@/database/entities/subject.entity';
+import { Chapter } from '@/database/entities/chapter.entity';
 
 /**
  * AI 模块
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([AiTask, AiPrompt, Question])],
+  imports: [TypeOrmModule.forFeature([AiTask, AiPrompt, Question, Subject, Chapter])],
   controllers: [AiController],
   providers: [AiService],
   exports: [AiService],

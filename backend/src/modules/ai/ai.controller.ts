@@ -42,28 +42,41 @@ export class AiController {
   @Get(['admin/ai/questions'])
   @ApiOperation({ summary: '待审核题目列表' })
   async getAIQuestions(@Query() query: any) {
-    return {
-      list: [],
-      total: 0,
-    };
+    return this.aiService.getAIQuestions(query);
   }
 
   @Post(['admin/ai/questions/:id/approve'])
   @ApiOperation({ summary: '审核题目通过' })
   async approveAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+    await this.aiService.approveAIQuestion(id, data);
     return { message: '审核通过' };
   }
 
   @Post(['admin/ai/questions/:id/reject'])
   @ApiOperation({ summary: '驳回题目' })
-  async rejectAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+  async rejectAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data?: any) {
+    await this.aiService.rejectAIQuestion(id, data?.reason);
     return { message: '已驳回' };
+  }
+
+  @Put(['admin/ai/questions/:id'])
+  @ApiOperation({ summary: '修改待审题目' })
+  async updateAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+    return this.aiService.updateAIQuestion(id, data);
   }
 
   @Post(['admin/ai/questions/batch-approve'])
   @ApiOperation({ summary: '批量审核题目通过' })
   async batchApproveAIQuestions(@Body() data: { ids: number[] }) {
+    await this.aiService.batchApproveAIQuestions(data.ids);
     return { message: '批量审核通过' };
+  }
+
+  @Post(['admin/ai/questions/batch-reject'])
+  @ApiOperation({ summary: '批量驳回题目' })
+  async batchRejectAIQuestions(@Body() data: { ids: number[] }) {
+    await this.aiService.batchRejectAIQuestions(data.ids);
+    return { message: '批量驳回成功' };
   }
 
   @Post(['ai/review/:questionId'])

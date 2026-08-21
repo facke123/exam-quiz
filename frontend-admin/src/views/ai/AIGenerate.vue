@@ -3,14 +3,16 @@
     <!-- 顶部出题控制台 -->
     <div class="panel generate-panel">
       <div class="panel-title">
-        <span>🤖 AI 命题引擎配置</span>
-        <span class="quota-info">今日模型调用剩余配额：<strong>4,850</strong> / 5,000次</span>
+        <span>🤖 AI 智能命题引擎控制台</span>
+        <span class="quota-info">
+          今日模型配额：<strong>{{ quota.used }}</strong> / {{ quota.total }} 次（剩余 <strong>{{ quota.remaining }}</strong> 次）
+        </span>
       </div>
 
       <div class="generate-form-grid">
         <div class="form-item">
           <span class="label">基座大模型：</span>
-          <el-select v-model="generateForm.model" style="width: 160px">
+          <el-select v-model="generateForm.model" style="width: 170px">
             <el-option label="Gemini 2.5 Pro (推荐)" value="gemini-2.5-pro" />
             <el-option label="GPT-4o" value="gpt-4o" />
             <el-option label="Claude 3.5 Sonnet" value="claude-3.5" />
@@ -20,7 +22,7 @@
 
         <div class="form-item">
           <span class="label">目标科目：</span>
-          <el-select v-model="generateForm.subjectId" style="width: 200px" @change="loadChapters">
+          <el-select v-model="generateForm.subjectId" style="width: 220px" @change="loadChapters">
             <el-option
               v-for="s in subjects"
               :key="s.value"
@@ -32,7 +34,7 @@
 
         <div class="form-item">
           <span class="label">核心章节：</span>
-          <el-select v-model="generateForm.chapterId" placeholder="全部章节/重点" style="width: 180px">
+          <el-select v-model="generateForm.chapterId" placeholder="指定章节/知识点" style="width: 200px">
             <el-option
               v-for="c in chapterOptions"
               :key="c.id"
@@ -54,12 +56,12 @@
 
         <div class="form-item">
           <span class="label">生成数量：</span>
-          <el-input-number v-model="generateForm.count" :min="1" :max="20" style="width: 120px" />
+          <el-input-number v-model="generateForm.count" :min="1" :max="10" style="width: 120px" />
         </div>
 
         <div class="form-item action-item">
           <el-button type="primary" :loading="generateLoading" @click="handleGenerate">
-            ⚡ 一键开始生成题目
+            ⚡ 一键开始智能命题
           </el-button>
         </div>
       </div>
@@ -69,8 +71,8 @@
     <div class="panel table-panel">
       <div class="table-toolbar">
         <div class="tt-left">
-          <span class="tt-title">📋 待审核题目（{{ total }}道）</span>
-          <span class="tt-desc">由 AI 命题生成的试题需人工核验答案与解析后方可上架</span>
+          <span class="tt-title">📋 待审核 AI 题目（共 {{ total }} 道）</span>
+          <span class="tt-desc">由 AI 命题生成的试题将写入待审池，经教研核验通过后直接入库上架</span>
         </div>
         <div class="tt-right">
           <el-button
@@ -78,7 +80,7 @@
             :disabled="!selectedRows.length"
             @click="handleBatchApprove"
           >
-            ✓ 批量审核通过 ({{ selectedRows.length }})
+            ✓ 批量审核入库 ({{ selectedRows.length }})
           </el-button>
           <el-button
             type="danger"
@@ -100,7 +102,7 @@
         <el-table-column type="selection" width="45" align="center" />
         <el-table-column prop="id" label="ID" width="70" align="center" />
 
-        <el-table-column label="题型" width="90">
+        <el-table-column label="题型" width="90" align="center">
           <template #default="{ row }">
             <span class="type-tag" :class="row.type">
               {{ typeMap[row.type] || row.type }}
@@ -108,22 +110,34 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="题干与选项预览" min-width="280">
+        <el-table-column label="题干与选项 / 解析内容" min-width="320">
           <template #default="{ row }">
             <div class="stem-content">
               <div class="stem-title">{{ row.title || row.content }}</div>
-              <div class="stem-ans">答案：<strong>{{ row.answer }}</strong> ｜ 解析：{{ row.analysis }}</div>
+              <div v-if="row.options && row.options.length" class="options-preview">
+                <span v-for="opt in row.options" :key="opt.key" class="opt-snippet">
+                  <strong>{{ opt.key }}.</strong> {{ opt.content }}
+                </span>
+              </div>
+              <div class="stem-ans">
+                <span class="ans-label">正确答案：</span><strong class="ans-val">{{ row.answer }}</strong>
+                <span class="ans-sep">｜</span>
+                <span class="ans-analysis">{{ row.analysis }}</span>
+              </div>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="knowledgePoint" label="知识点 / 考点" width="160">
+        <el-table-column label="科目 / 章节" width="180">
           <template #default="{ row }">
-            <span class="kp-badge">{{ row.knowledgePoint || '项目范围管理' }}</span>
+            <div class="sub-info">
+              <div class="sub-name">{{ row.subjectName || '系统集成项目管理' }}</div>
+              <div class="ch-name">{{ row.chapterName || row.knowledgePoint || '第1章' }}</div>
+            </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="AI 置信度" width="130">
+        <el-table-column label="AI 置信度" width="130" align="center">
           <template #default="{ row }">
             <div class="confidence-wrap">
               <div class="conf-bar">
@@ -140,42 +154,94 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="createdAt" label="生成时间" width="150" align="center" />
+        <el-table-column prop="createdAt" label="生成时间" width="160" align="center" />
 
         <el-table-column label="操作" width="180" fixed="right" align="center">
           <template #default="{ row }">
             <div class="table-ops">
               <span class="op-link pass" @click="handlePass(row)">通过入库</span>
-              <span class="op-link edit" @click="handleEdit(row)">修改</span>
+              <span class="op-link edit" @click="openEditDialog(row)">修改</span>
               <span class="op-link reject" @click="handleReject(row)">驳回</span>
             </div>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页组件 -->
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="query.page"
+          v-model:page-size="query.pageSize"
+          :total="total"
+          layout="total, prev, pager, next"
+          @change="fetchReviewList"
+        />
+      </div>
     </div>
+
+    <!-- 编辑待审核试题弹窗 -->
+    <el-dialog v-model="editDialogVisible" title="编辑待审核试题" width="650px">
+      <el-form :model="editForm" label-width="90px">
+        <el-form-item label="题干内容" required>
+          <el-input v-model="editForm.content" type="textarea" :rows="3" placeholder="请输入题干描述" />
+        </el-form-item>
+        <el-form-item label="正确答案" required>
+          <el-input v-model="editForm.answer" placeholder="如 A 或 ABCD" />
+        </el-form-item>
+        <el-form-item label="解析内容">
+          <el-input v-model="editForm.analysis" type="textarea" :rows="3" placeholder="官方解析" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEdit">保存修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getAIQuestionList,
+  generateQuestions,
+  approveAIQuestion,
+  rejectAIQuestion,
+  batchApproveAIQuestions,
+  batchRejectAIQuestions,
+  updateAIQuestion,
+  getAIQuota,
+} from '@/api/ai'
 import { getAllSubjects, getChapterTree } from '@/api/exam'
 
 const loading = ref(false)
 const generateLoading = ref(false)
 const list = ref<any[]>([])
-const total = ref(12)
+const total = ref(0)
 const selectedRows = ref<any[]>([])
+
+const quota = reactive({
+  total: 5000,
+  used: 150,
+  remaining: 4850,
+})
+
+const query = reactive({
+  page: 1,
+  pageSize: 10,
+  subjectId: undefined as any,
+})
 
 const subjects = ref<{ label: string; value: number }[]>([])
 const chapterOptions = ref<any[]>([])
 
-const generateForm = reactive({
+const generateForm = reactive<any>({
   model: 'gemini-2.5-pro',
   subjectId: 1,
   chapterId: 1,
   type: 'single',
-  count: 5,
+  count: 3,
 })
 
 const typeMap: Record<string, string> = {
@@ -185,11 +251,23 @@ const typeMap: Record<string, string> = {
   case: '案例',
 }
 
+const editDialogVisible = ref(false)
+const editForm = reactive<any>({
+  id: 0,
+  content: '',
+  answer: '',
+  analysis: '',
+})
+
 async function loadSubjects() {
   try {
     const res = await getAllSubjects()
     if (res?.data) {
       subjects.value = res.data.map((s: any) => ({ label: s.name, value: Number(s.id) }))
+      if (subjects.value.length > 0) {
+        generateForm.subjectId = subjects.value[0].value
+        loadChapters(subjects.value[0].value)
+      }
     }
   } catch {
     subjects.value = [
@@ -199,112 +277,137 @@ async function loadSubjects() {
   }
 }
 
-async function loadChapters() {
+async function loadChapters(subjectId: number) {
   try {
-    const res = await getChapterTree(generateForm.subjectId)
-    if (res?.data) {
+    const res = await getChapterTree(subjectId)
+    if (res?.data && res.data.length > 0) {
       chapterOptions.value = res.data
+      generateForm.chapterId = res.data[0].id
     }
   } catch {
     chapterOptions.value = [
       { id: 1, name: '第1章 信息化与发展' },
       { id: 2, name: '第6章 项目整体管理' },
-      { id: 3, name: '第7章 项目范围管理' },
     ]
   }
 }
 
-function fetchReviewList() {
-  loading.value = true
-  setTimeout(() => {
-    list.value = [
-      {
-        id: 201,
-        type: 'single',
-        title: '关于敏捷项目管理中的每日站会（Daily Scrum），以下说法正确的是？',
-        answer: 'B',
-        analysis: '每日站会通常严格控制在15分钟以内，由开发团队成员轮流同步昨天完成、今天计划及遇到的阻碍。',
-        knowledgePoint: '敏捷项目管理方法',
-        confidence: 98,
-        createdAt: '10分钟前',
-      },
-      {
-        id: 202,
-        type: 'multiple',
-        title: '在项目成本控制中，出现挣值（EV）小于计划价值（PV）通常意味着？',
-        answer: 'AC',
-        analysis: 'EV < PV 说明当前实际进度落后于计划进度（进度偏差 SV = EV - PV < 0）。',
-        knowledgePoint: '挣值分析法 (EVM)',
-        confidence: 92,
-        createdAt: '25分钟前',
-      },
-      {
-        id: 203,
-        type: 'case',
-        title: '【案例分析】某金融集成项目在上线前一周发现重大性能瓶颈...',
-        answer: '参考要点',
-        analysis: '应立即启动紧急变更评审，评估对上线里程碑及业务连续性的影响。',
-        knowledgePoint: '项目变更控制委员会 (CCB)',
-        confidence: 86,
-        createdAt: '1小时前',
-      },
-    ]
-    total.value = 12
-    loading.value = false
-  }, 300)
+async function fetchQuota() {
+  try {
+    const res = await getAIQuota()
+    if (res?.data) {
+      quota.total = res.data.total
+      quota.used = res.data.used
+      quota.remaining = res.data.remaining
+    }
+  } catch {
+    // ignore
+  }
 }
 
-function handleGenerate() {
+async function fetchReviewList() {
+  loading.value = true
+  try {
+    const res = await getAIQuestionList(query)
+    if (res?.data) {
+      list.value = res.data.list || []
+      total.value = res.data.total || 0
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取待审核题目失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleGenerate() {
   generateLoading.value = true
-  setTimeout(() => {
-    generateLoading.value = false
-    ElMessage.success('AI 已完成生成 5 道全新题目，已加入待审核列表！')
+  try {
+    const res = await generateQuestions(generateForm)
+    ElMessage.success(`AI 命题完成！已成功生成并在待审池载入题目`)
+    fetchQuota()
     fetchReviewList()
-  }, 1200)
+  } catch (err: any) {
+    ElMessage.error(err.message || 'AI 出题请求失败')
+  } finally {
+    generateLoading.value = false
+  }
 }
 
 function onSelectionChange(rows: any[]) {
   selectedRows.value = rows
 }
 
-function handlePass(row: any) {
-  ElMessage.success(`题目 [ID: ${row.id}] 审核通过并入库发布！`)
-  list.value = list.value.filter((i) => i.id !== row.id)
-  total.value = Math.max(0, total.value - 1)
+async function handlePass(row: any) {
+  try {
+    await approveAIQuestion(row.id)
+    ElMessage.success(`题目 [ID: ${row.id}] 审核通过并正式上架题库！`)
+    fetchReviewList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '审核操作失败')
+  }
 }
 
-function handleEdit(row: any) {
-  ElMessageBox.prompt('修改题干与答案', `编辑题目 [ID: ${row.id}]`, {
-    inputValue: row.title,
-  }).then(({ value }) => {
-    row.title = value
+function openEditDialog(row: any) {
+  editForm.id = row.id
+  editForm.content = row.content || row.title
+  editForm.answer = row.answer
+  editForm.analysis = row.analysis
+  editDialogVisible.value = true
+}
+
+async function submitEdit() {
+  try {
+    await updateAIQuestion(editForm.id, editForm)
     ElMessage.success('已保存修改')
-  })
+    editDialogVisible.value = false
+    fetchReviewList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '保存失败')
+  }
 }
 
-function handleReject(row: any) {
-  ElMessage.warning(`题目 [ID: ${row.id}] 已驳回丢弃`)
-  list.value = list.value.filter((i) => i.id !== row.id)
-  total.value = Math.max(0, total.value - 1)
+async function handleReject(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定驳回并丢弃题目 [ID: ${row.id}] 吗？`, '驳回确认', {
+      type: 'warning',
+    })
+    await rejectAIQuestion(row.id, '人工核验不符合标准')
+    ElMessage.warning(`题目 [ID: ${row.id}] 已驳回`)
+    fetchReviewList()
+  } catch {
+    // cancel
+  }
 }
 
-function handleBatchApprove() {
-  ElMessage.success(`已批量审核通过 ${selectedRows.value.length} 道题目！`)
+async function handleBatchApprove() {
   const ids = selectedRows.value.map((r) => r.id)
-  list.value = list.value.filter((i) => !ids.includes(i.id))
-  total.value = Math.max(0, total.value - ids.length)
+  try {
+    await batchApproveAIQuestions(ids)
+    ElMessage.success(`已批量审核通过 ${ids.length} 道题目并入库！`)
+    fetchReviewList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '批量审核失败')
+  }
 }
 
-function handleBatchReject() {
-  ElMessage.warning(`已批量驳回 ${selectedRows.value.length} 道题目`)
+async function handleBatchReject() {
   const ids = selectedRows.value.map((r) => r.id)
-  list.value = list.value.filter((i) => !ids.includes(i.id))
-  total.value = Math.max(0, total.value - ids.length)
+  try {
+    await ElMessageBox.confirm(`确定批量驳回选中的 ${ids.length} 道题目吗？`, '批量驳回确认', {
+      type: 'warning',
+    })
+    await batchRejectAIQuestions(ids)
+    ElMessage.warning(`已批量驳回 ${ids.length} 道题目`)
+    fetchReviewList()
+  } catch {
+    // cancel
+  }
 }
 
 onMounted(() => {
   loadSubjects()
-  loadChapters()
+  fetchQuota()
   fetchReviewList()
 })
 </script>
@@ -368,6 +471,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 
   .tt-left {
     .tt-title {
@@ -426,22 +531,62 @@ onMounted(() => {
     font-size: 13px;
     font-weight: 600;
     color: var(--gray-8);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    line-height: 1.5;
+  }
+
+  .options-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 6px;
+
+    .opt-snippet {
+      font-size: 12px;
+      color: var(--gray-7);
+      background: var(--gray-1);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
   }
 
   .stem-ans {
     font-size: 12px;
     color: var(--gray-6);
-    line-height: 1.4;
+    line-height: 1.5;
+
+    .ans-label {
+      font-weight: 600;
+      color: var(--gray-7);
+    }
+
+    .ans-val {
+      color: var(--primary);
+      font-size: 13px;
+    }
+
+    .ans-sep {
+      margin: 0 6px;
+      color: var(--gray-3);
+    }
+
+    .ans-analysis {
+      color: var(--gray-6);
+    }
   }
 }
 
-.kp-badge {
-  font-size: 12px;
-  background: #f1f5f9;
-  color: #475569;
-  padding: 2px 8px;
-  border-radius: 4px;
+.sub-info {
+  .sub-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-8);
+  }
+  .ch-name {
+    font-size: 11px;
+    color: var(--gray-5);
+    margin-top: 2px;
+  }
 }
 
 .confidence-wrap {
@@ -494,5 +639,11 @@ onMounted(() => {
       text-decoration: underline;
     }
   }
+}
+
+.table-pagination {
+  padding: 14px 0 0;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>
