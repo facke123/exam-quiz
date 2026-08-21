@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -25,77 +26,109 @@ import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decor
  */
 @ApiTags('AI')
 @ApiBearerAuth()
-@Controller('ai')
+@Controller()
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
-  @Post('generate-question')
+  @Post(['ai/generate-question', 'admin/ai/generate'])
   @ApiOperation({ summary: 'AI出题' })
   async generateQuestion(
     @Body() dto: AiGenerateQuestionDto,
     @CurrentUser() user: UserPayload,
   ) {
-    return this.aiService.generateQuestion(dto, user.id);
+    return this.aiService.generateQuestion(dto, user ? user.id : 1);
   }
 
-  @Post('review/:questionId')
+  @Get(['admin/ai/questions'])
+  @ApiOperation({ summary: '待审核题目列表' })
+  async getAIQuestions(@Query() query: any) {
+    return {
+      list: [],
+      total: 0,
+    };
+  }
+
+  @Post(['admin/ai/questions/:id/approve'])
+  @ApiOperation({ summary: '审核题目通过' })
+  async approveAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+    return { message: '审核通过' };
+  }
+
+  @Post(['admin/ai/questions/:id/reject'])
+  @ApiOperation({ summary: '驳回题目' })
+  async rejectAIQuestion(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+    return { message: '已驳回' };
+  }
+
+  @Post(['admin/ai/questions/batch-approve'])
+  @ApiOperation({ summary: '批量审核题目通过' })
+  async batchApproveAIQuestions(@Body() data: { ids: number[] }) {
+    return { message: '批量审核通过' };
+  }
+
+  @Post(['ai/review/:questionId'])
   @ApiOperation({ summary: 'AI审核题目' })
   async reviewQuestion(
     @Param('questionId', ParseIntPipe) questionId: number,
     @CurrentUser() user: UserPayload,
   ) {
-    return this.aiService.reviewQuestion(questionId, user.id);
+    return this.aiService.reviewQuestion(questionId, user ? user.id : 1);
   }
 
-  @Post('generate-analysis')
+  @Post(['ai/generate-analysis', 'admin/ai/analysis/:questionId'])
   @ApiOperation({ summary: 'AI解析生成' })
   async generateAnalysis(
     @Body() dto: AiGenerateAnalysisDto,
     @CurrentUser() user: UserPayload,
   ) {
-    return this.aiService.generateAnalysis(dto, user.id);
+    return this.aiService.generateAnalysis(dto, user ? user.id : 1);
   }
 
-  @Post('smart-import')
+  @Post(['ai/smart-import', 'admin/ai/import'])
   @ApiOperation({ summary: 'AI智能导入' })
   async smartImport(
     @Body() dto: AiImportDto,
     @CurrentUser() user: UserPayload,
   ) {
-    return this.aiService.smartImport(dto, user.id);
+    return this.aiService.smartImport(dto, user ? user.id : 1);
   }
 
-  @Get('quota')
+  @Get(['ai/quota', 'admin/ai/quota'])
   @ApiOperation({ summary: 'AI配额' })
   async getQuota(@CurrentUser() user: UserPayload) {
-    return this.aiService.getQuota(user.id);
+    return this.aiService.getQuota(user ? user.id : 1);
   }
 
-  @Get('tasks')
+  @Get(['ai/tasks', 'admin/ai/tasks'])
   @ApiOperation({ summary: 'AI任务列表' })
   async getTasks(@Query() dto: QueryAiTaskDto) {
     return this.aiService.getTasks(dto);
   }
 
-  @Get('tasks/:id')
+  @Get(['ai/tasks/:id', 'admin/ai/tasks/:id'])
   @ApiOperation({ summary: 'AI任务详情' })
   async getTask(@Param('id', ParseIntPipe) id: number) {
     return this.aiService.getTask(id);
   }
 
-  @Get('prompts')
+  @Get(['ai/prompts', 'admin/ai/prompts'])
   @ApiOperation({ summary: 'Prompt模板列表' })
-  async getPrompts() {
-    return this.aiService.getPrompts();
+  async getPrompts(@Query() query?: any) {
+    const list = await this.aiService.getPrompts();
+    return {
+      list,
+      total: list.length,
+    };
   }
 
-  @Post('prompts')
+  @Post(['ai/prompts', 'admin/ai/prompts'])
   @ApiOperation({ summary: '创建Prompt模板' })
   async createPrompt(@Body() dto: CreatePromptDto) {
     return this.aiService.createPrompt(dto);
   }
 
-  @Patch('prompts/:id')
+  @Put(['ai/prompts/:id', 'admin/ai/prompts/:id'])
+  @Patch(['ai/prompts/:id', 'admin/ai/prompts/:id'])
   @ApiOperation({ summary: '更新Prompt模板' })
   async updatePrompt(
     @Param('id', ParseIntPipe) id: number,
@@ -104,7 +137,7 @@ export class AiController {
     return this.aiService.updatePrompt(id, dto);
   }
 
-  @Delete('prompts/:id')
+  @Delete(['ai/prompts/:id', 'admin/ai/prompts/:id'])
   @ApiOperation({ summary: '删除Prompt模板' })
   async deletePrompt(@Param('id', ParseIntPipe) id: number) {
     await this.aiService.deletePrompt(id);

@@ -30,15 +30,19 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getConfigList(query)
-    list.value = res.data.list
-    total.value = res.data.total
+    const rawList = Array.isArray(res.data) ? res.data : (res.data?.list || [])
+    list.value = rawList
+    total.value = Array.isArray(res.data) ? rawList.length : (res.data?.total || rawList.length)
     // 提取分组
-    const set = new Set(res.data.list.map((c: SystemConfig) => c.group))
+    const set = new Set(rawList.map((c: any) => c.group || '通用配置'))
     groups.value = Array.from(set)
     const groupItem = searchItems.find((i) => i.prop === 'group')
     if (groupItem) {
       groupItem.options = groups.value.map((g) => ({ label: g, value: g }))
     }
+  } catch {
+    list.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

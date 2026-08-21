@@ -220,7 +220,8 @@ export class AdminController {
   @Get('configs')
   @ApiOperation({ summary: '系统配置列表' })
   async getConfigs() {
-    return this.adminService.getConfigs();
+    const configs = await this.adminService.getConfigs();
+    return { list: configs, total: configs.length };
   }
 
   @Get('configs/:key')
