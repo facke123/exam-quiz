@@ -40,6 +40,10 @@ export class CreateSubjectDto {
   @IsOptional()
   @IsNumber()
   sort?: number;
+
+  @ApiPropertyOptional({ description: '状态' })
+  @IsOptional()
+  status?: string | number;
 }
 
 /**
@@ -103,14 +107,15 @@ export class CreatePaperDto {
   @IsInt()
   year?: number;
 
-  @ApiProperty({ description: '类型: real/mock/practice' })
+  @ApiPropertyOptional({ description: '类型: real/mock/practice' })
+  @IsOptional()
   @IsString()
-  @IsIn(['real', 'mock', 'practice'])
-  type: string;
+  type?: string;
 
-  @ApiProperty({ description: '时长（分钟）' })
+  @ApiPropertyOptional({ description: '时长（分钟）' })
+  @IsOptional()
   @IsNumber()
-  duration: number;
+  duration?: number;
 
   @ApiPropertyOptional({ description: '总分', example: 100 })
   @IsOptional()
@@ -121,6 +126,10 @@ export class CreatePaperDto {
   @IsOptional()
   @IsArray()
   questionIds?: number[];
+
+  @ApiPropertyOptional({ description: '状态' })
+  @IsOptional()
+  status?: string | number;
 }
 
 /**
