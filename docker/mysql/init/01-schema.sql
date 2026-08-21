@@ -160,6 +160,8 @@ CREATE TABLE IF NOT EXISTS practice_records (
   status ENUM('ongoing','completed','abandoned') DEFAULT 'ongoing',
   started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   submitted_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_user_mode (user_id, mode),
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='做题记录表';

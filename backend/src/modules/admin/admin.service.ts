@@ -92,7 +92,8 @@ export class AdminService {
           },
         ];
         for (const da of defaultAdmins) {
-          const hash = await CryptoUtil.hashPassword('admin123');
+          const defaultPass = da.username === 'admin' ? 'fingal123.' : 'admin123';
+          const hash = await CryptoUtil.hashPassword(defaultPass);
           const item = this.adminRepository.create({
             username: da.username,
             password: hash,
@@ -105,9 +106,9 @@ export class AdminService {
       } else {
         let admin = await this.adminRepository.findOne({ where: { username: 'admin' } });
         if (admin) {
-          const isMatch = await CryptoUtil.comparePassword('admin123', admin.password);
+          const isMatch = await CryptoUtil.comparePassword('fingal123.', admin.password);
           if (!isMatch) {
-            admin.password = await CryptoUtil.hashPassword('admin123');
+            admin.password = await CryptoUtil.hashPassword('fingal123.');
             await this.adminRepository.save(admin);
           }
         }
