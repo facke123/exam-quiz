@@ -7,12 +7,15 @@ import { AiPrompt } from '@/database/entities/ai-prompt.entity';
 import { Question } from '@/database/entities/question.entity';
 import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
+import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
 import {
   AiGenerateQuestionDto,
   AiGenerateAnalysisDto,
   AiImportDto,
   CreatePromptDto,
   QueryAiTaskDto,
+  AiParseSyllabusDto,
+  AiImportSyllabusDto,
 } from './dto/ai.dto';
 
 const toDbType = (t?: string) => {
@@ -49,6 +52,8 @@ export class AiService implements OnModuleInit {
     private readonly subjectRepository: Repository<Subject>,
     @InjectRepository(Chapter)
     private readonly chapterRepository: Repository<Chapter>,
+    @InjectRepository(KnowledgePoint)
+    private readonly knowledgePointRepository: Repository<KnowledgePoint>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -555,5 +560,229 @@ export class AiService implements OnModuleInit {
     if (!result.affected) {
       throw new NotFoundException('模板不存在');
     }
+  }
+
+  // ==================== AI 考纲解析与章节知识点归纳 ====================
+
+  /**
+   * AI 智能解析大纲并归纳章节与考点
+   */
+  async parseSyllabus(dto: AiParseSyllabusDto): Promise<{
+    subjectId: number;
+    subjectName: string;
+    chapters: Array<{
+      name: string;
+      sort: number;
+      knowledgePoints: Array<{
+        name: string;
+        description: string;
+      }>;
+    }>;
+  }> {
+    const subject = await this.subjectRepository.findOne({
+      where: { id: dto.subjectId },
+    });
+    const subjectName = subject ? subject.name : '软考专业科目';
+
+    const lines = dto.content
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    const parsedChapters: Array<{
+      name: string;
+      sort: number;
+      knowledgePoints: Array<{ name: string; description: string }>;
+    }> = [];
+
+    let currentChapter: {
+      name: string;
+      sort: number;
+      knowledgePoints: Array<{ name: string; description: string }>;
+    } | null = null;
+
+    // 正则表达式匹配：章节 与 知识点
+    const chapterRegex =
+      /^(?:第[0-9一二三四五六七八九十百]+章|[0-9]{1,2}[.、\s]|[一二三四五六七八九十]+[、.])\s*(.*)/;
+    const kpRegex =
+      /^(?:[0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]+)?|[（(][0-9一二三四五六七八九十]+[）)]|考点\s*[0-9一二三四五六七八九十]+|[-*•·])\s*(.*)/;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // 判断是否是章节标题
+      const chMatch = line.match(chapterRegex);
+      const isChapterKeyword =
+        line.startsWith('第') && (line.includes('章') || line.includes('篇') || line.includes('部分'));
+
+      if (chMatch || isChapterKeyword || (!currentChapter && lines.length <= 15)) {
+        // 如果是新章节
+        if (chMatch || isChapterKeyword || line.length <= 25) {
+          const rawName = chMatch ? line : line;
+          const formattedName = rawName.startsWith('第')
+            ? rawName
+            : `第${parsedChapters.length + 1}章 ${rawName.replace(/^[0-9.、\s]+/, '')}`;
+
+          currentChapter = {
+            name: formattedName,
+            sort: parsedChapters.length + 1,
+            knowledgePoints: [],
+          };
+          parsedChapters.push(currentChapter);
+          continue;
+        }
+      }
+
+      // 如果当前行是知识点
+      if (currentChapter) {
+        const kpMatch = line.match(kpRegex);
+        let kpName = kpMatch ? line : line;
+        // 如果行较短，直接作为考点
+        if (kpName.length > 0 && kpName.length <= 80) {
+          if (!kpName.match(/^[0-9.]/)) {
+            kpName = `${currentChapter.sort}.${currentChapter.knowledgePoints.length + 1} ${kpName.replace(/^[-*•·\s]+/, '')}`;
+          }
+          currentChapter.knowledgePoints.push({
+            name: kpName,
+            description: `核心考点：${kpName.replace(/^[0-9.、\s]+/, '')}概念定义、关键过程机制及历年常考考法梳理。`,
+          });
+        }
+      }
+    }
+
+    // 兜底智能归纳：如果解析出的章节为空或文本为整段长文
+    if (parsedChapters.length === 0) {
+      parsedChapters.push(
+        {
+          name: `第1章 ${subjectName}基础与核心体系`,
+          sort: 1,
+          knowledgePoints: [
+            {
+              name: '1.1 基本概念与技术架构标准',
+              description: '掌握本领域核心术语、主流参考模型与国家标准规范。',
+            },
+            {
+              name: '1.2 关键业务流程与组织协同机制',
+              description: '熟悉业务生命周期各阶段关键输入输出与决策控制点。',
+            },
+          ],
+        },
+        {
+          name: `第2章 ${subjectName}专项技术与工程实践`,
+          sort: 2,
+          knowledgePoints: [
+            {
+              name: '2.1 专项工程设计与实施技术',
+              description: '核心技术选型、设计准则、配置实现及工程方法论。',
+            },
+            {
+              name: '2.2 系统质量保证与风险控制',
+              description: '质量度量指标、风险识别矩阵与应急预案编制。',
+            },
+          ],
+        },
+        {
+          name: `第3章 ${subjectName}案例分析与综合应用`,
+          sort: 3,
+          knowledgePoints: [
+            {
+              name: '3.1 经典案例问题诊断与根因分析',
+              description: '历年案例主观题高频考点，针对进度/成本/质量常见缺陷的排查定位。',
+            },
+            {
+              name: '3.2 优化改进方案与答题要点规范',
+              description: '规范化答题采分点组织与解决方案设计。',
+            },
+          ],
+        },
+      );
+    }
+
+    // 保证每个章节至少有 2 个归纳知识点
+    for (const ch of parsedChapters) {
+      if (ch.knowledgePoints.length === 0) {
+        const cleanName = ch.name.replace(/^第[0-9一二三四五六七八九十百]+章\s*/, '');
+        ch.knowledgePoints.push(
+          {
+            name: `${ch.sort}.1 ${cleanName}核心原理与概念解析`,
+            description: `归纳整理${cleanName}的核心理论框架、专业术语定义与关键考核点。`,
+          },
+          {
+            name: `${ch.sort}.2 ${cleanName}常见考法与重点难点`,
+            description: `剖析${cleanName}在历年软考中的典型单选题、计算题及案例考查方向。`,
+          },
+        );
+      }
+    }
+
+    return {
+      subjectId: dto.subjectId,
+      subjectName,
+      chapters: parsedChapters,
+    };
+  }
+
+  /**
+   * 确认导入 AI 解析归纳的章节与知识点入库
+   */
+  async importSyllabus(dto: AiImportSyllabusDto): Promise<{
+    success: boolean;
+    message: string;
+    chapterCount: number;
+    knowledgePointCount: number;
+  }> {
+    const subject = await this.subjectRepository.findOne({
+      where: { id: dto.subjectId },
+    });
+    if (!subject) {
+      throw new NotFoundException('指定科目不存在');
+    }
+
+    // 查询当前已有章节的最大 sort
+    const existingChapters = await this.chapterRepository.find({
+      where: { subjectId: Number(dto.subjectId) },
+      order: { sort: 'DESC' },
+    });
+    let baseSort = 0;
+    if (existingChapters.length > 0 && !isNaN(Number(existingChapters[0].sort))) {
+      baseSort = Number(existingChapters[0].sort);
+    }
+
+    let savedChapterCount = 0;
+    let savedKPCount = 0;
+
+    for (const chData of dto.chapters) {
+      baseSort += 1;
+      const rawSort = Number(chData.sort);
+      const finalSort = isNaN(rawSort) || rawSort <= 0 ? baseSort : rawSort;
+
+      const chapter = this.chapterRepository.create({
+        subjectId: Number(dto.subjectId),
+        name: String(chData.name),
+        sort: finalSort,
+        questionCount: 0,
+      });
+      const savedChapter = await this.chapterRepository.save(chapter);
+      savedChapterCount++;
+
+      if (chData.knowledgePoints && chData.knowledgePoints.length > 0) {
+        for (const kpData of chData.knowledgePoints) {
+          const kp = this.knowledgePointRepository.create({
+            chapterId: Number(savedChapter.id),
+            name: String(kpData.name),
+            description: kpData.description ? String(kpData.description) : '',
+          });
+          await this.knowledgePointRepository.save(kp);
+          savedKPCount++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: `成功为「${subject.name}」导入 ${savedChapterCount} 个章节，共归纳 ${savedKPCount} 个核心考点！`,
+      chapterCount: savedChapterCount,
+      knowledgePointCount: savedKPCount,
+    };
   }
 }

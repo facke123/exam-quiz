@@ -44,6 +44,7 @@ declare module 'vue' {
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ElUpload: typeof import('element-plus/es')['ElUpload']
     ImageUpload: typeof import('./../components/ImageUpload.vue')['default']
     LineChart: typeof import('./../components/Charts/LineChart.vue')['default']
     OptionEditor: typeof import('./../components/OptionEditor.vue')['default']

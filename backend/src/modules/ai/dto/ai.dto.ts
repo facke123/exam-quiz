@@ -129,3 +129,54 @@ export class QueryAiTaskDto {
   @IsString()
   status?: string;
 }
+
+/**
+ * AI 大纲/教材解析 DTO
+ */
+export class AiParseSyllabusDto {
+  @ApiProperty({ description: '科目ID', example: 1 })
+  @IsNumber()
+  subjectId: number;
+
+  @ApiProperty({ description: '大纲或教材文档文本', example: '第1章 信息化基础知识\n1.1 信息化体系' })
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @ApiPropertyOptional({ description: '模型型号', example: 'gemini-2.5-pro' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+}
+
+/**
+ * AI 导入章节及知识点 DTO
+ */
+export class AiImportSyllabusDto {
+  @ApiProperty({ description: '科目ID', example: 1 })
+  @IsNumber()
+  subjectId: number;
+
+  @ApiProperty({
+    description: '解析后的章节与知识点列表',
+    type: 'array',
+    example: [
+      {
+        name: '第1章 信息化知识与发展',
+        sort: 1,
+        knowledgePoints: [
+          { name: '1.1 国家信息化体系六要素', description: '信息资源、信息网络...' },
+        ],
+      },
+    ],
+  })
+  @IsArray()
+  chapters: Array<{
+    name: string;
+    sort?: number;
+    knowledgePoints?: Array<{
+      name: string;
+      description?: string;
+    }>;
+  }>;
+}

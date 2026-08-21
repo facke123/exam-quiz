@@ -170,3 +170,42 @@ export function deletePrompt(id: number) {
     method: 'delete',
   })
 }
+
+// AI 大纲解析与考点归纳
+export function parseSyllabus(data: { subjectId: number; content: string; model?: string }) {
+  return request<{
+    subjectId: number
+    subjectName: string
+    chapters: Array<{
+      name: string
+      sort: number
+      knowledgePoints: Array<{ name: string; description: string }>
+    }>
+  }>({
+    url: '/admin/ai/parse-syllabus',
+    method: 'post',
+    data,
+  })
+}
+
+// 确认导入 AI 归纳的章节与知识点
+export function importSyllabus(data: {
+  subjectId: number
+  chapters: Array<{
+    name: string
+    sort?: number
+    knowledgePoints?: Array<{ name: string; description?: string }>
+  }>
+}) {
+  return request<{
+    success: boolean
+    message: string
+    chapterCount: number
+    knowledgePointCount: number
+  }>({
+    url: '/admin/ai/import-syllabus',
+    method: 'post',
+    data,
+  })
+}
+

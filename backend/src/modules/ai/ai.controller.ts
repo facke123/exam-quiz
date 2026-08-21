@@ -18,6 +18,8 @@ import {
   AiImportDto,
   CreatePromptDto,
   QueryAiTaskDto,
+  AiParseSyllabusDto,
+  AiImportSyllabusDto,
 } from './dto/ai.dto';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 
@@ -104,6 +106,18 @@ export class AiController {
     @CurrentUser() user: UserPayload,
   ) {
     return this.aiService.smartImport(dto, user ? user.id : 1);
+  }
+
+  @Post(['ai/parse-syllabus', 'admin/ai/parse-syllabus', 'exam/ai/parse-syllabus'])
+  @ApiOperation({ summary: 'AI解析大纲与归纳知识点' })
+  async parseSyllabus(@Body() dto: AiParseSyllabusDto) {
+    return this.aiService.parseSyllabus(dto);
+  }
+
+  @Post(['ai/import-syllabus', 'admin/ai/import-syllabus', 'exam/ai/import-syllabus'])
+  @ApiOperation({ summary: '确认导入AI归纳的章节与知识点' })
+  async importSyllabus(@Body() dto: AiImportSyllabusDto) {
+    return this.aiService.importSyllabus(dto);
   }
 
   @Get(['ai/quota', 'admin/ai/quota'])
