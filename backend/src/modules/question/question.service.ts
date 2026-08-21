@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindManyOptions, In } from 'typeorm';
 import { Question } from '@/database/entities/question.entity';
@@ -12,17 +12,40 @@ import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
 import { ImportQuestionDto } from './dto/import-question.dto';
 
+const toDbType = (t?: string) => {
+  if (!t) return undefined;
+  if (t === 'single') return 'single_choice';
+  if (t === 'multiple') return 'multiple_choice';
+  if (t === 'judge') return 'true_false';
+  if (t === 'case') return 'case_analysis';
+  return t;
+};
+
+const fromDbType = (t?: string) => {
+  if (!t) return 'single';
+  if (t === 'single_choice') return 'single';
+  if (t === 'multiple_choice') return 'multiple';
+  if (t === 'true_false') return 'judge';
+  if (t === 'case_analysis') return 'case';
+  return t;
+};
+
+const toDbSource = (s?: string) => {
+  if (['manual', 'excel', 'word', 'ai'].includes(s as string)) return s;
+  return 'manual';
+};
+
 /**
  * 题库服务
  */
 @Injectable()
-export class QuestionService {
+export class QuestionService implements OnModuleInit {
   // 模拟导入记录
   private static importRecords = [
     {
       id: 1,
-      fileName: '2025年软件设计师试题.xlsx',
-      subjectName: '软件设计师',
+      fileName: '2025年系统集成真题精选.xlsx',
+      subjectName: '系统集成项目管理工程师',
       totalCount: 75,
       successCount: 75,
       failCount: 0,
@@ -47,6 +70,157 @@ export class QuestionService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  async onModuleInit() {
+    const count = await this.questionRepository.count();
+    if (count === 0) {
+      await this.seedInitialQuestions();
+    }
+  }
+
+  /**
+   * 自动初始化内置精选试题
+   */
+  private async seedInitialQuestions() {
+    const seeds = [
+      {
+        subjectId: 1,
+        chapterId: 1,
+        type: 'single_choice',
+        difficulty: 2,
+        content: '国家信息化体系六要素中，处于核心位置的是哪个要素？',
+        options: [
+          { key: 'A', label: 'A', content: '信息资源的开发利用' },
+          { key: 'B', label: 'B', content: '信息网络' },
+          { key: 'C', label: 'C', content: '信息技术应用' },
+          { key: 'D', label: 'D', content: '信息化人才' },
+        ],
+        answer: 'A',
+        analysis: '国家信息化体系包括信息资源、信息网络、信息技术应用、信息技术和产业、信息化人才、信息化法规政策和标准规范6个要素。其中，信息资源的开发利用是国家信息化体系的核心。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 1,
+        chapterId: 2,
+        type: 'single_choice',
+        difficulty: 3,
+        content: '在项目生命周期的哪个阶段，成本和人员投入水平通常达到最高？',
+        options: [
+          { key: 'A', label: 'A', content: '启动阶段' },
+          { key: 'B', label: 'B', content: '组织与准备阶段' },
+          { key: 'C', label: 'C', content: '执行阶段（开展工作）' },
+          { key: 'D', label: 'D', content: '结束项目阶段' },
+        ],
+        answer: 'C',
+        analysis: '项目生命周期中，成本和人员投入水平在启动阶段较低，在开展工作（执行阶段）达到最高，在项目收尾时迅速下降。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 1,
+        chapterId: 3,
+        type: 'multiple_choice',
+        difficulty: 4,
+        content: '根据PMBOK规范，项目范围管理的主要过程包括以下哪些？',
+        options: [
+          { key: 'A', label: 'A', content: '规划范围管理' },
+          { key: 'B', label: 'B', content: '收集需求与定义范围' },
+          { key: 'C', label: 'C', content: '创建WBS' },
+          { key: 'D', label: 'D', content: '确认范围与控制范围' },
+        ],
+        answer: 'ABCD',
+        analysis: '项目范围管理包括：规划范围管理、收集需求、定义范围、创建WBS、确认范围和控制范围6个过程。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 1,
+        chapterId: 3,
+        type: 'true_false',
+        difficulty: 2,
+        content: '关键路径是项目中时间最长的活动序列，其总时差通常为0。',
+        options: [
+          { key: 'A', label: 'A', content: '正确' },
+          { key: 'B', label: 'B', content: '错误' },
+        ],
+        answer: 'A',
+        analysis: '关键路径是项目网络图中决定项目总工期的最长活动序列，关键路径上活动的总时差通常为零或负数。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 1,
+        chapterId: 2,
+        type: 'single_choice',
+        difficulty: 3,
+        content: '制定项目章程过程的主要输出文件是？',
+        options: [
+          { key: 'A', label: 'A', content: '项目章程' },
+          { key: 'B', label: 'B', content: '项目管理计划' },
+          { key: 'C', label: 'C', content: '范围基准' },
+          { key: 'D', label: 'D', content: '工作说明书(SOW)' },
+        ],
+        answer: 'A',
+        analysis: '制定项目章程是编写一份正式批准项目并授权项目经理在项目活动中动用组织资源的文件。该过程的主要输出为项目章程和假设日志。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 2,
+        chapterId: 1,
+        type: 'case_analysis',
+        difficulty: 5,
+        content: '【案例分析】某大型系统集成企业中标智慧医疗云平台建设项目，合同总金额1500万元，工期18个月。在项目实施进行到第6个月时，发生重大需求变更...',
+        options: [
+          { key: 'A', label: 'A', content: '详见案例答题卡' },
+        ],
+        answer: '参考要点',
+        analysis: '1. 项目经理未严格遵循变更控制流程（CCB评审）；2. 缺乏范围基准变更影响评估；3. 未及时更新进度与成本基准。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 3,
+        chapterId: 1,
+        type: 'single_choice',
+        difficulty: 3,
+        content: '在面向对象设计原则中，开闭原则（OCP）指的是什么？',
+        options: [
+          { key: 'A', label: 'A', content: '软件实体应对扩展开放，对修改关闭' },
+          { key: 'B', label: 'B', content: '子类必须能够替换它们的基类' },
+          { key: 'C', label: 'C', content: '高层模块不应该依赖低层模块' },
+          { key: 'D', label: 'D', content: '一个类应该只有一个引起它变化的原因' },
+        ],
+        answer: 'A',
+        analysis: '开闭原则（Open-Closed Principle, OCP）是面向对象设计的核心原则，指出软件实体（类、模块、函数等）应该对扩展开放，对修改关闭。',
+        source: 'manual',
+        status: 'published',
+      },
+      {
+        subjectId: 4,
+        chapterId: 1,
+        type: 'single_choice',
+        difficulty: 2,
+        content: '在TCP/IP协议簇中，ARP协议的主要作用是？',
+        options: [
+          { key: 'A', label: 'A', content: '将IP地址解析为MAC硬件地址' },
+          { key: 'B', label: 'B', content: '将MAC地址解析为IP地址' },
+          { key: 'C', label: 'C', content: '将域名解析为IP地址' },
+          { key: 'D', label: 'D', content: '提供端到端的可靠传输' },
+        ],
+        answer: 'A',
+        analysis: 'ARP（Address Resolution Protocol，地址解析协议）用于根据IP地址获取对应的物理MAC硬件地址。',
+        source: 'manual',
+        status: 'published',
+      },
+    ];
+
+    for (const s of seeds) {
+      const q = this.questionRepository.create(s as any);
+      await this.questionRepository.save(q);
+    }
+  }
+
   /**
    * 创建题目
    */
@@ -54,14 +228,14 @@ export class QuestionService {
     const question = this.questionRepository.create({
       subjectId: dto.subjectId || 1,
       chapterId: dto.chapterId || 1,
-      type: dto.type || 'single',
+      type: toDbType(dto.type) || 'single_choice',
       difficulty: dto.difficulty || 2,
       content: dto.content || dto.title || '',
       options: dto.options || [],
       answer: dto.answer || 'A',
       analysis: dto.analysis || '',
       aiAnalysis: dto.aiAnalysis || '',
-      source: dto.source || 'manual',
+      source: toDbSource(dto.source),
       status: dto.status || 'published',
     } as any);
     return this.questionRepository.save(question as any);
@@ -75,6 +249,8 @@ export class QuestionService {
     if (!question) {
       throw new NotFoundException('题目不存在');
     }
+    if (dto.type) dto.type = toDbType(dto.type);
+    if (dto.source) dto.source = toDbSource(dto.source);
     Object.assign(question, dto);
     if (dto.title && !dto.content) {
       question.content = dto.title;
@@ -114,6 +290,7 @@ export class QuestionService {
     return {
       ...question,
       id: Number(question.id),
+      type: fromDbType(question.type),
       title: question.content,
       subjectName: subject ? subject.name : '',
       chapterName: chapter ? chapter.name : '',
@@ -149,7 +326,8 @@ export class QuestionService {
       qb.andWhere('q.chapterId = :chapterId', { chapterId });
     }
     if (type) {
-      qb.andWhere('q.type = :type', { type });
+      const dbType = toDbType(type);
+      qb.andWhere('(q.type = :type OR q.type = :dbType)', { type, dbType });
     }
     if (keyword) {
       qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
@@ -191,7 +369,7 @@ export class QuestionService {
 
       return {
         id: String(q.id),
-        type: q.type,
+        type: fromDbType(q.type),
         title: q.content,
         options: formattedOptions,
         analysis: q.analysis || '',
@@ -221,7 +399,10 @@ export class QuestionService {
 
     if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
     if (chapterId) qb.andWhere('q.chapterId = :chapterId', { chapterId });
-    if (type) qb.andWhere('q.type = :type', { type });
+    if (type) {
+      const dbType = toDbType(type);
+      qb.andWhere('(q.type = :type OR q.type = :dbType)', { type, dbType });
+    }
     if (difficulty) qb.andWhere('q.difficulty = :difficulty', { difficulty });
     if (status) qb.andWhere('q.status = :status', { status });
     if (source) qb.andWhere('q.source = :source', { source });
@@ -252,10 +433,10 @@ export class QuestionService {
       return {
         id: Number(q.id),
         subjectId: Number(q.subjectId),
-        subjectName: subjectMap.get(Number(q.subjectId)) || '软考科目',
+        subjectName: subjectMap.get(Number(q.subjectId)) || '系统集成项目管理工程师',
         chapterId: Number(q.chapterId),
-        chapterName: chapterMap.get(Number(q.chapterId)) || '基础章节',
-        type: q.type,
+        chapterName: chapterMap.get(Number(q.chapterId)) || '第1章 信息化与发展',
+        type: fromDbType(q.type),
         difficulty: typeof q.difficulty === 'number' ? diffMap[q.difficulty] || 'medium' : q.difficulty,
         title: q.content,
         content: q.content,
@@ -278,80 +459,53 @@ export class QuestionService {
    */
   async submitAnswer(questionId: number, answer: string | string[]): Promise<{
     correct: boolean;
-    correctAnswer: string | string[];
+    rightAnswer: string;
+    analysis: string;
   }> {
     const question = await this.questionRepository.findOne({ where: { id: questionId } });
     if (!question) {
       throw new NotFoundException('题目不存在');
     }
-    const userAns = Array.isArray(answer) ? answer.sort().join('') : String(answer).trim();
-    const correctAns = question.answer.trim();
-    const isCorrect = userAns.toUpperCase() === correctAns.toUpperCase();
+
+    const formattedAnswer = Array.isArray(answer) ? answer.sort().join('') : String(answer).toUpperCase();
+    const rightAnswer = String(question.answer).toUpperCase();
+    const correct = formattedAnswer === rightAnswer;
+
+    if (correct) {
+      question.correctCount = (question.correctCount || 0) + 1;
+    } else {
+      question.wrongCount = (question.wrongCount || 0) + 1;
+    }
+    await this.questionRepository.save(question);
+
     return {
-      correct: isCorrect,
-      correctAnswer: question.answer,
+      correct,
+      rightAnswer: question.answer,
+      analysis: question.analysis || '',
     };
   }
 
   /**
-   * 获取解析
+   * 获取题目解析
    */
-  async getAnalysis(id: number): Promise<any> {
-    const question = await this.findOne(id);
-    return {
-      question,
-      correctAnswer: question.answer,
-      analysis: question.analysis || '暂无详细解析',
-      aiAnalysis: question.aiAnalysis || 'AI 解析：本题考察核心考点，请结合软考大纲重点理解。',
-      knowledgePoints: ['软件工程基础', '系统设计'],
-      myAnswer: question.answer,
-    };
-  }
-
-  /**
-   * 批量导入题目
-   */
-  async batchImport(dto: ImportQuestionDto | any): Promise<{
-    success: number;
-    failed: number;
+  async getAnalysis(id: number): Promise<{
+    id: number;
+    answer: string;
+    analysis: string;
+    aiAnalysis?: string;
   }> {
-    let success = 0;
-    let failed = 0;
-    const questions = dto.questions || [];
-    for (const item of questions) {
-      try {
-        const question = this.questionRepository.create({
-          subjectId: item.subjectId || 1,
-          chapterId: item.chapterId || 1,
-          type: item.type || 'single',
-          difficulty: item.difficulty || 2,
-          content: item.content || item.title || '',
-          options: item.options || [],
-          answer: item.answer || 'A',
-          analysis: item.analysis || '',
-          source: dto.source || 'import',
-          status: 'draft',
-        } as any);
-        await this.questionRepository.save(question as any);
-        success++;
-      } catch (_error) {
-        failed++;
-      }
+    const question = await this.questionRepository.findOne({ where: { id } });
+    if (!question) {
+      throw new NotFoundException('题目不存在');
     }
-    if (questions.length > 0) {
-      QuestionService.importRecords.unshift({
-        id: Date.now(),
-        fileName: '批量导入试题.xlsx',
-        subjectName: '软件设计师',
-        totalCount: questions.length,
-        successCount: success,
-        failCount: failed,
-        status: failed === 0 ? 'success' : 'partial',
-        creator: '超级管理员',
-        createdAt: new Date().toISOString(),
-      });
-    }
-    return { success, failed };
+    return {
+      id: Number(question.id),
+      answer: question.answer,
+      analysis: question.analysis || '',
+      aiAnalysis:
+        question.analysis ||
+        '【AI深度名师解析】本题考察核心考点。解题关键在于准确记忆标准流程与知识点定义。',
+    };
   }
 
   /**
@@ -364,16 +518,71 @@ export class QuestionService {
   }
 
   /**
+   * 批量导入题目
+   */
+  async batchImport(dto: ImportQuestionDto | any): Promise<{
+    success: number;
+    failed: number;
+    errors: { row: number; error: string }[];
+  }> {
+    const questions = dto.questions || [];
+    let success = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      try {
+        if (!q.content) throw new Error('题干不能为空');
+        const entity = this.questionRepository.create({
+          subjectId: dto.subjectId || q.subjectId || 1,
+          chapterId: q.chapterId || 1,
+          type: toDbType(q.type) || 'single_choice',
+          difficulty: q.difficulty || 3,
+          content: q.content,
+          options: q.options || [],
+          answer: q.answer || 'A',
+          analysis: q.analysis || '',
+          source: toDbSource(dto.type) || 'excel',
+          status: 'published',
+        } as any);
+        await this.questionRepository.save(entity as any);
+        success++;
+      } catch (err: any) {
+        failed++;
+        errors.push({ row: i + 1, error: err.message });
+      }
+    }
+
+    QuestionService.importRecords.unshift({
+      id: Date.now(),
+      fileName: dto.fileName || `批量导入批次_${Date.now()}`,
+      subjectName: dto.subjectName || '系统集成项目管理工程师',
+      totalCount: questions.length,
+      successCount: success,
+      failCount: failed,
+      status: failed === 0 ? 'success' : 'partial',
+      creator: '超级管理员',
+      createdAt: new Date().toISOString(),
+    });
+
+    return { success, failed, errors };
+  }
+
+  /**
    * 题目查重
    */
   async checkDuplicate(content: string, subjectId?: number): Promise<{
-    duplicates: Question[];
+    duplicates: any[];
     isDuplicate: boolean;
-    matches: Question[];
+    matches: any[];
   }> {
+    if (!content) {
+      return { duplicates: [], isDuplicate: false, matches: [] };
+    }
     const qb = this.questionRepository.createQueryBuilder('q');
     if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
-    qb.andWhere('q.content LIKE :kw', { kw: `%${content.slice(0, 30)}%` });
+    qb.andWhere('q.content LIKE :kw', { kw: `%${content.slice(0, 20)}%` });
     const matches = await qb.take(5).getMany();
 
     return {
