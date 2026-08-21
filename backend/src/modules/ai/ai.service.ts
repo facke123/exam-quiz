@@ -1331,12 +1331,23 @@ ${dto.content}`;
       throw new NotFoundException('指定科目不存在');
     }
 
+    // 如果选择覆盖模式 (overwrite)，先清空该科目下的旧章节和知识点
+    if (dto.mode === 'overwrite') {
+      const oldChapters = await this.chapterRepository.find({
+        where: { subjectId: Number(dto.subjectId) },
+      });
+      for (const oldCh of oldChapters) {
+        await this.knowledgePointRepository.delete({ chapterId: oldCh.id });
+      }
+      await this.chapterRepository.delete({ subjectId: Number(dto.subjectId) });
+    }
+
     const existingChapters = await this.chapterRepository.find({
       where: { subjectId: Number(dto.subjectId) },
       order: { sort: 'DESC' },
     });
     let baseSort = 0;
-    if (existingChapters.length > 0 && !isNaN(Number(existingChapters[0].sort))) {
+    if (dto.mode !== 'overwrite' && existingChapters.length > 0 && !isNaN(Number(existingChapters[0].sort))) {
       baseSort = Number(existingChapters[0].sort);
     }
 

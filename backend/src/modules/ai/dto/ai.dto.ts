@@ -179,6 +179,14 @@ export class AiImportSyllabusDto {
       description?: string;
     }>;
   }>;
+
+  @ApiPropertyOptional({
+    description: '导入模式: append(追加)/overwrite(覆盖清空现有章节)',
+    default: 'append',
+  })
+  @IsOptional()
+  @IsString()
+  mode?: 'append' | 'overwrite';
 }
 
 /**

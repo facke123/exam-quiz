@@ -61,8 +61,27 @@
           <div class="ph-title">
             <span>📖 章节与知识点拓扑</span>
             <span class="ph-sub">— {{ currentSubject?.name || '系统集成项目管理工程师' }}</span>
+            <el-tag size="small" type="info" style="margin-left: 8px">
+              共 {{ chapterTree.length }} 章 / {{ totalTreeKPCount }} 个考点
+            </el-tag>
           </div>
           <div class="ph-actions">
+            <el-button
+              v-if="chapterTree.length"
+              size="small"
+              @click="toggleAllChapters"
+            >
+              {{ isAllExpanded ? '📁 全部折叠' : '📂 全部展开' }}
+            </el-button>
+            <el-button
+              v-if="chapterTree.length"
+              type="danger"
+              size="small"
+              plain
+              @click="handleClearSubjectChapters"
+            >
+              🗑️ 清空章节
+            </el-button>
             <el-button type="success" size="small" @click="openAiImportDialog">
               ⚡ AI 智能导入大纲
             </el-button>
@@ -80,31 +99,38 @@
           </div>
 
           <div v-for="(ch, idx) in chapterTree" :key="ch.id" class="chapter-node">
-            <div class="ch-header">
+            <div class="ch-header" @click="toggleChapterCollapse(ch.id)">
               <div class="ch-title">
+                <span class="ch-fold-icon">{{ collapsedMap[ch.id] ? '▶' : '▼' }}</span>
                 <span class="ch-idx">{{ idx + 1 }}</span>
                 <span class="ch-name">{{ ch.name }}</span>
+                <span class="ch-badge kp-count-badge">{{ ch.knowledgePoints?.length || 0 }} 考点</span>
                 <span class="ch-badge">{{ ch.questionCount || 0 }} 题</span>
               </div>
-              <div class="ch-actions">
+              <div class="ch-actions" @click.stop>
                 <span class="op-link" @click="handleAddKP(ch)">+ 知识点</span>
                 <span class="op-link" @click="handleEditChapter(ch)">编辑</span>
                 <span class="op-link del" @click="handleDeleteChapter(ch)">删除</span>
               </div>
             </div>
 
-            <!-- 知识点子列表 -->
-            <div v-if="ch.knowledgePoints && ch.knowledgePoints.length" class="kp-list">
-              <div v-for="kp in ch.knowledgePoints" :key="kp.id" class="kp-item">
-                <div class="kp-title">
-                  <span class="kp-dot">●</span>
-                  <span class="kp-name">{{ kp.name }}</span>
-                  <span v-if="kp.description" class="kp-desc-tip" :title="kp.description">ℹ️ 考点速记</span>
+            <!-- 知识点子列表 (展开状态) -->
+            <div v-show="!collapsedMap[ch.id]" class="kp-list-container">
+              <div v-if="ch.knowledgePoints && ch.knowledgePoints.length" class="kp-list">
+                <div v-for="kp in ch.knowledgePoints" :key="kp.id" class="kp-item">
+                  <div class="kp-title">
+                    <span class="kp-dot">●</span>
+                    <span class="kp-name">{{ kp.name }}</span>
+                    <span v-if="kp.description" class="kp-desc-tip" :title="kp.description">ℹ️ 考点速记</span>
+                  </div>
+                  <div class="kp-actions">
+                    <span class="op-link" @click="handleEditKP(kp)">编辑</span>
+                    <span class="op-link del" @click="handleDeleteKP(kp)">删除</span>
+                  </div>
                 </div>
-                <div class="kp-actions">
-                  <span class="op-link" @click="handleEditKP(kp)">编辑</span>
-                  <span class="op-link del" @click="handleDeleteKP(kp)">删除</span>
-                </div>
+              </div>
+              <div v-else class="kp-empty-box">
+                <span class="empty-hint">暂无考点，点击上方「+ 知识点」添加</span>
               </div>
             </div>
           </div>
@@ -303,6 +329,18 @@
             </div>
           </div>
         </div>
+
+        <div class="import-mode-box">
+          <span class="mode-label">📦 写入数据库模式：</span>
+          <el-radio-group v-model="aiImportMode" size="default">
+            <el-radio value="overwrite">
+              <strong>覆盖并清空现有旧章节</strong>（推荐，避免旧测试数据重复）
+            </el-radio>
+            <el-radio value="append">
+              追加到现有章节末尾
+            </el-radio>
+          </el-radio-group>
+        </div>
       </div>
 
       <template #footer>
@@ -351,6 +389,49 @@ const chaptersLoading = ref(false)
 const subjects = ref<any[]>([])
 const currentSubject = ref<any>(null)
 const chapterTree = ref<any[]>([])
+const collapsedMap = ref<Record<number, boolean>>({})
+
+const totalTreeKPCount = computed(() => {
+  return chapterTree.value.reduce(
+    (sum: number, ch: any) => sum + (ch.knowledgePoints?.length || 0),
+    0,
+  )
+})
+
+const isAllExpanded = computed(() => {
+  if (!chapterTree.value.length) return false
+  return chapterTree.value.every((ch) => !collapsedMap.value[ch.id])
+})
+
+function toggleChapterCollapse(chId: number) {
+  collapsedMap.value[chId] = !collapsedMap.value[chId]
+}
+
+function toggleAllChapters() {
+  const targetState = isAllExpanded.value
+  chapterTree.value.forEach((ch) => {
+    collapsedMap.value[ch.id] = targetState
+  })
+}
+
+async function handleClearSubjectChapters() {
+  if (!currentSubject.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要清空「${currentSubject.value.name}」下的所有 ${chapterTree.value.length} 个章节及关联考点吗？`,
+      '清空确认',
+      { type: 'warning', confirmButtonText: '确定清空', cancelButtonText: '取消' },
+    )
+    for (const ch of chapterTree.value) {
+      await deleteChapter(ch.id)
+    }
+    ElMessage.success('已清空当前科目所有章节')
+    loadChapters(currentSubject.value.id)
+    loadSubjects()
+  } catch {
+    // cancel
+  }
+}
 
 const subjectDialogVisible = ref(false)
 const subjectForm = ref<any>({})
@@ -367,6 +448,7 @@ const aiParsingLoading = ref(false)
 const aiImportingLoading = ref(false)
 const aiOutlineContent = ref('')
 const parsedResult = ref<any>(null)
+const aiImportMode = ref<'overwrite' | 'append'>('overwrite')
 
 const totalKnowledgePoints = computed(() => {
   if (!parsedResult.value?.chapters) return 0
@@ -671,6 +753,7 @@ async function confirmAiImport() {
     const res = await importSyllabus({
       subjectId: currentSubject.value?.id || 1,
       chapters: parsedResult.value.chapters,
+      mode: aiImportMode.value,
     })
     if (res?.data?.success) {
       ElMessage.success(res.data.message || '导入成功')
@@ -806,7 +889,8 @@ onMounted(loadSubjects)
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  max-height: 720px;
+  min-height: 480px;
+  max-height: 800px;
 }
 
 .empty-tip {
@@ -828,18 +912,39 @@ onMounted(loadSubjects)
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+
+  &:hover {
+    border-color: #cbd5e1;
+  }
 
   .ch-header {
     padding: 12px 16px;
-    background: var(--gray-1);
+    background: #f8fafc;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: #f1f5f9;
+    }
 
     .ch-title {
       display: flex;
       align-items: center;
       gap: 10px;
+
+      .ch-fold-icon {
+        font-size: 11px;
+        color: var(--primary);
+        width: 14px;
+        display: inline-block;
+        text-align: center;
+      }
 
       .ch-idx {
         width: 22px;
@@ -864,8 +969,14 @@ onMounted(loadSubjects)
         font-size: 11px;
         background: #e2e8f0;
         color: var(--gray-6);
-        padding: 1px 6px;
+        padding: 1px 8px;
         border-radius: 10px;
+
+        &.kp-count-badge {
+          background: #e0e7ff;
+          color: #4338ca;
+          font-weight: 600;
+        }
       }
     }
 
@@ -889,8 +1000,19 @@ onMounted(loadSubjects)
     }
   }
 
+  .kp-list-container {
+    background: #fff;
+    border-top: 1px solid #f1f5f9;
+
+    .kp-empty-box {
+      padding: 12px 16px 12px 48px;
+      color: var(--gray-5);
+      font-size: 12px;
+    }
+  }
+
   .kp-list {
-    padding: 8px 16px 12px 48px;
+    padding: 10px 16px 12px 48px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -899,13 +1021,16 @@ onMounted(loadSubjects)
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 6px 10px;
-      border-radius: 4px;
+      padding: 7px 12px;
+      border-radius: 6px;
       background: #f8fafc;
+      border: 1px solid #f1f5f9;
       font-size: 13px;
+      transition: all 0.15s ease;
 
       &:hover {
-        background: #f1f5f9;
+        background: #eef2ff;
+        border-color: #c7d2fe;
       }
 
       .kp-title {
@@ -918,7 +1043,8 @@ onMounted(loadSubjects)
           color: var(--primary);
         }
         .kp-name {
-          color: var(--gray-7);
+          color: var(--gray-8);
+          font-weight: 500;
         }
         .kp-desc-tip {
           font-size: 11px;
@@ -945,6 +1071,24 @@ onMounted(loadSubjects)
         }
       }
     }
+  }
+}
+
+.import-mode-box {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .mode-label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--gray-8);
+    white-space: nowrap;
   }
 }
 
