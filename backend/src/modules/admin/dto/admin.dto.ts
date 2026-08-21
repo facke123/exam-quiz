@@ -10,7 +10,7 @@ export class AdminLoginDto {
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ description: '密码', example: 'Admin1234' })
+  @ApiProperty({ description: '密码', example: 'admin123' })
   @IsString()
   @IsNotEmpty()
   password: string;
