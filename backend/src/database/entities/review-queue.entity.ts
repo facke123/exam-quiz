@@ -23,6 +23,7 @@ export class ReviewQueue {
   questionId: number;
 
   @Column({
+    name: 'interval_days',
     type: 'int',
     default: 1,
     comment: '复习间隔（天）: 1/2/4/7/15/30',

@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS wrong_questions (
   last_wrong_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   status ENUM('pending','reviewing','mastered') DEFAULT 'pending',
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_user_question (user_id, question_id),
   INDEX idx_user_status (user_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题本表';
@@ -237,6 +238,7 @@ CREATE TABLE IF NOT EXISTS review_queue (
   last_reviewed_at DATETIME,
   status ENUM('pending','completed','mastered') DEFAULT 'pending',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_user_next (user_id, next_review_at, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='艾宾浩斯复习队列表';
 
@@ -253,7 +255,8 @@ CREATE TABLE IF NOT EXISTS member_plans (
   features JSON COMMENT '权益列表(JSON数组)',
   status TINYINT DEFAULT 1,
   sort INT DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员套餐表';
 
 -- ------------------------------------------------------------
