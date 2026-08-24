@@ -262,4 +262,31 @@ export function testAIConnection(data: {
   })
 }
 
+// AI 智能解析题目文本
+export function parseQuestions(data: { subjectId: number; content: string; model?: string }) {
+  return request<{
+    subjectId: number
+    subjectName: string
+    questions: Array<{
+      rowNo: number
+      type: string
+      typeText: string
+      content: string
+      title: string
+      options: Array<{ key: string; label: string; content: string }>
+      answer: string
+      analysis: string
+      chapter: string
+      chapterName: string
+      difficulty: number
+      valid: boolean
+      errorMsg: string
+    }>
+  }>({
+    url: '/admin/ai/parse-questions',
+    method: 'post',
+    data,
+  })
+}
+
 

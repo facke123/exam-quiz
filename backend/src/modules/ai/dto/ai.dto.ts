@@ -240,9 +240,27 @@ export class TestLlmConnectionDto {
   @IsString()
   apiKey?: string;
 
-  @ApiPropertyOptional({ description: '模型名称', example: 'deepseek-chat' })
+  @ApiPropertyOptional({ description: '测试模型名称', example: 'deepseek-chat' })
   @IsOptional()
   @IsString()
   model?: string;
 }
 
+/**
+ * AI 题目文本结构化解析 DTO
+ */
+export class AiParseQuestionsDto {
+  @ApiProperty({ description: '科目ID', example: 1 })
+  @IsNumber()
+  subjectId: number;
+
+  @ApiProperty({ description: '试题文本内容', example: '1. 国家信息化体系六要素中，处于核心位置的是哪个要素？\nA. 信息资源\nB. 信息网络\nC. 信息技术应用\nD. 信息化人才\n答案：A\n解析：信息资源是国家信息化体系的六要素之一。' })
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @ApiPropertyOptional({ description: '模型名称', example: 'gemini-2.5-flash' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+}

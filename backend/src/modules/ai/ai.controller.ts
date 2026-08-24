@@ -20,6 +20,7 @@ import {
   QueryAiTaskDto,
   AiParseSyllabusDto,
   AiImportSyllabusDto,
+  AiParseQuestionsDto,
   SaveAiConfigDto,
   TestLlmConnectionDto,
 } from './dto/ai.dto';
@@ -114,6 +115,12 @@ export class AiController {
   @ApiOperation({ summary: 'AI解析大纲与归纳知识点' })
   async parseSyllabus(@Body() dto: AiParseSyllabusDto) {
     return this.aiService.parseSyllabus(dto);
+  }
+
+  @Post(['ai/parse-questions', 'admin/ai/parse-questions', 'questions/ai-parse', 'admin/questions/ai-parse'])
+  @ApiOperation({ summary: 'AI试题文本智能结构化识别解析' })
+  async parseQuestions(@Body() dto: AiParseQuestionsDto) {
+    return this.aiService.parseQuestions(dto);
   }
 
   @Post(['ai/import-syllabus', 'admin/ai/import-syllabus', 'exam/ai/import-syllabus'])

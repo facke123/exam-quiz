@@ -112,12 +112,13 @@ export function updateQuestionStatus(ids: number[], status: QuestionStatus) {
 }
 
 // 批量导入
-export function importQuestions(data: FormData) {
+export function importQuestions(data: any) {
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData
   return request({
     url: '/admin/questions/import',
     method: 'post',
     data,
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
   })
 }
 

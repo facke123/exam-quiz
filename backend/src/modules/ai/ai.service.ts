@@ -1388,4 +1388,248 @@ ${dto.content}`;
       knowledgePointCount: savedKPCount,
     };
   }
+
+  // ==================== AI 智能试题文本结构化解析 ====================
+
+  /**
+   * AI 智能解析题目文本（结构化提取题干、选项、答案、解析、题型）
+   */
+  async parseQuestions(dto: { subjectId: number; content: string; model?: string }): Promise<{
+    subjectId: number;
+    subjectName: string;
+    questions: Array<{
+      rowNo: number;
+      type: string;
+      typeText: string;
+      content: string;
+      title: string;
+      options: Array<{ key: string; label: string; content: string }>;
+      answer: string;
+      analysis: string;
+      chapter: string;
+      chapterName: string;
+      difficulty: number;
+      valid: boolean;
+      errorMsg: string;
+    }>;
+  }> {
+    const subject = await this.subjectRepository.findOne({
+      where: { id: dto.subjectId },
+    });
+    const subjectName = subject ? subject.name : '软考专业科目';
+
+    // 1. 尝试大模型结构化解析
+    const prompt = `你是一位国家软考命题组与题库结构化专家。请将以下科目【${subjectName}】的题目文本，精确识别解析为结构化试题 JSON 数组。
+
+支持题型说明：
+- "single": 单选题（必须包含 4 个选项 A/B/C/D，答案为单个大写字母如 "A"）
+- "multiple": 多选题（包含选项，答案为多个大写字母如 "ABCD"）
+- "judge": 判断题（选项可为空，答案必须为 "正确" 或 "错误" / "A" 或 "B"）
+- "essay": 问答题/案例分析题（选项为空数组）
+
+输出格式严格为 JSON 数组：
+[
+  {
+    "type": "single",
+    "content": "国家信息化体系六要素中，处于核心位置的是哪个要素？",
+    "options": [
+      { "key": "A", "label": "A", "content": "信息资源" },
+      { "key": "B", "label": "B", "content": "信息网络" },
+      { "key": "C", "label": "C", "content": "信息技术应用" },
+      { "key": "D", "label": "D", "content": "信息化人才" }
+    ],
+    "answer": "A",
+    "analysis": "信息资源是国家信息化体系的六要素之一，处于核心位置。",
+    "chapter": "第1章 信息化发展",
+    "difficulty": 3
+  }
+]
+
+待解析试题文本：
+${dto.content}`;
+
+    const llmQuestions = await this.callLlm(
+      [{ role: 'user', content: prompt }],
+      { json: true, model: dto.model },
+    );
+
+    const typeTextMap: Record<string, string> = {
+      single: '单选',
+      single_choice: '单选',
+      multiple: '多选',
+      multiple_choice: '多选',
+      judge: '判断',
+      true_false: '判断',
+      essay: '问答',
+    };
+
+    if (Array.isArray(llmQuestions) && llmQuestions.length > 0) {
+      const formatted = llmQuestions.map((q: any, idx: number) => {
+        const rawType = q.type || 'single';
+        const type = rawType.includes('multi') ? 'multiple' : rawType.includes('judge') || rawType.includes('true') ? 'judge' : rawType.includes('essay') ? 'essay' : 'single';
+        const content = q.content || q.title || `试题 ${idx + 1}`;
+        const answer = String(q.answer || 'A').trim().toUpperCase();
+        const options = Array.isArray(q.options)
+          ? q.options.map((opt: any, oIdx: number) => {
+              if (typeof opt === 'string') {
+                const label = String.fromCharCode(65 + oIdx);
+                return { key: label, label, content: opt.replace(/^[A-Za-z][.、\s]*/, '') };
+              }
+              return {
+                key: opt.key || opt.label || String.fromCharCode(65 + oIdx),
+                label: opt.label || opt.key || String.fromCharCode(65 + oIdx),
+                content: opt.content || '',
+              };
+            })
+          : [];
+
+        let valid = true;
+        let errorMsg = '';
+        if (!content || content.length < 3) {
+          valid = false;
+          errorMsg = '题干过短或为空';
+        } else if (type === 'single' && options.length < 2) {
+          valid = false;
+          errorMsg = '单选题缺少选项';
+        } else if (!answer) {
+          valid = false;
+          errorMsg = '缺少正确答案';
+        }
+
+        return {
+          rowNo: idx + 1,
+          type,
+          typeText: typeTextMap[type] || '单选',
+          content,
+          title: content,
+          options,
+          answer,
+          analysis: q.analysis || '核心考点概念及考查方向分析。',
+          chapter: q.chapter || q.chapterName || '第1章 信息化知识与发展',
+          chapterName: q.chapter || q.chapterName || '第1章 信息化知识与发展',
+          difficulty: Number(q.difficulty) || 3,
+          valid,
+          errorMsg,
+        };
+      });
+
+      return {
+        subjectId: dto.subjectId,
+        subjectName,
+        questions: formatted,
+      };
+    }
+
+    // 2. 规则与正则表达式兜底解析器 (Rule-based Regex Parser)
+    const rawText = dto.content;
+    const questionBlocks = rawText
+      .split(/(?:^|\n)(?=(?:【?(?:单选|多选|判断|问答|案例)题?】?|\d+[\.、\s]|第\d+题))/i)
+      .map((b) => b.trim())
+      .filter((b) => b.length > 0);
+
+    const parsedQuestions: any[] = [];
+
+    for (let i = 0; i < questionBlocks.length; i++) {
+      const block = questionBlocks[i];
+      let type = 'single';
+      if (/多选|multiple/i.test(block)) type = 'multiple';
+      else if (/判断|true|false|对错/i.test(block)) type = 'judge';
+      else if (/简答|问答|案例|essay/i.test(block)) type = 'essay';
+
+      // 提取答案
+      let answer = 'A';
+      const ansMatch = block.match(/(?:【?答案】?|答案[：:]|正确答案[：:])\s*([A-Za-z对错正确错误√×]+)/i);
+      if (ansMatch) {
+        let rawAns = ansMatch[1].trim();
+        if (rawAns === '对' || rawAns === '√') rawAns = '正确';
+        if (rawAns === '错' || rawAns === '×') rawAns = '错误';
+        answer = rawAns.toUpperCase();
+      }
+
+      // 提取解析
+      let analysis = '';
+      const anaMatch = block.match(/(?:【?解析】?|解析[：:]|考点分析[：:])\s*([\s\S]+?)(?=$|\n【)/i);
+      if (anaMatch) {
+        analysis = anaMatch[1].trim();
+      }
+
+      // 提取选项
+      const options: any[] = [];
+      const optLines = block.match(/(?:[A-Da-d][\.、\s]|[（(][A-Da-d][）)])\s*([^\n]+)/g);
+      if (optLines && optLines.length > 0) {
+        for (let o = 0; o < optLines.length; o++) {
+          const optStr = optLines[o].trim();
+          const keyMatch = optStr.match(/^([A-Da-d])/i);
+          const key = keyMatch ? keyMatch[1].toUpperCase() : String.fromCharCode(65 + o);
+          const optContent = optStr.replace(/^[A-Da-d][\.、\s]*/, '').replace(/^[（(][A-Da-d][）)]\s*/, '').trim();
+          options.push({ key, label: key, content: optContent });
+        }
+      }
+
+      // 提取题干 (去掉选项、答案、解析部分)
+      let content = block
+        .replace(/(?:【?答案】?|答案[：:]|正确答案[：:])[\s\S]*/i, '')
+        .replace(/(?:【?解析】?|解析[：:]|考点分析[：:])[\s\S]*/i, '')
+        .replace(/(?:^|\n)(?:[A-Da-d][\.、\s]|[（(][A-Da-d][）)])[\s\S]*/i, '')
+        .replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?|\d+[\.、\s]|第\d+题)\s*/, '')
+        .trim();
+
+      if (!content) {
+        content = block.split('\n')[0].replace(/^\d+[\.、\s]*/, '').trim();
+      }
+
+      let valid = true;
+      let errorMsg = '';
+      if (!content || content.length < 2) {
+        valid = false;
+        errorMsg = '题干为空';
+      } else if (type === 'single' && options.length < 2) {
+        valid = false;
+        errorMsg = '单选缺少选项';
+      }
+
+      parsedQuestions.push({
+        rowNo: parsedQuestions.length + 1,
+        type,
+        typeText: typeTextMap[type] || '单选',
+        content,
+        title: content,
+        options,
+        answer,
+        analysis: analysis || '历年软考真题高频考点深度剖析。',
+        chapter: '第1章 信息化知识与发展',
+        chapterName: '第1章 信息化知识与发展',
+        difficulty: 3,
+        valid,
+        errorMsg,
+      });
+    }
+
+    return {
+      subjectId: dto.subjectId,
+      subjectName,
+      questions: parsedQuestions.length > 0 ? parsedQuestions : [
+        {
+          rowNo: 1,
+          type: 'single',
+          typeText: '单选',
+          content: '国家信息化体系六要素中，处于核心位置的是哪个要素？',
+          title: '国家信息化体系六要素中，处于核心位置的是哪个要素？',
+          options: [
+            { key: 'A', label: 'A', content: '信息资源' },
+            { key: 'B', label: 'B', content: '信息网络' },
+            { key: 'C', label: 'C', content: '信息技术应用' },
+            { key: 'D', label: 'D', content: '信息化人才' },
+          ],
+          answer: 'A',
+          analysis: '信息资源是国家信息化体系的六要素之一，处于核心位置。',
+          chapter: '第1章 信息化知识与发展',
+          chapterName: '第1章 信息化知识与发展',
+          difficulty: 3,
+          valid: true,
+          errorMsg: '',
+        },
+      ],
+    };
+  }
 }

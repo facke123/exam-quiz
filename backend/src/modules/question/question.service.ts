@@ -41,11 +41,23 @@ const toDbSource = (s?: string) => {
 @Injectable()
 export class QuestionService implements OnModuleInit {
   // 模拟导入记录
-  private static importRecords = [
+  private static importRecords: Array<{
+    id: number;
+    fileName: string;
+    subjectName: string;
+    type?: string;
+    totalCount: number;
+    successCount: number;
+    failCount: number;
+    status: string;
+    creator: string;
+    createdAt: string;
+  }> = [
     {
       id: 1,
       fileName: '2025年系统集成真题精选.xlsx',
       subjectName: '系统集成项目管理工程师',
+      type: 'excel',
       totalCount: 75,
       successCount: 75,
       failCount: 0,
@@ -530,20 +542,61 @@ export class QuestionService implements OnModuleInit {
     let failed = 0;
     const errors = [];
 
+    const targetSubjectId = Number(dto.subjectId || 1);
+    const subject = await this.subjectRepository.findOne({ where: { id: targetSubjectId } });
+    const subjectName = subject ? subject.name : (dto.subjectName || '系统集成项目管理工程师');
+
+    // 预先查询该科目下的所有章节，用于章节名称模糊匹配
+    const existingChapters = await this.chapterRepository.find({
+      where: { subjectId: targetSubjectId },
+      order: { sort: 'ASC' },
+    });
+
+    let defaultChapterId = existingChapters.length > 0 ? Number(existingChapters[0].id) : 1;
+    if (existingChapters.length === 0) {
+      // 若该科目尚无章节，自动创建一个基础章节
+      const newCh = this.chapterRepository.create({
+        subjectId: targetSubjectId,
+        name: '第1章 基础知识与考点',
+        sort: 1,
+        questionCount: 0,
+      });
+      const savedCh = await this.chapterRepository.save(newCh);
+      defaultChapterId = Number(savedCh.id);
+      existingChapters.push(savedCh);
+    }
+
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       try {
-        if (!q.content) throw new Error('题干不能为空');
+        const content = q.content || q.title;
+        if (!content) throw new Error('题干不能为空');
+
+        // 匹配章节ID
+        let chapterId = q.chapterId ? Number(q.chapterId) : defaultChapterId;
+        const rawChName = String(q.chapter || q.chapterName || '').trim();
+        if (rawChName) {
+          const matched = existingChapters.find(
+            (c) =>
+              c.name.includes(rawChName) ||
+              rawChName.includes(c.name) ||
+              c.name.replace(/\s+/g, '') === rawChName.replace(/\s+/g, '')
+          );
+          if (matched) {
+            chapterId = Number(matched.id);
+          }
+        }
+
         const entity = this.questionRepository.create({
-          subjectId: dto.subjectId || q.subjectId || 1,
-          chapterId: q.chapterId || 1,
+          subjectId: targetSubjectId,
+          chapterId,
           type: toDbType(q.type) || 'single_choice',
-          difficulty: q.difficulty || 3,
-          content: q.content,
+          difficulty: Number(q.difficulty) || 3,
+          content,
           options: q.options || [],
-          answer: q.answer || 'A',
+          answer: String(q.answer || 'A').trim().toUpperCase(),
           analysis: q.analysis || '',
-          source: toDbSource(dto.type) || 'excel',
+          source: toDbSource(dto.type) || 'import',
           status: 'published',
         } as any);
         await this.questionRepository.save(entity as any);
@@ -557,7 +610,8 @@ export class QuestionService implements OnModuleInit {
     QuestionService.importRecords.unshift({
       id: Date.now(),
       fileName: dto.fileName || `批量导入批次_${Date.now()}`,
-      subjectName: dto.subjectName || '系统集成项目管理工程师',
+      subjectName,
+      type: dto.type || 'excel',
       totalCount: questions.length,
       successCount: success,
       failCount: failed,
