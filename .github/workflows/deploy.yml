@@ -6,10 +6,7 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
-
-  # 支持手动触发
+  # 支持在 GitHub Actions 手动触发部署
   workflow_dispatch:
 
 concurrency:
@@ -25,7 +22,6 @@ jobs:
   build-and-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
-    if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
     permissions:
       contents: read
 
