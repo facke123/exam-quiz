@@ -52,6 +52,7 @@ export class QuestionService implements OnModuleInit {
     status: string;
     creator: string;
     createdAt: string;
+    errors?: Array<{ row: number; title?: string; error: string }>;
   }> = [
     {
       id: 1,
@@ -603,7 +604,11 @@ export class QuestionService implements OnModuleInit {
         success++;
       } catch (err: any) {
         failed++;
-        errors.push({ row: i + 1, error: err.message });
+        errors.push({
+          row: i + 1,
+          title: String(q.content || q.title || `第 ${i + 1} 题`).slice(0, 100),
+          error: err.message || '格式校验不通过',
+        });
       }
     }
 
@@ -618,6 +623,7 @@ export class QuestionService implements OnModuleInit {
       status: failed === 0 ? 'success' : 'partial',
       creator: '超级管理员',
       createdAt: new Date().toISOString(),
+      errors: errors || [],
     });
 
     return { success, failed, errors };

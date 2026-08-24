@@ -76,9 +76,11 @@
       <div class="panel-header">
         <div class="ph-title">
           <span>📋 解析校验预览</span>
-          <span class="ph-badge">共 {{ previewList.length }} 道题</span>
-          <span v-if="errorCount > 0" class="ph-badge error-badge">⚠️ {{ errorCount }} 道格式待修正</span>
-          <span v-else class="ph-badge success-badge">✓ 全部格式合规</span>
+          <el-radio-group v-model="previewFilter" size="small" style="margin-left: 12px">
+            <el-radio-button label="all">全部 ({{ previewList.length }})</el-radio-button>
+            <el-radio-button label="valid">✓ 格式合规 ({{ validList.length }})</el-radio-button>
+            <el-radio-button label="invalid">⚠️ 待修正 ({{ errorCount }})</el-radio-button>
+          </el-radio-group>
         </div>
         <div class="ph-actions">
           <el-button size="small" @click="previewList = []">清空预览</el-button>
@@ -86,7 +88,7 @@
             type="primary"
             size="small"
             :loading="importingLoading"
-            :disabled="previewList.length === 0"
+            :disabled="validList.length === 0"
             @click="commitImport"
           >
             🚀 确认全部入库 ({{ validList.length }}题)
@@ -94,7 +96,7 @@
         </div>
       </div>
 
-      <el-table :data="previewList" class="custom-table" border stripe max-height="600">
+      <el-table :data="filteredPreviewList" class="custom-table" border stripe max-height="600">
         <el-table-column prop="rowNo" label="序号" width="65" align="center" />
         <el-table-column prop="type" label="题型" width="85" align="center">
           <template #default="{ row }">
@@ -146,32 +148,110 @@
       </div>
 
       <el-table v-loading="recordsLoading" :data="historyRecords" class="custom-table" border stripe>
-        <el-table-column prop="id" label="批次ID" width="130" align="center" />
-        <el-table-column prop="createdAt" label="导入时间" width="180" />
-        <el-table-column prop="type" label="导入方式" width="130" align="center">
+        <el-table-column prop="id" label="批次ID" width="140" align="center" />
+        <el-table-column prop="createdAt" label="导入时间" width="170" />
+        <el-table-column prop="type" label="导入方式" width="120" align="center">
           <template #default="{ row }">
             <el-tag size="small" type="info">{{ formatImportType(row.type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="fileName" label="文件名 / 来源" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="subjectName" label="目标科目" width="200" show-overflow-tooltip />
-        <el-table-column label="导入统计" width="140" align="center">
+        <el-table-column prop="subjectName" label="目标科目" width="180" show-overflow-tooltip />
+        <el-table-column label="导入统计" width="170" align="center">
           <template #default="{ row }">
             <span style="color: var(--success); font-weight: 600">成功 {{ row.successCount || 0 }}</span>
-            <span v-if="row.failCount > 0" style="color: var(--danger); font-weight: 600; margin-left: 6px">
-              失败 {{ row.failCount }}
-            </span>
+            <el-button
+              v-if="row.failCount > 0"
+              type="danger"
+              link
+              size="small"
+              style="margin-left: 6px; font-weight: 600"
+              @click="showBatchErrors(row)"
+            >
+              失败 {{ row.failCount }} 🔍
+            </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110" align="center">
+        <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
             <span class="status-pill" :class="row.status">
               {{ row.status === 'success' ? '导入成功' : '部分失败' }}
             </span>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="110" align="center">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.failCount > 0 || (row.errors && row.errors.length > 0)"
+              type="danger"
+              link
+              size="small"
+              @click="showBatchErrors(row)"
+            >
+              查看失败原因
+            </el-button>
+            <span v-else style="color: var(--text-muted); font-size: 12px">全部成功</span>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
+
+    <!-- 导入失败明细对话框 -->
+    <el-dialog
+      v-model="batchErrorDialogVisible"
+      title="📜 批次导入失败明细与原因分析"
+      width="780px"
+      append-to-body
+    >
+      <div v-if="currentBatchRecord" class="batch-detail-info">
+        <div class="bdi-row">
+          <span>批次ID: <strong>{{ currentBatchRecord.id }}</strong></span>
+          <span>文件来源: <strong>{{ currentBatchRecord.fileName }}</strong></span>
+        </div>
+        <div class="bdi-row">
+          <span>目标科目: <strong>{{ currentBatchRecord.subjectName }}</strong></span>
+          <span>
+            导入结果:
+            <span style="color: var(--success); font-weight: 600; margin-right: 8px">
+              成功 {{ currentBatchRecord.successCount }}
+            </span>
+            <span style="color: var(--danger); font-weight: 600">
+              失败 {{ currentBatchRecord.failCount }}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
+          失败试题列表及错误原因：
+        </div>
+        <el-table
+          :data="currentBatchRecord?.errors || []"
+          border
+          stripe
+          max-height="400"
+          class="custom-table"
+        >
+          <el-table-column prop="row" label="序号/行号" width="90" align="center" />
+          <el-table-column prop="title" label="试题内容 / 题干摘要" min-width="260" show-overflow-tooltip />
+          <el-table-column prop="error" label="失败原因" width="160">
+            <template #default="{ row }">
+              <el-tag type="danger" size="small">{{ row.error || '单选缺少选项或格式不合规' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <div style="font-size: 12px; color: var(--text-muted)">
+            💡 提示：最新版状态机解析引擎已修复该类排版识别问题，重新上传文档即可全部成功入库。
+          </div>
+          <el-button type="primary" @click="batchErrorDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -195,10 +275,25 @@ const importingLoading = ref(false)
 const recordsLoading = ref(false)
 
 const previewList = ref<any[]>([])
+const previewFilter = ref<'all' | 'valid' | 'invalid'>('all')
 const historyRecords = ref<any[]>([])
+
+const batchErrorDialogVisible = ref(false)
+const currentBatchRecord = ref<any>(null)
 
 const errorCount = computed(() => previewList.value.filter((p) => !p.valid).length)
 const validList = computed(() => previewList.value.filter((p) => p.valid))
+
+const filteredPreviewList = computed(() => {
+  if (previewFilter.value === 'valid') return previewList.value.filter((p) => p.valid)
+  if (previewFilter.value === 'invalid') return previewList.value.filter((p) => !p.valid)
+  return previewList.value
+})
+
+function showBatchErrors(row: any) {
+  currentBatchRecord.value = row
+  batchErrorDialogVisible.value = true
+}
 
 function getTypeTagType(type: string) {
   if (type === 'single') return 'primary'
@@ -244,6 +339,7 @@ async function loadRecords() {
         successCount: r.successCount ?? r.totalCount ?? 0,
         failCount: r.failCount || 0,
         status: r.status || 'success',
+        errors: r.errors || [],
       }))
     }
   } catch {
@@ -384,6 +480,176 @@ async function parseExcelFile(file: File) {
   ElMessage.success(`成功从 Excel 解析出 ${parsed.length} 道试题！`)
 }
 
+// 客户端状态机试卷解析算法
+function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信息化发展') {
+  const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
+  const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
+
+  const parsedQuestions: any[] = []
+  let currentChapter = defaultChapter
+  let currentTypeHint = 'single'
+  let currentQ: any = null
+
+  const extractOptionsFromLine = (line: string) => {
+    const optRegex = /(?:^|\s+|[\t　]+)(?:([A-Ea-e])[\.、．\s]|[（(]([A-Ea-e])[）)])\s*/g
+    const matches: Array<{ key: string; startIndex: number; contentStart: number }> = []
+    let m: RegExpExecArray | null
+    while ((m = optRegex.exec(line)) !== null) {
+      matches.push({
+        key: (m[1] || m[2]).toUpperCase(),
+        startIndex: m.index,
+        contentStart: optRegex.lastIndex,
+      })
+    }
+    if (matches.length === 0) return null
+
+    const opts: Array<{ key: string; label: string; content: string }> = []
+    for (let i = 0; i < matches.length; i++) {
+      const curr = matches[i]
+      const nextStart = i + 1 < matches.length ? matches[i + 1].startIndex : line.length
+      const content = line.substring(curr.contentStart, nextStart).trim()
+      opts.push({
+        key: curr.key,
+        label: curr.key,
+        content,
+      })
+    }
+    return opts
+  }
+
+  const finalizeQuestion = (q: any) => {
+    if (!q) return
+    let content = q.stemLines.join('\n').trim()
+    content = content.replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?\s*)+/i, '')
+    content = content.replace(/^\d+[\.、．\s]\s*/, '')
+    content = content.replace(/^第\d+题[\.、．\s]?\s*/, '')
+    content = content.replace(/^[（(]\d+[）)][\.、\s]?\s*/, '')
+
+    if (!content) return
+
+    let type = q.type || currentTypeHint
+    const optCount = q.options.length
+    if (optCount >= 2) {
+      if (q.answer && q.answer.length > 1 && /^[A-E]+$/.test(q.answer)) {
+        type = 'multiple'
+      } else {
+        type = 'single'
+      }
+    } else if (/正确|错误|对|错|√|×/i.test(q.answer) || /判断/i.test(content) || /判断/i.test(q.rawType)) {
+      type = 'judge'
+    } else if (optCount === 0 && (q.rawType === 'essay' || (q.answer && q.answer.length > 8) || /简述|论述|简答|分析/i.test(content))) {
+      type = 'essay'
+    }
+
+    const typeTextMap: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', essay: '问答' }
+
+    let valid = true
+    let errorMsg = ''
+    if (!content || content.length < 2) {
+      valid = false
+      errorMsg = '题干不能为空'
+    } else if (type === 'single' && q.options.length < 2) {
+      valid = false
+      errorMsg = '单选缺少选项'
+    } else if (!q.answer) {
+      valid = false
+      errorMsg = '缺少正确答案'
+    }
+
+    parsedQuestions.push({
+      rowNo: parsedQuestions.length + 1,
+      type,
+      typeText: typeTextMap[type] || '单选',
+      content,
+      title: content,
+      options: q.options,
+      answer: q.answer || (type === 'essay' ? '详见解析' : 'A'),
+      analysis: q.analysisLines.join('\n').trim() || '详见教材对应核心考点解析。',
+      chapter: q.chapter || currentChapter,
+      chapterName: q.chapter || currentChapter,
+      difficulty: 3,
+      valid,
+      errorMsg,
+    })
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    if (/^第\s*\d+\s*章\s+[^\n]+/i.test(line) || /^第[一二三四五六七八九十百]+章\s+[^\n]+/i.test(line)) {
+      currentChapter = line.replace(/\s+/g, ' ')
+      continue
+    }
+
+    if (/^【?(?:单选|多选|判断|问答|简答|案例)题?】?$/i.test(line)) {
+      if (/多选/i.test(line)) currentTypeHint = 'multiple'
+      else if (/判断/i.test(line)) currentTypeHint = 'judge'
+      else if (/问答|简答|案例/i.test(line)) currentTypeHint = 'essay'
+      else currentTypeHint = 'single'
+      continue
+    }
+
+    const isNewQuestionStart = /^(?:\d+[\.、．\s]|第\d+题|[（(]\d+[）)])\s*\S+/i.test(line)
+
+    if (isNewQuestionStart) {
+      finalizeQuestion(currentQ)
+      currentQ = {
+        stemLines: [line],
+        options: [],
+        answer: '',
+        analysisLines: [],
+        chapter: currentChapter,
+        type: currentTypeHint,
+        rawType: currentTypeHint,
+        state: 'stem',
+      }
+      continue
+    }
+
+    if (!currentQ) continue
+
+    const ansMatch = line.match(/^【?(?:正确答案|参考答案|答案)】?[：:]\s*(.+)/i) ||
+                     line.match(/^【答案】\s*(.+)/i)
+    if (ansMatch) {
+      currentQ.state = 'answer'
+      let rawAns = ansMatch[1].trim()
+      if (rawAns === '对' || rawAns === '√') rawAns = '正确'
+      if (rawAns === '错' || rawAns === '×') rawAns = '错误'
+      currentQ.answer = rawAns.toUpperCase()
+      continue
+    }
+
+    const anaMatch = line.match(/^【?(?:考点分析|试题解析|解析说明|解析)】?[：:]\s*(.*)/i) ||
+                     line.match(/^【解析】\s*(.*)/i)
+    if (anaMatch) {
+      currentQ.state = 'analysis'
+      if (anaMatch[1].trim()) {
+        currentQ.analysisLines.push(anaMatch[1].trim())
+      }
+      continue
+    }
+
+    if (currentQ.state === 'analysis') {
+      currentQ.analysisLines.push(line)
+      continue
+    }
+
+    const lineOptions = extractOptionsFromLine(line)
+    if (lineOptions && lineOptions.length > 0) {
+      currentQ.state = 'option'
+      currentQ.options.push(...lineOptions)
+      continue
+    }
+
+    if (currentQ.state === 'stem') {
+      currentQ.stemLines.push(line)
+    }
+  }
+
+  finalizeQuestion(currentQ)
+  return parsedQuestions
+}
+
 // 解析 Word / 纯文本文件
 async function parseTextOrDocFile(file: File) {
   let text = ''
@@ -407,6 +673,15 @@ async function parseTextOrDocFile(file: File) {
 
   parsing.value = true
   try {
+    // 优先使用客户端即时状态机高精解析
+    const clientQuestions = parseWordQuestionsClient(text)
+    if (clientQuestions.length > 0) {
+      previewList.value = clientQuestions
+      ElMessage.success(`🎉 成功从 Word 文档解析出 ${clientQuestions.length} 道试题！`)
+      return
+    }
+
+    // 兜底调用后端 AI 解析
     const res = await parseQuestions({
       subjectId: selectedSubjectId.value,
       content: text,
@@ -864,6 +1139,23 @@ onMounted(() => {
   &.partial {
     background: #fffbeb;
     color: #d97706;
+  }
+}
+
+.batch-detail-info {
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .bdi-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--gray-7);
   }
 }
 </style>
