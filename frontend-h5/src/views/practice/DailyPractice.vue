@@ -52,8 +52,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSubjectStore } from '@/stores/subject'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
 
 function onBack() {
   if (window.history.state?.back) {
@@ -77,7 +79,7 @@ const last7Days = ref([
 ])
 
 function onStart() {
-  router.push('/quiz/practice')
+  router.push(`/quiz/practice?mode=daily&subjectId=${subjectStore.currentSubjectId}`)
 }
 </script>
 

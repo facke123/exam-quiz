@@ -158,23 +158,58 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
+import { getOverview } from '@/api/stats'
 
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
 
-const examDays = ref(68)
-const reviewCount = ref(385)
+// 倒计时计算（距离下次软考，假设为2026年11月统考）
+const targetExamDate = new Date('2026-11-08T09:00:00')
+const now = new Date()
+const diffDays = Math.max(1, Math.ceil((targetExamDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+const examDays = ref(diffDays)
+const reviewCount = ref(0)
 
 const stats = reactive({
-  todayDone: 8,
-  correctRate: 50,
-  totalQuestions: 385,
+  todayDone: 0,
+  correctRate: 0,
+  totalQuestions: 0,
 })
 
+async function fetchHomeStats() {
+  try {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+    const res = await getOverview(subId)
+    if (res?.data) {
+      stats.todayDone = res.data.todayCount ?? res.data.totalAnswered ?? 0
+      stats.correctRate = res.data.correctRate ?? 0
+      stats.totalQuestions = res.data.totalQuestions || subjectStore.currentSubject?.questionCount || 0
+      reviewCount.value = res.data.totalQuestions || 0
+    } else {
+      stats.totalQuestions = subjectStore.currentSubject?.questionCount || 0
+      reviewCount.value = stats.totalQuestions
+    }
+  } catch {
+    stats.totalQuestions = subjectStore.currentSubject?.questionCount || 0
+    reviewCount.value = stats.totalQuestions
+  }
+}
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    fetchHomeStats()
+  }
+)
+
 onMounted(async () => {
+  if (subjectStore.subjectList.length === 0) {
+    await subjectStore.fetchSubjects()
+  }
+  await fetchHomeStats()
   if (userStore.token && !userStore.userInfo) {
     try {
       await userStore.fetchProfile()

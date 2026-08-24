@@ -16,8 +16,14 @@ export class StatsController {
 
   @Get('stats/overview')
   @ApiOperation({ summary: '前台统计 - 总览' })
-  async getOverview(@CurrentUser() user: UserPayload) {
-    return this.statsService.getOverview(user ? user.id : 1);
+  async getOverview(
+    @CurrentUser() user: UserPayload,
+    @Query('subjectId') subjectId?: number,
+  ) {
+    return this.statsService.getOverview(
+      user ? user.id : 1,
+      subjectId ? Number(subjectId) : undefined,
+    );
   }
 
   @Get('stats/trend')

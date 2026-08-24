@@ -6,27 +6,37 @@
       <div class="right"></div>
     </div>
 
-    <div class="subject-list">
+    <div v-if="subjectStore.loading" class="loading-state">
+      <van-loading type="spinner" color="var(--primary)">加载科目列表中...</van-loading>
+    </div>
+
+    <div v-else-if="subjects.length === 0" class="empty-state">
+      <van-empty description="暂无可用的考试科目" />
+    </div>
+
+    <div v-else class="subject-list">
       <div
         v-for="sub in subjects"
         :key="sub.id"
         class="subject-card"
-        :class="{ active: sub.name === currentSubjectName }"
+        :class="{ active: String(sub.id) === String(currentSubjectId) }"
         @click="onSelect(sub)"
       >
-        <div class="sc-icon" :style="{ background: sub.bg }">{{ sub.icon }}</div>
+        <div class="sc-icon" :style="{ background: sub.bg || 'var(--primary-bg)' }">
+          {{ sub.icon || '💻' }}
+        </div>
         <div class="sc-info">
           <div class="sc-name">{{ sub.name }}</div>
-          <div class="sc-meta">{{ sub.level }} · {{ sub.questionCount }}题</div>
+          <div class="sc-meta">{{ sub.level }} · {{ sub.questionCount || 0 }}题</div>
         </div>
-        <div v-if="sub.name === currentSubjectName" class="sc-check">✓</div>
+        <div v-if="String(sub.id) === String(currentSubjectId)" class="sc-check">✓</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
@@ -42,19 +52,14 @@ function onBack() {
   }
 }
 
-const currentSubjectName = computed(
-  () => subjectStore.currentSubject?.name || '系统集成项目管理工程师'
-)
+const subjects = computed(() => subjectStore.subjectList)
+const currentSubjectId = computed(() => subjectStore.currentSubjectId)
 
-const subjects = ref([
-  { id: '1', name: '系统集成项目管理工程师', level: '中级', questionCount: 385, icon: '💻', bg: 'var(--primary-bg)' },
-  { id: '2', name: '信息系统项目管理师', level: '高级', questionCount: 520, icon: '📊', bg: 'var(--success-bg)' },
-  { id: '3', name: '信息系统监理师', level: '中级', questionCount: 320, icon: '🏗️', bg: 'var(--warning-bg)' },
-  { id: '4', name: '系统架构设计师', level: '高级', questionCount: 460, icon: '🔒', bg: 'var(--purple-bg)' },
-  { id: '5', name: '软件设计师', level: '中级', questionCount: 480, icon: '💻', bg: 'var(--primary-bg)' },
-  { id: '6', name: '网络工程师', level: '中级', questionCount: 390, icon: '🌐', bg: 'var(--cyan-bg)' },
-  { id: '7', name: '程序员', level: '初级', questionCount: 260, icon: '⌨️', bg: 'var(--gray-2)' },
-])
+onMounted(async () => {
+  if (subjectStore.subjectList.length === 0) {
+    await subjectStore.fetchSubjects()
+  }
+})
 
 function onSelect(sub: any) {
   subjectStore.switchSubject(sub.id)
@@ -64,7 +69,7 @@ function onSelect(sub: any) {
   })
   setTimeout(() => {
     router.back()
-  }, 600)
+  }, 400)
 }
 </script>
 
@@ -101,6 +106,14 @@ function onSelect(sub: any) {
   .right {
     width: 24px;
   }
+}
+
+.loading-state,
+.empty-state {
+  padding: 40px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .subject-list {

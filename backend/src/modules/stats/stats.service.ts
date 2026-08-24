@@ -52,16 +52,17 @@ export class StatsService {
   /**
    * 前台统计 - 总览
    */
-  async getOverview(userId: number): Promise<{
+  async getOverview(userId: number, subjectId?: number): Promise<{
     totalQuestions: number;
     totalAnswered: number;
     correctRate: number;
     wrongCount: number;
     favoriteCount: number;
     streakDays: number;
+    todayCount: number;
   }> {
     const totalQuestions = await this.questionRepository.count({
-      where: { status: 'published' },
+      where: subjectId ? { subjectId: Number(subjectId), status: 'published' } : { status: 'published' },
     });
 
     const records = await this.recordRepository.find({
@@ -78,6 +79,16 @@ export class StatsService {
     const correctRate =
       totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayRecords = records.filter(
+      (r) => r.createdAt && new Date(r.createdAt) >= startOfToday,
+    );
+    const todayCount = todayRecords.reduce(
+      (sum, r) => sum + (r.answeredQuestions || 0),
+      0,
+    );
+
     const wrongCount = await this.wrongQuestionRepository.count({
       where: { userId },
     });
@@ -86,12 +97,13 @@ export class StatsService {
     });
 
     return {
-      totalQuestions: totalQuestions || 500,
+      totalQuestions: totalQuestions || 0,
       totalAnswered,
       correctRate: correctRate || 0,
       wrongCount,
       favoriteCount,
-      streakDays: records.length > 0 ? 3 : 0,
+      streakDays: records.length > 0 ? 1 : 0,
+      todayCount,
     };
   }
 

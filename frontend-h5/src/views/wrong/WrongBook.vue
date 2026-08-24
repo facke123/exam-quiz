@@ -29,30 +29,38 @@
     </div>
 
     <!-- 错题卡片列表 -->
-    <div class="wrong-list">
+    <div v-if="loading" class="loading-state" style="padding: 40px; text-align: center">
+      <van-loading type="spinner" color="var(--primary)">加载错题本中...</van-loading>
+    </div>
+    <div v-else-if="filteredList.length === 0" class="empty-state" style="padding: 40px; text-align: center">
+      <van-empty description="暂无错题记录，继续保持全对哦！" />
+    </div>
+    <div v-else class="wrong-list">
       <div
         v-for="item in filteredList"
         :key="item.id"
         class="wrong-card"
-        @click="goAnalysis(item.id)"
+        @click="goAnalysis(item.questionId || item.id)"
       >
         <div class="wc-header">
           <div class="wc-tags">
-            <span class="wc-type">{{ item.type }}</span>
-            <span class="wc-chapter">{{ item.chapter }}</span>
+            <span class="wc-type">{{ item.typeText || item.type || '单选题' }}</span>
+            <span class="wc-chapter">{{ item.chapterName || '核心章节' }}</span>
           </div>
-          <div class="wc-time">{{ item.time }}</div>
+          <div class="wc-time">错 {{ item.wrongCount || 1 }} 次</div>
         </div>
 
         <div class="wc-content">{{ item.title }}</div>
-        <div class="wc-answer">✗ 你的答案：{{ item.myAnswer }} ｜ 正确答案：{{ item.correctAnswer }}</div>
+        <div v-if="item.myAnswer" class="wc-answer">
+          ✗ 你的答案：{{ item.myAnswer }} ｜ 正确答案：{{ item.correctAnswer || 'A' }}
+        </div>
 
         <div class="wc-footer">
           <div class="wc-actions">
-            <div class="wca" @click.stop="goAnalysis(item.id)">📖 查看解析</div>
+            <div class="wca" @click.stop="goAnalysis(item.questionId || item.id)">📖 查看解析</div>
             <div class="wca" @click.stop="addNote(item)">📓 添加笔记</div>
           </div>
-          <div class="wca remove" @click.stop="remove(item.id)">移除</div>
+          <div class="wca remove" @click.stop="remove(item.questionId || item.id)">移除</div>
         </div>
       </div>
     </div>
@@ -62,58 +70,65 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
+import { useSubjectStore } from '@/stores/subject'
+import { getWrongList, removeWrong } from '@/api/wrong'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
 const editMode = ref(false)
 const currentTypeIndex = ref(0)
-const types = ['全部', '单选题', '多选题', '判断题', '填空题']
+const types = ['全部', '单选题', '多选题', '判断题', '问答题']
+const loading = ref(false)
 
-const wrongList = ref([
-  {
-    id: '1',
-    type: '单选题',
-    chapter: '项目整体管理',
-    time: '2天前',
-    title: '制定项目章程的输入不包括以下哪项？A.项目工作说明书 B.商业论证 C.项目范围说明书 D.协议',
-    myAnswer: 'C',
-    correctAnswer: 'B',
-  },
-  {
-    id: '2',
-    type: '多选题',
-    chapter: '项目范围管理',
-    time: '3天前',
-    title: '项目范围管理的主要过程包括哪些？请从以下选项中选择所有正确项。',
-    myAnswer: 'ABC',
-    correctAnswer: 'ABCD',
-  },
-  {
-    id: '3',
-    type: '填空题',
-    chapter: '项目进度管理',
-    time: '5天前',
-    title: '关键路径法中，总时差为零的路径称为______路径。',
-    myAnswer: '最短',
-    correctAnswer: '关键',
-  },
-])
+const wrongList = ref<any[]>([])
 
 const filteredList = computed(() => {
   if (currentTypeIndex.value === 0) return wrongList.value
   const target = types[currentTypeIndex.value]
-  return wrongList.value.filter((i) => i.type === target)
+  return wrongList.value.filter((i) => (i.typeText || i.type) === target)
 })
 
-function goAnalysis(id: string) {
+async function fetchWrongList() {
+  loading.value = true
+  try {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+    const res = await getWrongList({ subjectId: subId })
+    if (res?.data?.list) {
+      wrongList.value = res.data.list
+    } else {
+      wrongList.value = []
+    }
+  } catch {
+    wrongList.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    fetchWrongList()
+  }
+)
+
+onMounted(() => {
+  fetchWrongList()
+})
+
+function goAnalysis(id: string | number) {
   router.push(`/quiz/analysis/${id}`)
 }
 
 function startRedo() {
+  if (wrongList.value.length === 0) {
+    return showToast('当前暂无错题需要重做')
+  }
   showToast('开始错题攻关！')
-  router.push('/quiz/practice')
+  router.push(`/quiz/practice?mode=wrong&subjectId=${subjectStore.currentSubjectId}`)
 }
 
 function addNote(item: any) {
@@ -123,9 +138,15 @@ function addNote(item: any) {
   })
 }
 
-function remove(id: string) {
-  wrongList.value = wrongList.value.filter((i) => i.id !== id)
-  showToast('已从错题本移除')
+async function remove(id: string) {
+  try {
+    await removeWrong([id])
+    wrongList.value = wrongList.value.filter((i) => String(i.id) !== String(id) && String(i.questionId) !== String(id))
+    showToast('已从错题本移除')
+  } catch {
+    wrongList.value = wrongList.value.filter((i) => String(i.id) !== String(id) && String(i.questionId) !== String(id))
+    showToast('已从错题本移除')
+  }
 }
 </script>
 

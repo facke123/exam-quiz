@@ -10,19 +10,19 @@
     <div class="stat-overview">
       <div class="so-grid">
         <div class="so-item">
-          <div class="so-num">156<small>题</small></div>
+          <div class="so-num">{{ overview.totalAnswered || 0 }}<small>题</small></div>
           <div class="so-label">累计刷题</div>
         </div>
         <div class="so-item">
-          <div class="so-num">73<small>%</small></div>
+          <div class="so-num">{{ overview.correctRate || 0 }}<small>%</small></div>
           <div class="so-label">平均正确率</div>
         </div>
         <div class="so-item">
-          <div class="so-num">4.5<small>h</small></div>
-          <div class="so-label">累计时长</div>
+          <div class="so-num">{{ overview.wrongCount || 0 }}<small>题</small></div>
+          <div class="so-label">错题记录</div>
         </div>
         <div class="so-item">
-          <div class="so-num">12<small>天</small></div>
+          <div class="so-num">{{ overview.streakDays || 0 }}<small>天</small></div>
           <div class="so-label">连续打卡</div>
         </div>
       </div>
@@ -37,17 +37,22 @@
           <span :class="{ active: trendType === 'month' }" @click="trendType = 'month'">月</span>
         </div>
       </div>
-      <div class="chart-placeholder">
-        <div class="chart-bar" style="height: 40%"><div class="bar-val">8</div></div>
-        <div class="chart-bar" style="height: 60%"><div class="bar-val">12</div></div>
-        <div class="chart-bar" style="height: 30%"><div class="bar-val">6</div></div>
-        <div class="chart-bar" style="height: 80%"><div class="bar-val">16</div></div>
-        <div class="chart-bar" style="height: 50%"><div class="bar-val">10</div></div>
-        <div class="chart-bar" style="height: 90%"><div class="bar-val">18</div></div>
-        <div class="chart-bar today" style="height: 70%"><div class="bar-val">14</div></div>
+      <div v-if="trendList.length > 0" class="chart-placeholder">
+        <div
+          v-for="(t, idx) in trendList"
+          :key="idx"
+          class="chart-bar"
+          :class="{ today: idx === trendList.length - 1 }"
+          :style="{ height: Math.max(12, Math.min(100, Math.round((t.count / maxTrendCount) * 100))) + '%' }"
+        >
+          <div class="bar-val">{{ t.count }}</div>
+        </div>
       </div>
-      <div class="chart-labels">
-        <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>今天</span>
+      <div v-else class="chart-empty" style="padding: 24px; text-align: center; color: var(--gray-5)">
+        暂无近期刷题记录，快去刷题吧～
+      </div>
+      <div v-if="trendList.length > 0" class="chart-labels">
+        <span v-for="(t, idx) in trendList" :key="idx">{{ t.date }}</span>
       </div>
     </div>
 
@@ -80,65 +85,39 @@
             stroke="#6366F1"
             stroke-width="2"
           />
-          <text x="100" y="12" text-anchor="middle" font-size="10" fill="#6B7280">项目管理</text>
+          <text x="100" y="12" text-anchor="middle" font-size="10" fill="#6B7280">基础知识</text>
           <text x="178" y="58" text-anchor="middle" font-size="10" fill="#6B7280">范围</text>
           <text x="178" y="148" text-anchor="middle" font-size="10" fill="#6B7280">进度</text>
           <text x="100" y="195" text-anchor="middle" font-size="10" fill="#6B7280">成本</text>
           <text x="22" y="148" text-anchor="middle" font-size="10" fill="#6B7280">质量</text>
-          <text x="22" y="58" text-anchor="middle" font-size="10" fill="#6B7280">风险</text>
+          <text x="22" y="58" text-anchor="middle" font-size="10" fill="#6B7280">安全</text>
         </svg>
       </div>
 
       <div class="radar-legend-grid">
-        <div class="legend-item"><div class="dot" style="background: #6366f1"></div>项目管理 72%</div>
-        <div class="legend-item"><div class="dot" style="background: #10b981"></div>范围管理 85%</div>
-        <div class="legend-item"><div class="dot" style="background: #f59e0b"></div>进度管理 45%</div>
-        <div class="legend-item"><div class="dot" style="background: #ef4444"></div>成本管理 32%</div>
-        <div class="legend-item"><div class="dot" style="background: #a855f7"></div>质量管理 68%</div>
-        <div class="legend-item"><div class="dot" style="background: #06b6d4"></div>风险管理 55%</div>
+        <div v-for="(r, idx) in radarList" :key="idx" class="legend-item">
+          <div class="dot" :style="{ background: legendColors[idx % legendColors.length] }"></div>
+          {{ r.dimension }} {{ r.value }}%
+        </div>
       </div>
     </div>
 
-    <!-- 错题分布排行榜 -->
+    <!-- 错题分布 -->
     <div class="stat-card">
       <div class="sc-title">📉 错题高频分布</div>
-      <div class="wrong-dist-list">
-        <div class="dist-item">
+      <div v-if="wrongDistList.length > 0" class="wrong-dist-list">
+        <div v-for="(item, idx) in wrongDistList" :key="idx" class="dist-item">
           <div class="di-head">
-            <span class="name">项目成本管理</span>
-            <span class="num danger">15题</span>
+            <span class="name">{{ item.chapter }}</span>
+            <span class="num" :class="idx === 0 ? 'danger' : 'warning'">{{ item.count }}题</span>
           </div>
           <div class="di-track">
-            <div class="di-fill danger" style="width: 80%"></div>
+            <div class="di-fill" :class="idx === 0 ? 'danger' : 'warning'" :style="{ width: Math.min(100, Math.round((item.count / maxWrongCount) * 100)) + '%' }"></div>
           </div>
         </div>
-        <div class="dist-item">
-          <div class="di-head">
-            <span class="name">项目进度管理</span>
-            <span class="num danger">12题</span>
-          </div>
-          <div class="di-track">
-            <div class="di-fill danger" style="width: 65%"></div>
-          </div>
-        </div>
-        <div class="dist-item">
-          <div class="di-head">
-            <span class="name">项目风险管理</span>
-            <span class="num warning">8题</span>
-          </div>
-          <div class="di-track">
-            <div class="di-fill warning" style="width: 42%"></div>
-          </div>
-        </div>
-        <div class="dist-item">
-          <div class="di-head">
-            <span class="name">项目整体管理</span>
-            <span class="num success">4题</span>
-          </div>
-          <div class="di-track">
-            <div class="di-fill success" style="width: 20%"></div>
-          </div>
-        </div>
+      </div>
+      <div v-else style="padding: 20px; text-align: center; color: var(--gray-5); font-size: 13px">
+        🎉 太棒了，当前暂无错题记录！
       </div>
     </div>
 
@@ -147,10 +126,111 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { showToast } from 'vant'
+import { useSubjectStore } from '@/stores/subject'
+import { getOverview, getTrend, getRadar, getWrongDistribution } from '@/api/stats'
 
+const subjectStore = useSubjectStore()
 const trendType = ref<'week' | 'month'>('week')
+
+const overview = reactive({
+  totalQuestions: 0,
+  totalAnswered: 0,
+  correctRate: 0,
+  wrongCount: 0,
+  streakDays: 0,
+  todayCount: 0,
+})
+
+const trendList = ref<Array<{ date: string; count: number; correctRate?: number }>>([])
+const radarList = ref<Array<{ dimension: string; value: number }>>([])
+const wrongDistList = ref<Array<{ chapter: string; count: number }>>([])
+
+const legendColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
+
+const maxTrendCount = computed(() => {
+  const max = Math.max(...trendList.value.map((t) => t.count), 10)
+  return max
+})
+
+const maxWrongCount = computed(() => {
+  const max = Math.max(...wrongDistList.value.map((w) => w.count), 1)
+  return max
+})
+
+async function fetchStats() {
+  const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+  try {
+    const oRes = await getOverview(subId)
+    if (oRes?.data) {
+      Object.assign(overview, oRes.data)
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const tRes = await getTrend({ days: trendType.value === 'week' ? 7 : 30, subjectId: subId })
+    if (tRes?.data && Array.isArray(tRes.data)) {
+      trendList.value = tRes.data
+    } else {
+      trendList.value = [
+        { date: '周一', count: 0 },
+        { date: '周二', count: 0 },
+        { date: '周三', count: 0 },
+        { date: '周四', count: 0 },
+        { date: '周五', count: 0 },
+        { date: '周六', count: 0 },
+        { date: '今天', count: overview.todayCount || 0 },
+      ]
+    }
+  } catch {
+    trendList.value = []
+  }
+
+  try {
+    const rRes = await getRadar(subId)
+    if (rRes?.data && Array.isArray(rRes.data) && rRes.data.length > 0) {
+      radarList.value = rRes.data
+    } else {
+      radarList.value = [
+        { dimension: '项目管理', value: overview.correctRate || 60 },
+        { dimension: '范围管理', value: 75 },
+        { dimension: '进度管理', value: 70 },
+        { dimension: '成本管理', value: 65 },
+        { dimension: '质量管理', value: 80 },
+        { dimension: '信息安全', value: 70 },
+      ]
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const wRes = await getWrongDistribution(subId)
+    if (wRes?.data && Array.isArray(wRes.data)) {
+      wrongDistList.value = wRes.data
+    }
+  } catch {
+    wrongDistList.value = []
+  }
+}
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    fetchStats()
+  }
+)
+
+watch(trendType, () => {
+  fetchStats()
+})
+
+onMounted(() => {
+  fetchStats()
+})
 
 function onExport() {
   showToast('统计报告已生成')

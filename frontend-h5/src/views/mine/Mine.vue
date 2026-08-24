@@ -35,7 +35,7 @@
         <div class="uc-item" @click="$router.push('/wrong')">
           <div class="uci-icon" style="background: var(--danger-bg)">❌</div>
           <div class="uci-text">错题本</div>
-          <div class="uci-value">3题</div>
+          <div class="uci-value">{{ overview.wrongCount || 0 }}题</div>
           <div class="uci-arrow">›</div>
         </div>
         <div class="uc-item" @click="$router.push('/notes')">
@@ -47,7 +47,7 @@
         <div class="uc-item" @click="$router.push('/records')">
           <div class="uci-icon" style="background: var(--cyan-bg)">📋</div>
           <div class="uci-text">做题记录</div>
-          <div class="uci-value">1次</div>
+          <div class="uci-value">{{ overview.totalAnswered || 0 }}题</div>
           <div class="uci-arrow">›</div>
         </div>
       </div>
@@ -56,7 +56,7 @@
         <div class="uc-item" @click="$router.push('/subject')">
           <div class="uci-icon" style="background: var(--success-bg)">🎯</div>
           <div class="uci-text">考试科目</div>
-          <div class="uci-value">{{ subjectStore.currentSubject?.name || '系统集成项目管理工程师' }}</div>
+          <div class="uci-value">{{ subjectStore.currentSubject?.name || '选择科目' }}</div>
           <div class="uci-arrow">›</div>
         </div>
         <div class="uc-item" @click="$router.push('/settings')">
@@ -77,7 +77,7 @@
           <div class="uci-text">帮助与反馈</div>
           <div class="uci-arrow">›</div>
         </div>
-        <div class="uc-item" @click="showToast('软考刷题王 v2.0 · 高效备考一战过关')">
+        <div class="uc-item" @click="showToast('软考刷题系统 · 高效备考一战过关')">
           <div class="uci-icon" style="background: var(--gray-2)">ℹ️</div>
           <div class="uci-text">关于我们</div>
           <div class="uci-arrow">›</div>
@@ -94,14 +94,42 @@
 </template>
 
 <script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showConfirmDialog, showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
+import { getOverview } from '@/api/stats'
 
 const router = useRouter()
 const userStore = useUserStore()
 const subjectStore = useSubjectStore()
+
+const overview = reactive({
+  totalAnswered: 0,
+  wrongCount: 0,
+  favoriteCount: 0,
+})
+
+async function fetchStats() {
+  try {
+    const res = await getOverview(subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined)
+    if (res?.data) {
+      overview.totalAnswered = res.data.totalAnswered || 0
+      overview.wrongCount = res.data.wrongCount || 0
+      overview.favoriteCount = res.data.favoriteCount || 0
+    }
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(() => {
+  if (userStore.token && !userStore.userInfo) {
+    userStore.fetchProfile()
+  }
+  fetchStats()
+})
 
 async function onLogout() {
   try {

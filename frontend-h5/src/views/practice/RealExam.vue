@@ -51,8 +51,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSubjectStore } from '@/stores/subject'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
 
 function onBack() {
   if (window.history.state?.back) {
@@ -64,13 +66,16 @@ function onBack() {
 const currentYear = ref('全部')
 const yearList = ['全部', '2025年', '2024年', '2023年', '2022年']
 
-const exams = ref([
-  { id: '1', year: '2025', season: '下半年', title: '系统集成项目管理工程师 2025下半年综合知识', paperType: '上午综合', duration: 150, questionCount: 75, score: 68 },
-  { id: '2', year: '2025', season: '上半年', title: '系统集成项目管理工程师 2025上半年综合知识', paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
-  { id: '3', year: '2024', season: '下半年', title: '系统集成项目管理工程师 2024下半年综合知识', paperType: '上午综合', duration: 150, questionCount: 75, score: 62 },
-  { id: '4', year: '2024', season: '上半年', title: '系统集成项目管理工程师 2024上半年综合知识', paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
-  { id: '5', year: '2023', season: '下半年', title: '系统集成项目管理工程师 2023下半年综合知识', paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
-])
+const exams = computed(() => {
+  const name = subjectStore.currentSubject?.name || '系统集成管理工程师'
+  return [
+    { id: '1', year: '2025', season: '下半年', title: `${name} 2025下半年综合知识`, paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
+    { id: '2', year: '2025', season: '上半年', title: `${name} 2025上半年综合知识`, paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
+    { id: '3', year: '2024', season: '下半年', title: `${name} 2024下半年综合知识`, paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
+    { id: '4', year: '2024', season: '上半年', title: `${name} 2024上半年综合知识`, paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
+    { id: '5', year: '2023', season: '下半年', title: `${name} 2023下半年综合知识`, paperType: '上午综合', duration: 150, questionCount: 75, score: 0 },
+  ]
+})
 
 const filteredExams = computed(() => {
   if (currentYear.value === '全部') return exams.value
@@ -79,7 +84,7 @@ const filteredExams = computed(() => {
 })
 
 function enterExam(exam: any) {
-  router.push(`/quiz/real?examId=${exam.id}`)
+  router.push(`/quiz/real?examId=${exam.id}&subjectId=${subjectStore.currentSubjectId}`)
 }
 </script>
 

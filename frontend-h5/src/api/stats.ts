@@ -4,9 +4,11 @@ export interface OverviewData {
   totalQuestions: number
   totalAnswered: number
   correctRate: number
-  duration: number
+  duration?: number
   streakDays: number
-  todayCount: number
+  todayCount?: number
+  wrongCount?: number
+  favoriteCount?: number
 }
 
 export interface TrendItem {

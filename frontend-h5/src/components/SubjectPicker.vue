@@ -33,22 +33,22 @@
 import { computed } from 'vue'
 import { useSubjectStore } from '@/stores/subject'
 
-const props = defineProps<{ modelValue: boolean; currentId?: string }>()
+const props = defineProps<{ modelValue: boolean; currentId?: number | string }>()
 const emit = defineEmits<{
   'update:modelValue': [v: boolean]
-  select: [id: string]
+  select: [id: number | string]
 }>()
 
 const subjectStore = useSubjectStore()
 const subjects = computed(() => subjectStore.subjectList)
-const currentId = computed(() => props.currentId || subjectStore.currentSubjectId)
+const currentId = computed(() => props.currentId ?? subjectStore.currentSubjectId)
 
 const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v)
 })
 
-function onSelect(id: string) {
+function onSelect(id: number | string) {
   emit('select', id)
   visible.value = false
 }

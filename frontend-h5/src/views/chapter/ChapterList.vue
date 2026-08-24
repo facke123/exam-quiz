@@ -16,7 +16,13 @@
     </div>
 
     <!-- 章节列表 -->
-    <div class="chapter-list">
+    <div v-if="loading" class="loading-box" style="padding: 40px; text-align: center;">
+      <van-loading type="spinner" color="var(--primary)">加载章节数据中...</van-loading>
+    </div>
+    <div v-else-if="chapters.length === 0" class="empty-box" style="padding: 40px; text-align: center;">
+      <van-empty description="当前科目暂无章节数据" />
+    </div>
+    <div v-else class="chapter-list">
       <div
         v-for="(ch, idx) in chapters"
         :key="ch.id"
@@ -27,10 +33,10 @@
         <div class="ch-info">
           <div class="ch-name">{{ ch.name }}</div>
           <div class="ch-meta">
-            <span>{{ ch.questionCount }}题</span>
-            <span v-if="ch.progress > 0">已做{{ Math.round((ch.progress / 100) * ch.questionCount) }}题</span>
+            <span>{{ ch.questionCount || 0 }}题</span>
+            <span v-if="(ch.progress || 0) > 0">已做{{ Math.round(((ch.progress || 0) / 100) * (ch.questionCount || 0)) }}题</span>
             <span v-else>未开始</span>
-            <span v-if="ch.progress > 0" class="rate">正确率{{ percent(ch.correctRate) }}</span>
+            <span v-if="(ch.progress || 0) > 0" class="rate">正确率{{ percent(ch.correctRate || 0) }}</span>
           </div>
         </div>
         <div class="ch-arrow">›</div>
@@ -40,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { getChapterList, type Chapter } from '@/api/question'
@@ -48,6 +54,7 @@ import { toPercent } from '@/utils/format'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+const loading = ref(false)
 
 function onBack() {
   if (window.history.state?.back) {
@@ -60,12 +67,12 @@ function onBack() {
 const showFilter = ref(false)
 const chapters = ref<Chapter[]>([])
 
-const totalQuestions = computed(() => chapters.value.reduce((s, c) => s + (c.questionCount || 0), 0) || 385)
+const totalQuestions = computed(() => chapters.value.reduce((s, c) => s + (c.questionCount || 0), 0))
 const answeredCount = computed(() =>
-  chapters.value.reduce((s, c) => s + Math.round(((c.progress || 0) / 100) * (c.questionCount || 0)), 0) || 8
+  chapters.value.reduce((s, c) => s + Math.round(((c.progress || 0) / 100) * (c.questionCount || 0)), 0)
 )
 const overallProgress = computed(() =>
-  totalQuestions.value ? Math.min(100, Math.round((answeredCount.value / totalQuestions.value) * 100)) : 2
+  totalQuestions.value ? Math.min(100, Math.round((answeredCount.value / totalQuestions.value) * 100)) : 0
 )
 
 function percent(n: number) {
@@ -76,28 +83,35 @@ function enterChapter(ch: Chapter) {
   router.push(`/quiz/chapter?chapterId=${ch.id}`)
 }
 
-onMounted(async () => {
+async function loadChapters() {
+  loading.value = true
   try {
-    const res = await getChapterList(subjectStore.currentSubjectId || '1')
-    if (res?.data && res.data.length > 0) {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : '1'
+    const res = await getChapterList(subId)
+    if (res?.data && Array.isArray(res.data)) {
       chapters.value = res.data
     } else {
-      throw new Error('empty')
+      chapters.value = []
     }
   } catch {
-    chapters.value = [
-      { id: '1', name: '信息化与发展', questionCount: 12, correctRate: 0.5, progress: 67 },
-      { id: '2', name: '信息系统集成及服务管理', questionCount: 15, correctRate: 0, progress: 0 },
-      { id: '3', name: '信息系统集成专业技术知识', questionCount: 48, correctRate: 0, progress: 0 },
-      { id: '4', name: '项目一般管理知识', questionCount: 35, correctRate: 0, progress: 0 },
-      { id: '5', name: '项目立项管理', questionCount: 20, correctRate: 0, progress: 0 },
-      { id: '6', name: '项目整体管理', questionCount: 42, correctRate: 0, progress: 0 },
-      { id: '7', name: '项目范围管理', questionCount: 30, correctRate: 0, progress: 0 },
-      { id: '8', name: '项目进度管理', questionCount: 38, correctRate: 0, progress: 0 },
-      { id: '9', name: '项目成本管理', questionCount: 25, correctRate: 0, progress: 0 },
-      { id: '10', name: '项目质量管理', questionCount: 28, correctRate: 0, progress: 0 },
-    ]
+    chapters.value = []
+  } finally {
+    loading.value = false
   }
+}
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    loadChapters()
+  }
+)
+
+onMounted(async () => {
+  if (subjectStore.subjectList.length === 0) {
+    await subjectStore.fetchSubjects()
+  }
+  await loadChapters()
 })
 </script>
 

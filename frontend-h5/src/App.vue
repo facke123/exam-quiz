@@ -18,10 +18,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useSubjectStore } from '@/stores/subject'
 
 const cachedViews = ref<string[]>(['Home', 'ChapterList', 'WrongBook', 'Stats', 'Mine'])
 const globalLoading = ref(false)
+const subjectStore = useSubjectStore()
+
+onMounted(() => {
+  subjectStore.fetchSubjects()
+})
 </script>
 
 <style scoped lang="scss">

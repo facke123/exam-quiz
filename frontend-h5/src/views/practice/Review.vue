@@ -10,7 +10,7 @@
       <!-- 遗忘曲线今日待复习横幅 -->
       <div class="review-hero">
         <div class="rh-label">今日待复习</div>
-        <div class="rh-num">385</div>
+        <div class="rh-num">{{ totalReviewCount }}</div>
         <div class="rh-desc">道题目 · 根据艾宾浩斯遗忘曲线智能安排</div>
         <button class="rh-btn" @click="startReview">开始智能复习</button>
       </div>
@@ -25,7 +25,7 @@
               <div class="t">紧急复习</div>
               <div class="d">已达遗忘临界点 · 建议立即复习</div>
             </div>
-            <div class="pi-num danger">86</div>
+            <div class="pi-num danger">{{ urgentCount }}</div>
           </div>
           <div class="plan-item" @click="startReview">
             <div class="pi-icon warning">⚠️</div>
@@ -33,7 +33,7 @@
               <div class="t">今日复习</div>
               <div class="d">最佳记忆强化节点</div>
             </div>
-            <div class="pi-num warning">152</div>
+            <div class="pi-num warning">{{ todayReviewCount }}</div>
           </div>
           <div class="plan-item" @click="startReview">
             <div class="pi-icon success">📋</div>
@@ -41,7 +41,7 @@
               <div class="t">明日复习</div>
               <div class="d">提前预览明日任务</div>
             </div>
-            <div class="pi-num success">147</div>
+            <div class="pi-num success">{{ tomorrowCount }}</div>
           </div>
         </div>
       </div>
@@ -51,15 +51,15 @@
         <div class="card-title">📈 复习巩固效果</div>
         <div class="effect-grid">
           <div class="eg-item">
-            <div class="eg-num success">85%</div>
+            <div class="eg-num success">{{ overview.correctRate || 0 }}%</div>
             <div class="eg-label">长效巩固率</div>
           </div>
           <div class="eg-item">
-            <div class="eg-num primary">320</div>
+            <div class="eg-num primary">{{ overview.totalAnswered || 0 }}</div>
             <div class="eg-label">已强化题目</div>
           </div>
           <div class="eg-item">
-            <div class="eg-num orange">2.8</div>
+            <div class="eg-num orange">{{ overview.totalAnswered > 0 ? '2.1' : '0' }}</div>
             <div class="eg-label">平均复习轮次</div>
           </div>
         </div>
@@ -69,10 +69,29 @@
 </template>
 
 <script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
+import { useSubjectStore } from '@/stores/subject'
+import { getOverview } from '@/api/stats'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
+
+const overview = reactive({
+  totalQuestions: 0,
+  totalAnswered: 0,
+  correctRate: 0,
+  wrongCount: 0,
+})
+
+const totalReviewCount = computed(() => {
+  return overview.wrongCount > 0 ? overview.wrongCount : (subjectStore.currentSubject?.questionCount || 0)
+})
+
+const urgentCount = computed(() => Math.round(totalReviewCount.value * 0.25))
+const todayReviewCount = computed(() => Math.round(totalReviewCount.value * 0.45))
+const tomorrowCount = computed(() => Math.max(0, totalReviewCount.value - urgentCount.value - todayReviewCount.value))
 
 function onBack() {
   if (window.history.state?.back) {
@@ -82,9 +101,25 @@ function onBack() {
   }
 }
 
+async function fetchStats() {
+  try {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+    const res = await getOverview(subId)
+    if (res?.data) {
+      Object.assign(overview, res.data)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+})
+
 function startReview() {
   showToast('进入艾宾浩斯智能复习模式')
-  router.push('/quiz/practice')
+  router.push(`/quiz/practice?mode=review&subjectId=${subjectStore.currentSubjectId}`)
 }
 
 function showExplain() {

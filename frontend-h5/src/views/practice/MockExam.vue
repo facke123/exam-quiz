@@ -44,8 +44,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSubjectStore } from '@/stores/subject'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
 
 function onBack() {
   if (window.history.state?.back) {
@@ -86,7 +88,7 @@ const mocks = ref([
 ])
 
 function enterMock(mock: any) {
-  router.push(`/quiz/mock?examId=${mock.id}`)
+  router.push(`/quiz/mock?examId=${mock.id}&subjectId=${subjectStore.currentSubjectId}`)
 }
 </script>
 

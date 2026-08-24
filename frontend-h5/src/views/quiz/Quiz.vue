@@ -15,7 +15,16 @@
       ⏱️ {{ formatTime(remainingSeconds) }}
     </div>
 
-    <div v-if="currentQuestion" class="quiz-body">
+    <div v-if="loading" class="loading-state" style="padding: 60px 16px; text-align: center;">
+      <van-loading type="spinner" color="var(--primary)">正在组卷抽取考点试题...</van-loading>
+    </div>
+    <div v-else-if="questions.length === 0" class="empty-state" style="padding: 60px 16px; text-align: center;">
+      <van-empty description="当前科目或章节暂无已发布试题" />
+      <van-button type="primary" size="small" round style="margin-top: 12px" @click="$router.push('/')">
+        返回首页选择其他科目
+      </van-button>
+    </div>
+    <div v-else-if="currentQuestion" class="quiz-body">
       <QuestionCard
         :question="currentQuestion"
         v-model="currentAnswer"
@@ -25,6 +34,7 @@
 
     <!-- 底部操作栏 -->
     <QuizFooter
+      v-if="questions.length > 0"
       :current="currentIndex"
       :total="total"
       :favorited="isFavorited()"
@@ -64,7 +74,8 @@ const router = useRouter()
 const quizStore = useQuizStore()
 const subjectStore = useSubjectStore()
 
-const mode = computed(() => (route.params.mode as string) || 'practice')
+const loading = ref(false)
+const mode = computed(() => (route.params.mode as string) || (route.query.mode as string) || 'practice')
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
 const remainingSeconds = ref(7200)
 let timer: any = null
@@ -74,7 +85,7 @@ const currentIndex = ref(0)
 const answers = ref<Record<string, string | string[]>>({})
 const sheetVisible = ref(false)
 
-const total = computed(() => questions.value.length || 10)
+const total = computed(() => questions.value.length)
 const currentQuestion = computed(() => questions.value[currentIndex.value])
 
 const currentAnswer = computed<string | string[]>({
@@ -144,7 +155,6 @@ function onSubmit() {
     message: `您已答 ${Object.keys(answers.value).length} / ${total.value} 题，确定要交卷吗？`,
     showCancelButton: true,
   }).then(() => {
-    // 跳转成绩报告页
     router.push({
       path: '/quiz/report/1',
       state: {
@@ -163,62 +173,25 @@ onMounted(async () => {
     }, 1000)
   }
 
+  loading.value = true
   try {
-    const res = await getQuestions({ subjectId: subjectStore.currentSubjectId || '1', count: 10 })
-    if (res?.data && res.data.length > 0) {
+    const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+    const targetChapterId = route.query.chapterId ? String(route.query.chapterId) : undefined
+    const res = await getQuestions({
+      subjectId: String(targetSubjectId),
+      chapterId: targetChapterId,
+      mode: mode.value,
+      count: 20,
+    })
+    if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
       questions.value = res.data
     } else {
-      throw new Error('empty')
+      questions.value = []
     }
   } catch {
-    questions.value = [
-      {
-        id: '1',
-        title: '在项目生命周期中，哪个阶段的项目成本和人员投入水平通常最高？',
-        type: 'single',
-        score: 2,
-        difficulty: 2,
-        knowledgePoint: '项目生命周期',
-        options: [
-          { key: 'A', content: '启动阶段' },
-          { key: 'B', content: '执行阶段' },
-          { key: 'C', content: '规划阶段' },
-          { key: 'D', content: '收尾阶段' },
-        ],
-        answer: 'B',
-        analysis: '在项目生命周期的执行阶段，项目成本和人员投入水平通常达到最高。大部分项目预算和人力都集中在此阶段完成产品交付。',
-      },
-      {
-        id: '2',
-        title: '项目范围管理的主要过程包括哪些？请从以下选项中选择所有正确项。',
-        type: 'multiple',
-        score: 3,
-        difficulty: 3,
-        knowledgePoint: '项目范围管理',
-        options: [
-          { key: 'A', content: '规划范围管理' },
-          { key: 'B', content: '收集需求' },
-          { key: 'C', content: '定义范围与创建WBS' },
-          { key: 'D', content: '确认范围与控制范围' },
-        ],
-        answer: ['A', 'B', 'C', 'D'],
-        analysis: '项目范围管理全过程涵盖规划范围管理、收集需求、定义范围、创建WBS、确认范围和控制范围6个主要过程。',
-      },
-      {
-        id: '3',
-        title: '关键路径法中，总时差为零的活动所在的路径即为关键路径。',
-        type: 'judge',
-        score: 2,
-        difficulty: 1,
-        knowledgePoint: '项目进度管理',
-        options: [
-          { key: 'A', content: '正确' },
-          { key: 'B', content: '错误' },
-        ],
-        answer: 'A',
-        analysis: '关键路径是项目中时间最长的活动序列，关键路径上的活动总时差和自由时差通常均为0。',
-      },
-    ]
+    questions.value = []
+  } finally {
+    loading.value = false
   }
 })
 
