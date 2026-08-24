@@ -623,6 +623,14 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
   const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
 
+  let explicitPrefixCount = 0
+  for (const line of lines) {
+    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(line)) {
+      explicitPrefixCount++
+    }
+  }
+  const useExplicitOnly = explicitPrefixCount >= 10
+
   const parsedQuestions: any[] = []
   let currentChapter = defaultChapter
   let currentTypeHint = 'single'
@@ -659,8 +667,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
     if (!q) return
     let content = q.stemLines.join('\n').trim()
     content = content.replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?\s*)+/i, '')
-    content = content.replace(/^\d+[.、．\s]\s*/, '')
-    content = content.replace(/^第\d+题[.、．\s]?\s*/, '')
+    content = content.replace(/^(?:试题\s*|第\s*)?\d+(?:\s*题)?[\s、.．:：\-\—_]*(?:【[^】]*】)?\s*/i, '')
     content = content.replace(/^[（(]\d+[）)][.、\s]?\s*/, '')
 
     if (!content) return
@@ -675,7 +682,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       }
     } else if (/正确|错误|对|错|√|×/i.test(q.answer) || /判断/i.test(content) || /判断/i.test(q.rawType)) {
       type = 'judge'
-    } else if (optCount === 0 && (q.rawType === 'essay' || (q.answer && q.answer.length > 8) || /简述|论述|简答|分析/i.test(content))) {
+    } else if (optCount === 0 && (q.rawType === 'essay' || (q.answer && q.answer.length > 8) || /简述|论述|简答|案例|分析/i.test(content))) {
       type = 'essay'
     }
 
@@ -728,7 +735,22 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       continue
     }
 
-    const isNewQuestionStart = /^(?:\d+[.、．\s]|第\d+题|[（(]\d+[）)])\s*\S+/i.test(line)
+    // 遇到下午案例大题
+    if (/案例分析试题|下午试题|【\d+年\d+月试题[一二三四五六七八九十]】/.test(line)) {
+      finalizeQuestion(currentQ)
+      currentQ = null
+      break
+    }
+
+    // 识别新试题
+    let isNewQuestionStart = false
+    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(line)) {
+      isNewQuestionStart = true
+    } else if (!useExplicitOnly && /^\d{1,3}[.、．\s]\s*\S+/i.test(line)) {
+      if (!currentQ || (currentQ.state !== 'stem' && currentQ.state !== 'analysis') || currentQ.answer) {
+        isNewQuestionStart = true
+      }
+    }
 
     if (isNewQuestionStart) {
       finalizeQuestion(currentQ)
@@ -768,7 +790,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       continue
     }
 
-    if (currentQ.state === 'analysis') {
+    if (currentQ.state === 'analysis' || (currentQ.answer && currentQ.options.length > 0)) {
       currentQ.analysisLines.push(line)
       continue
     }
@@ -807,7 +829,11 @@ async function parseTextOrDocFile(file: File) {
   // eslint-disable-next-line no-control-regex
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   if (!text) {
-    return ElMessage.warning('未能从 Word 文档中提取到文字内容，请确认文档非空')
+    return ElMessageBox.alert(
+      `文档「${file.name}」中未能提取到可识别的试题文本内容。\n\n【原因分析】\n检测到该文件为【纯图片扫描版/截图版 Word】（内部全为页面图片，无包含文字题干）。\n\n【解决方案】\n1. 请上传包含文字可编辑版的文档（如同一目录下的「..._文字版.docx」或「.txt」文本）；\n2. 或复制试题文字使用「AI 文本智能识别」；\n3. 系统将自动提取题干、选项、答案及考点解析并一键入库。`,
+      'Word 文档解析提示',
+      { type: 'warning', confirmButtonText: '我知道了' }
+    )
   }
 
   parsing.value = true
@@ -816,7 +842,7 @@ async function parseTextOrDocFile(file: File) {
     if (clientQuestions.length > 0) {
       previewList.value = clientQuestions
       await runBatchDuplicateCheck()
-      ElMessage.success(`🎉 成功从 Word 文档解析出 ${clientQuestions.length} 道试题！`)
+      ElMessage.success(`🎉 成功从 Word/文本文档解析出 ${clientQuestions.length} 道试题！`)
       return
     }
 
@@ -829,7 +855,11 @@ async function parseTextOrDocFile(file: File) {
       await runBatchDuplicateCheck()
       ElMessage.success(`🎉 成功从 Word 文档解析出 ${res.data.questions.length} 道试题！`)
     } else {
-      ElMessage.warning('未能识别到有效题目，请参考标准模板调整 Word 试卷排版')
+      ElMessageBox.alert(
+        `未能从「${file.name}」识别到有效题目。\n\n【排查建议】：\n1. 若该文档为纯图片扫描版 Word，请更换为文字版 Word（如「..._文字版.docx」）或 .txt 格式；\n2. 或切换到「AI 文本智能识别」直接粘贴试卷内容。`,
+        '试卷解析提示',
+        { type: 'warning', confirmButtonText: '我知道了' }
+      )
     }
   } catch (err: any) {
     ElMessage.error(err.message || '试卷识别失败')

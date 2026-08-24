@@ -469,8 +469,9 @@ async function onPaperFileSelected(e: Event) {
   if (!files || !files.length) return
   const file = files[0]
   
-  // 提取试卷名
-  const cleanBaseName = file.name.replace(/\.[^/.]+$/, '')
+  // 提取试卷名并清理后缀
+  let cleanBaseName = file.name.replace(/\.[^/.]+$/, '')
+  cleanBaseName = cleanBaseName.replace(/[_\- ]*文字版$/i, '').trim()
   if (cleanBaseName && cleanBaseName.length >= 3) {
     importForm.name = cleanBaseName
   }
@@ -480,7 +481,16 @@ async function onPaperFileSelected(e: Event) {
     if (file.name.endsWith('.docx')) {
       const buffer = await file.arrayBuffer()
       const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-      parseTextToQuestions(result.value)
+      const text = (result.value || '').trim()
+      
+      const count = parseTextToQuestions(text)
+      if (count === 0) {
+        ElMessageBox.alert(
+          `文档「${file.name}」中未能提取到可识别的试题文本内容。\n\n【原因分析】\n检测到该文件为【纯图片扫描版/截图版 Word】（内部全为页面图片，无包含文字题干）。\n\n【解决方案】\n1. 请上传包含文字可编辑版的文档（如同一目录下的「${cleanBaseName}_文字版.docx」或「.txt」文本）；\n2. 或将试题文字直接复制粘贴至「或粘贴试卷」输入框中；\n3. 系统将自动提取题干、选项A/B/C/D、答案及考点解析并一键入库建卷。`,
+          '试卷文档解析提示',
+          { type: 'warning', confirmButtonText: '我知道了' }
+        )
+      }
     } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
@@ -489,7 +499,10 @@ async function onPaperFileSelected(e: Event) {
       parseExcelToQuestions(rows)
     } else {
       const text = await file.text()
-      parseTextToQuestions(text)
+      const count = parseTextToQuestions(text)
+      if (count === 0) {
+        ElMessage.warning('未能从文本中识别出符合格式的试题，请检查文本格式')
+      }
     }
   } catch (err: any) {
     ElMessage.error(`试卷解析失败: ${err.message}`)
@@ -532,23 +545,52 @@ function parseExcelToQuestions(rows: any[]) {
 }
 
 // 文本与 Word 试卷解析状态机
-function parseTextToQuestions(rawText: string) {
+function parseTextToQuestions(rawText: string): number {
   const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const questions: any[] = []
   let currentQ: any = null
 
+  // 预判文档是否显式采用“试题1 / 第1题”规范命名
+  let explicitCount = 0
+  for (const l of lines) {
+    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(l)) explicitCount++
+  }
+  const useExplicitOnly = explicitCount >= 10
+
   const isQuestionStart = (line: string) => {
-    return /^(\d+)[、.．\s]\s*(.+)/.test(line) || /^[（(](\d+)[）)]\s*(.+)/.test(line)
+    // 遇到下午案例分析部分，结束上午选择题提取
+    if (/案例分析试题|下午试题|【\d+年\d+月试题[一二三四五六七八九十]】/.test(line)) {
+      return 'stop'
+    }
+    // 1. 显式格式：试题 1 / 试题1- / 第1题
+    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(line)) return 'start'
+    
+    // 2. 标准数字题号 1. / 1、 / 1．
+    if (!useExplicitOnly && /^\d{1,3}[、.．]\s*\S+/.test(line)) {
+      if (currentQ && (currentQ.state === 'stem' || currentQ.state === 'analysis')) {
+        return false
+      }
+      return 'start'
+    }
+    return false
   }
 
   const saveCurrentQ = () => {
     if (!currentQ) return
-    if (currentQ.content) {
+    if (currentQ.content && (currentQ.options.length > 0 || currentQ.answer || currentQ.analysis)) {
       if (!currentQ.answer) currentQ.answer = 'A'
-      if (currentQ.options && currentQ.options.length >= 2 && currentQ.type === 'essay') {
+      if (currentQ.options && currentQ.options.length >= 2) {
         currentQ.type = currentQ.answer.length > 1 ? 'multiple' : 'single'
       }
-      questions.push({ ...currentQ })
+      questions.push({
+        rowNo: questions.length + 1,
+        type: currentQ.type,
+        content: currentQ.content,
+        options: currentQ.options,
+        answer: currentQ.answer,
+        analysis: currentQ.analysis || '详见教材对应核心考点解析。',
+        score: 1,
+      })
     }
     currentQ = null
   }
@@ -556,25 +598,29 @@ function parseTextToQuestions(rawText: string) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
 
-    if (isQuestionStart(line)) {
+    const qStatus = isQuestionStart(line)
+    if (qStatus === 'stop') {
       saveCurrentQ()
-      const m = line.match(/^(\d+)[、.．\s]\s*(.+)/) || line.match(/^[（(](\d+)[）)]\s*(.+)/)
-      const qNum = m ? m[1] : String(questions.length + 1)
+      break
+    }
+
+    if (qStatus === 'start') {
+      saveCurrentQ()
+      const m = line.match(/^(?:试题\s*|第\s*)?(\d+)(?:\s*题)?[\s、.．:：\-\—_]*(?:【[^】]*】)?\s*(.*)/)
       const titleContent = m ? m[2] : line
 
       let type = 'single'
       if (titleContent.includes('多选')) type = 'multiple'
       else if (titleContent.includes('判断')) type = 'judge'
-      else if (titleContent.includes('问答') || titleContent.includes('简答')) type = 'essay'
+      else if (titleContent.includes('问答') || titleContent.includes('简答') || titleContent.includes('案例')) type = 'essay'
 
       currentQ = {
-        rowNo: Number(qNum) || questions.length + 1,
         type,
         content: titleContent.replace(/【(?:单选|多选|判断|问答)题?】/g, '').trim(),
         options: [],
         answer: '',
         analysis: '',
-        score: 1,
+        state: 'stem',
       }
       continue
     }
@@ -582,43 +628,55 @@ function parseTextToQuestions(rawText: string) {
     if (!currentQ) continue
 
     // 答案识别
-    const ansMatch = line.match(/【?(?:参考)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
+    const ansMatch = line.match(/^【?(?:参考)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
     if (ansMatch) {
+      currentQ.state = 'answer'
       currentQ.answer = ansMatch[1].trim().toUpperCase()
       continue
     }
 
     // 解析识别
-    const anaMatch = line.match(/【?(?:试题)?解析】?[:：\s]*(.*)/i)
+    const anaMatch = line.match(/^【?(?:试题)?解析】?[:：\s]*(.*)/i)
     if (anaMatch) {
+      currentQ.state = 'analysis'
       currentQ.analysis = anaMatch[1].trim()
       continue
     }
 
-    // 选项识别 A/B/C/D
-    const optMatch = line.match(/^([A-Ea-e])[.、．\s]\s*(.+)/) || line.match(/^[（(]([A-Ea-e])[）)]\s*(.+)/)
+    // 如果已经在解析阶段（或已有答案后），后续文本一律作为解析内容追加
+    if (currentQ.state === 'analysis' || (currentQ.answer && currentQ.options.length > 0)) {
+      currentQ.analysis += (currentQ.analysis ? '\n' : '') + line
+      continue
+    }
+
+    // 单行独立选项识别 A/B/C/D
+    const optMatch = line.match(/^([A-Ea-e])[.、．\s]\s*(.+)/)
     if (optMatch) {
+      currentQ.state = 'option'
       const key = optMatch[1].toUpperCase()
       currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
       continue
     }
 
-    // 多行选项识别（如 A. xxx B. yyy在一行）
-    const inlineOptRegex = /([A-Ea-e])[.、．\s]\s*([^A-Ea-e]+)/g
-    let inlineM: RegExpExecArray | null
-    let foundInline = false
-    while ((inlineM = inlineOptRegex.exec(line)) !== null) {
-      foundInline = true
-      const key = inlineM[1].toUpperCase()
-      currentQ.options.push({ key, label: key, content: inlineM[2].trim() })
+    // 多选项合并在单行（如 A. xxx B. yyy）
+    if (/[A-Da-d][.、．\s].+[B-Eb-e][.、．\s]/.test(line)) {
+      const inlineOptRegex = /([A-Ea-e])[.、．\s]\s*([^A-Ea-e]+)/g
+      let inlineM: RegExpExecArray | null
+      let count = 0
+      while ((inlineM = inlineOptRegex.exec(line)) !== null) {
+        count++
+        const key = inlineM[1].toUpperCase()
+        currentQ.options.push({ key, label: key, content: inlineM[2].trim() })
+      }
+      if (count > 0) {
+        currentQ.state = 'option'
+        continue
+      }
     }
-    if (foundInline) continue
 
-    // 题干/解析多行追加
-    if (currentQ.analysis) {
-      currentQ.analysis += '\n' + line
-    } else if (currentQ.options.length === 0) {
-      currentQ.content += ' ' + line
+    // 题干多行追加
+    if (currentQ.state === 'stem') {
+      currentQ.content += (currentQ.content ? '\n' : '') + line
     }
   }
 
@@ -626,9 +684,8 @@ function parseTextToQuestions(rawText: string) {
   parsedQuestions.value = questions
   if (questions.length > 0) {
     ElMessage.success(`试卷解析完毕，共提取出 ${questions.length} 道试题！`)
-  } else {
-    ElMessage.warning('未能识别出符合格式的试题，请检查文档题号与选项标识')
   }
+  return questions.length
 }
 
 // 提交导入试卷
