@@ -539,7 +539,10 @@ export class QuestionService implements OnModuleInit {
   async batchImport(dto: ImportQuestionDto | any): Promise<{
     success: number;
     failed: number;
-    errors: { row: number; error: string }[];
+    skipped?: number;
+    updated?: number;
+    note?: string;
+    errors: { row: number; title?: string; error: string }[];
   }> {
     const questions = dto.questions || [];
     let success = 0;
@@ -570,10 +573,14 @@ export class QuestionService implements OnModuleInit {
       existingChapters.push(savedCh);
     }
 
+    const duplicateStrategy = dto.duplicateStrategy || 'skip'; // skip | overwrite | allow
+    let skipped = 0;
+    let updated = 0;
+
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       try {
-        const content = q.content || q.title;
+        const content = String(q.content || q.title || '').trim();
         if (!content) throw new Error('题干不能为空');
 
         // 匹配章节ID
@@ -588,6 +595,30 @@ export class QuestionService implements OnModuleInit {
           );
           if (matched) {
             chapterId = Number(matched.id);
+          }
+        }
+
+        // 查重检测
+        if (duplicateStrategy !== 'allow') {
+          const existingQuestion = await this.questionRepository.findOne({
+            where: { subjectId: targetSubjectId, content },
+          });
+          if (existingQuestion) {
+            if (duplicateStrategy === 'skip') {
+              skipped++;
+              continue;
+            } else if (duplicateStrategy === 'overwrite') {
+              existingQuestion.chapterId = chapterId;
+              existingQuestion.type = toDbType(q.type) || 'single_choice';
+              existingQuestion.difficulty = Number(q.difficulty) || 3;
+              existingQuestion.options = q.options || [];
+              existingQuestion.answer = String(q.answer || 'A').trim().toUpperCase();
+              existingQuestion.analysis = q.analysis || '';
+              existingQuestion.source = toDbSource(dto.type) || 'import';
+              await this.questionRepository.save(existingQuestion as any);
+              updated++;
+              continue;
+            }
           }
         }
 
@@ -615,13 +646,17 @@ export class QuestionService implements OnModuleInit {
       }
     }
 
+    const note = skipped > 0 
+      ? `新增入库 ${success} 道，自动跳过重复 ${skipped} 道${updated > 0 ? `，更新覆盖 ${updated} 道` : ''}` 
+      : `成功入库 ${success} 道${updated > 0 ? `，更新覆盖 ${updated} 道` : ''}`;
+
     QuestionService.importRecords.unshift({
       id: Date.now(),
       fileName: dto.fileName || `批量导入批次_${Date.now()}`,
       subjectName,
       type: dto.type || 'excel',
       totalCount: questions.length,
-      successCount: success,
+      successCount: success + updated,
       failCount: failed,
       status: failed === 0 ? 'success' : 'partial',
       creator: '超级管理员',
@@ -629,11 +664,134 @@ export class QuestionService implements OnModuleInit {
       errors: errors || [],
     });
 
-    return { success, failed, errors };
+    return { success, failed, skipped, updated, note, errors };
   }
 
   /**
-   * 题目查重
+   * 批量预检重复试题
+   */
+  async batchCheckDuplicates(subjectId: number, contents: string[]): Promise<{
+    duplicates: Array<{ index: number; content: string; existingId: number; existingChapterId?: number }>;
+  }> {
+    if (!contents || contents.length === 0) return { duplicates: [] };
+
+    const existingQuestions = await this.questionRepository.find({
+      where: { subjectId },
+      select: ['id', 'content', 'chapterId'],
+    });
+
+    const contentMap = new Map<string, { id: number; chapterId: number }>();
+    existingQuestions.forEach((q) => {
+      if (q.content) contentMap.set(q.content.trim(), { id: Number(q.id), chapterId: Number(q.chapterId) });
+    });
+
+    const duplicates: Array<{ index: number; content: string; existingId: number; existingChapterId?: number }> = [];
+    contents.forEach((c, idx) => {
+      const trimmed = String(c || '').trim();
+      if (contentMap.has(trimmed)) {
+        const match = contentMap.get(trimmed)!;
+        duplicates.push({
+          index: idx,
+          content: trimmed,
+          existingId: match.id,
+          existingChapterId: match.chapterId,
+        });
+      }
+    });
+
+    return { duplicates };
+  }
+
+  /**
+   * 全题库扫描重复题目组
+   */
+  async scanDuplicates(subjectId?: number): Promise<{
+    totalDuplicates: number;
+    duplicateGroupsCount: number;
+    groups: Array<{
+      content: string;
+      subjectId: number;
+      count: number;
+      records: Array<{ id: number; createdAt: Date; type: string; answer: string; chapterId: number }>;
+    }>;
+  }> {
+    const qb = this.questionRepository
+      .createQueryBuilder('q')
+      .select('q.content', 'content')
+      .addSelect('q.subjectId', 'subjectId')
+      .addSelect('COUNT(q.id)', 'cnt');
+    
+    if (subjectId) {
+      qb.where('q.subjectId = :subjectId', { subjectId });
+    }
+    
+    const dupContents = await qb
+      .groupBy('q.subjectId, q.content')
+      .having('COUNT(q.id) > 1')
+      .getRawMany();
+
+    let totalDuplicates = 0;
+    const groups: any[] = [];
+
+    for (const item of dupContents) {
+      const records = await this.questionRepository.find({
+        where: { subjectId: item.subjectId, content: item.content },
+        order: { id: 'ASC' },
+        select: ['id', 'createdAt', 'type', 'answer', 'chapterId', 'content'],
+      });
+      totalDuplicates += (records.length - 1);
+      groups.push({
+        content: item.content,
+        subjectId: item.subjectId,
+        count: records.length,
+        records,
+      });
+    }
+
+    return {
+      totalDuplicates,
+      duplicateGroupsCount: groups.length,
+      groups,
+    };
+  }
+
+  /**
+   * 一键清理重复题目
+   */
+  async cleanDuplicates(
+    subjectId?: number,
+    keepPolicy: 'keep_earliest' | 'keep_latest' = 'keep_earliest',
+  ): Promise<{
+    deletedCount: number;
+    affectedGroups: number;
+  }> {
+    const scanRes = await this.scanDuplicates(subjectId);
+    const idsToDelete: number[] = [];
+
+    for (const grp of scanRes.groups) {
+      if (grp.records.length > 1) {
+        if (keepPolicy === 'keep_earliest') {
+          const toDel = grp.records.slice(1).map((r) => Number(r.id));
+          idsToDelete.push(...toDel);
+        } else {
+          const toDel = grp.records.slice(0, grp.records.length - 1).map((r) => Number(r.id));
+          idsToDelete.push(...toDel);
+        }
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      await this.questionRepository.delete(idsToDelete);
+    }
+
+    return {
+      deletedCount: idsToDelete.length,
+      affectedGroups: scanRes.duplicateGroupsCount,
+    };
+  }
+
+  /**
+   * 题目查重（单题）
    */
   async checkDuplicate(content: string, subjectId?: number): Promise<{
     duplicates: any[];

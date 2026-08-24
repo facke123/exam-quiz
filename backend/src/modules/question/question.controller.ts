@@ -108,9 +108,30 @@ export class QuestionController {
 
   @Post('admin/questions/duplicate-check')
   @Post('questions/admin/check-duplicate')
-  @ApiOperation({ summary: '后台-题目查重（POST）' })
+  @ApiOperation({ summary: '后台-题目查重（单题 POST）' })
   async checkDuplicatePost(@Body() body: { content: string; subjectId?: number }) {
     return this.questionService.checkDuplicate(body.content, body.subjectId);
+  }
+
+  @Post('admin/questions/batch-check-duplicates')
+  @ApiOperation({ summary: '后台-批量预检重复题目' })
+  async batchCheckDuplicates(@Body() body: { subjectId: number; contents: string[] }) {
+    return this.questionService.batchCheckDuplicates(Number(body.subjectId), body.contents || []);
+  }
+
+  @Get('admin/questions/scan-duplicates')
+  @ApiOperation({ summary: '后台-全题库扫描重复题目组' })
+  async scanDuplicates(@Query('subjectId') subjectId?: number) {
+    return this.questionService.scanDuplicates(subjectId ? Number(subjectId) : undefined);
+  }
+
+  @Post('admin/questions/clean-duplicates')
+  @ApiOperation({ summary: '后台-一键清理重复题目' })
+  async cleanDuplicates(@Body() body: { subjectId?: number; keepPolicy?: 'keep_earliest' | 'keep_latest' }) {
+    return this.questionService.cleanDuplicates(
+      body.subjectId ? Number(body.subjectId) : undefined,
+      body.keepPolicy || 'keep_earliest',
+    );
   }
 
   @Post(['admin/questions/import', 'questions/admin/batch-import'])

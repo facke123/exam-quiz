@@ -132,12 +132,53 @@ export function exportQuestions(params: QuestionQuery) {
   })
 }
 
-// 题目查重
+// 题目单题查重
 export function checkDuplicate(params: { subjectId: number; content: string }) {
   return request<{ duplicates: Question[] }>({
     url: '/admin/questions/duplicate-check',
     method: 'get',
     params,
+  })
+}
+
+// 批量预检重复题目
+export function batchCheckDuplicates(data: { subjectId: number; contents: string[] }) {
+  return request<{
+    duplicates: Array<{ index: number; content: string; existingId: number; existingChapterId?: number }>
+  }>({
+    url: '/admin/questions/batch-check-duplicates',
+    method: 'post',
+    data,
+  })
+}
+
+// 全题库扫描重复题目组
+export function scanDuplicates(params?: { subjectId?: number }) {
+  return request<{
+    totalDuplicates: number
+    duplicateGroupsCount: number
+    groups: Array<{
+      content: string
+      subjectId: number
+      count: number
+      records: Array<{ id: number; createdAt: string; type: string; answer: string; chapterId: number }>
+    }>
+  }>({
+    url: '/admin/questions/scan-duplicates',
+    method: 'get',
+    params,
+  })
+}
+
+// 一键清理重复题目
+export function cleanDuplicates(data: { subjectId?: number; keepPolicy?: 'keep_earliest' | 'keep_latest' }) {
+  return request<{
+    deletedCount: number
+    affectedGroups: number
+  }>({
+    url: '/admin/questions/clean-duplicates',
+    method: 'post',
+    data,
   })
 }
 

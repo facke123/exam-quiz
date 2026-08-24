@@ -5,6 +5,9 @@
       <div class="panel-header">
         <div class="ph-title">📥 批量导入题目</div>
         <div class="ph-templates">
+          <el-button type="warning" size="small" @click="openDedupScanDialog">
+            🔍 题库去重检测与清理
+          </el-button>
           <a class="tpl-link" @click="downloadTemplate('excel')">📊 下载 Excel 标准模板 (.xlsx)</a>
           <a class="tpl-link" @click="downloadTemplate('word')">📄 下载 Word 标准模板 (.docx)</a>
         </div>
@@ -13,7 +16,7 @@
       <div class="upload-config-row">
         <div class="config-item">
           <span class="label">目标科目：</span>
-          <el-select v-model="selectedSubjectId" placeholder="请选择科目" style="width: 260px">
+          <el-select v-model="selectedSubjectId" placeholder="请选择科目" style="width: 260px" @change="onSubjectChanged">
             <el-option
               v-for="s in subjects"
               :key="s.value"
@@ -29,6 +32,21 @@
             <el-radio-button value="excel">Excel 批量导入</el-radio-button>
             <el-radio-button value="word">Word / 文本解析</el-radio-button>
             <el-radio-button value="ai">AI 文本智能识别</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <div class="config-item">
+          <span class="label">重复策略：</span>
+          <el-radio-group v-model="duplicateStrategy" size="small">
+            <el-radio-button value="skip" title="如果题库中已存在相同题干，则自动跳过不重复导入">
+              ⚡ 自动跳过重复 (推荐)
+            </el-radio-button>
+            <el-radio-button value="overwrite" title="如果题库中已存在相同题干，更新其选项、答案与解析">
+              🔄 覆盖更新已有
+            </el-radio-button>
+            <el-radio-button value="allow" title="不做排重，全部以新题目插入">
+              ➕ 允许重复
+            </el-radio-button>
           </el-radio-group>
         </div>
       </div>
@@ -79,6 +97,7 @@
           <el-radio-group v-model="previewFilter" size="small" style="margin-left: 12px">
             <el-radio-button label="all">全部 ({{ previewList.length }})</el-radio-button>
             <el-radio-button label="valid">✓ 格式合规 ({{ validList.length }})</el-radio-button>
+            <el-radio-button label="duplicate">🔁 题库重复 ({{ duplicateCount }})</el-radio-button>
             <el-radio-button label="invalid">⚠️ 待修正 ({{ errorCount }})</el-radio-button>
           </el-radio-group>
         </div>
@@ -91,7 +110,7 @@
             :disabled="validList.length === 0"
             @click="commitImport"
           >
-            🚀 确认全部入库 ({{ validList.length }}题)
+            🚀 确认入库 ({{ validList.length }}题)
           </el-button>
         </div>
       </div>
@@ -124,13 +143,18 @@
           </template>
         </el-table-column>
         <el-table-column prop="analysis" label="解析说明" min-width="180" show-overflow-tooltip />
-        <el-table-column label="校验状态" width="120" align="center">
+        <el-table-column label="校验与查重状态" width="160" align="center">
           <template #default="{ row }">
-            <span v-if="row.valid" class="val-tag success">✓ 格式合规</span>
-            <span v-else class="val-tag error" :title="row.errorMsg">✗ {{ row.errorMsg }}</span>
+            <div style="display: flex; flex-direction: column; gap: 4px; align-items: center">
+              <el-tag v-if="row.isDuplicate" type="warning" size="small">
+                🔁 题库已存在 (#{{ row.existingId }})
+              </el-tag>
+              <span v-if="row.valid" class="val-tag success">✓ 格式合规</span>
+              <span v-else class="val-tag error" :title="row.errorMsg">✗ {{ row.errorMsg }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="center">
+        <el-table-column label="操作" width="90" align="center">
           <template #default="{ row, $index }">
             <div class="row-ops">
               <el-button type="danger" link size="small" @click="removePreviewRow($index)">删除</el-button>
@@ -246,10 +270,73 @@
       <template #footer>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <div style="font-size: 12px; color: var(--text-muted)">
-            💡 提示：最新版状态机解析引擎已修复该类排版识别问题，重新上传文档即可全部成功入库。
+            💡 提示：问答题 MySQL 枚举与状态机解析已修复，重新上传文档即可全部成功入库。
           </div>
           <el-button type="primary" @click="batchErrorDialogVisible = false">关闭</el-button>
         </div>
+      </template>
+    </el-dialog>
+
+    <!-- 题库全局查重与一键清理对话框 -->
+    <el-dialog
+      v-model="dedupDialogVisible"
+      title="🔍 题库去重检测与一键清理"
+      width="860px"
+      append-to-body
+    >
+      <div v-loading="dedupScanLoading">
+        <div class="dedup-summary-banner">
+          <div class="dsb-stat">
+            <div class="stat-val" :style="{ color: (dedupResult?.totalDuplicates || 0) > 0 ? 'var(--danger)' : 'var(--success)' }">
+              {{ dedupResult?.totalDuplicates || 0 }}
+            </div>
+            <div class="stat-label">多余重复题目数</div>
+          </div>
+          <div class="dsb-stat">
+            <div class="stat-val">{{ dedupResult?.duplicateGroupsCount || 0 }}</div>
+            <div class="stat-label">重复题目组数</div>
+          </div>
+          <div class="dsb-actions">
+            <el-button :loading="dedupScanLoading" @click="runScanDuplicates">🔄 重新扫描</el-button>
+            <el-button
+              type="danger"
+              :disabled="!dedupResult || dedupResult.totalDuplicates === 0"
+              :loading="dedupCleanLoading"
+              @click="executeCleanDuplicates('keep_earliest')"
+            >
+              🧹 一键清理多余重复 (保留最早创建)
+            </el-button>
+          </div>
+        </div>
+
+        <div v-if="dedupResult && dedupResult.groups && dedupResult.groups.length > 0" style="margin-top: 16px">
+          <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
+            重复试题组列表 (已折叠展示各版本)：
+          </div>
+          <div class="dedup-group-list">
+            <div v-for="(grp, gIdx) in dedupResult.groups" :key="gIdx" class="dedup-group-card">
+              <div class="dgc-header">
+                <span class="dgc-title">📌 {{ grp.content }}</span>
+                <el-tag type="danger" size="small">重复 {{ grp.count }} 次 (多余 {{ grp.count - 1 }} 条)</el-tag>
+              </div>
+              <div class="dgc-items">
+                <div v-for="rec in grp.records" :key="rec.id" class="dgc-item">
+                  <span class="item-badge">ID: #{{ rec.id }}</span>
+                  <span class="item-time">创建于: {{ rec.createdAt ? rec.createdAt.replace('T', ' ').substring(0, 16) : '未知' }}</span>
+                  <span class="item-ans">答案: <strong>{{ rec.answer }}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <el-empty
+          v-else-if="!dedupScanLoading"
+          description="🎉 题库暂未检测到重复题目，题库非常健康干净！"
+        />
+      </div>
+
+      <template #footer>
+        <el-button @click="dedupDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -261,12 +348,20 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import mammoth from 'mammoth'
 import { getAllSubjects } from '@/api/exam'
-import { getImportRecords, importQuestions } from '@/api/question'
+import {
+  getImportRecords,
+  importQuestions,
+  batchCheckDuplicates,
+  scanDuplicates,
+  cleanDuplicates,
+} from '@/api/question'
 import { parseQuestions } from '@/api/ai'
 
 const subjects = ref<{ label: string; value: number }[]>([])
 const selectedSubjectId = ref<number>(1)
 const importMode = ref<'excel' | 'word' | 'ai'>('excel')
+const duplicateStrategy = ref<'skip' | 'overwrite' | 'allow'>('skip')
+
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const currentFileName = ref<string>('')
 const aiText = ref('')
@@ -275,20 +370,34 @@ const importingLoading = ref(false)
 const recordsLoading = ref(false)
 
 const previewList = ref<any[]>([])
-const previewFilter = ref<'all' | 'valid' | 'invalid'>('all')
+const previewFilter = ref<'all' | 'valid' | 'duplicate' | 'invalid'>('all')
 const historyRecords = ref<any[]>([])
 
 const batchErrorDialogVisible = ref(false)
 const currentBatchRecord = ref<any>(null)
 
+// 题库查重弹窗状态
+const dedupDialogVisible = ref(false)
+const dedupScanLoading = ref(false)
+const dedupCleanLoading = ref(false)
+const dedupResult = ref<any>(null)
+
 const errorCount = computed(() => previewList.value.filter((p) => !p.valid).length)
+const duplicateCount = computed(() => previewList.value.filter((p) => p.isDuplicate).length)
 const validList = computed(() => previewList.value.filter((p) => p.valid))
 
 const filteredPreviewList = computed(() => {
   if (previewFilter.value === 'valid') return previewList.value.filter((p) => p.valid)
+  if (previewFilter.value === 'duplicate') return previewList.value.filter((p) => p.isDuplicate)
   if (previewFilter.value === 'invalid') return previewList.value.filter((p) => !p.valid)
   return previewList.value
 })
+
+function onSubjectChanged() {
+  if (previewList.value.length > 0) {
+    runBatchDuplicateCheck()
+  }
+}
 
 function showBatchErrors(row: any) {
   currentBatchRecord.value = row
@@ -375,6 +484,33 @@ D. 组织过程资产
 【答案】正确
 【解析】自由时差是指在不延误紧后活动最早开始时间的前提下可以延误的时间，因此自由时差 <= 总时差。`
   ElMessage.success('已填入标准示例试题')
+}
+
+// Excel / Word / 文本文件选择解析
+// 批量预检重复试题
+async function runBatchDuplicateCheck() {
+  if (!previewList.value.length) return
+  try {
+    const contents = previewList.value.map((p) => p.content)
+    const res = await batchCheckDuplicates({
+      subjectId: selectedSubjectId.value,
+      contents,
+    })
+    if (res?.data?.duplicates) {
+      const dupMap = new Map(res.data.duplicates.map((d: any) => [d.index, d.existingId]))
+      previewList.value.forEach((p, idx) => {
+        if (dupMap.has(idx)) {
+          p.isDuplicate = true
+          p.existingId = dupMap.get(idx)
+        } else {
+          p.isDuplicate = false
+          p.existingId = undefined
+        }
+      })
+    }
+  } catch {
+    // 忽略预检报错
+  }
 }
 
 // Excel / Word / 文本文件选择解析
@@ -477,6 +613,7 @@ async function parseExcelFile(file: File) {
   })
 
   previewList.value = parsed
+  await runBatchDuplicateCheck()
   ElMessage.success(`成功从 Excel 解析出 ${parsed.length} 道试题！`)
 }
 
@@ -570,6 +707,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       difficulty: 3,
       valid,
       errorMsg,
+      isDuplicate: false,
     })
   }
 
@@ -665,7 +803,6 @@ async function parseTextOrDocFile(file: File) {
     return ElMessage.error(`读取 Word/文本文件失败: ${readErr.message || '文件损坏'}`)
   }
 
-  // 清洗不可打印字符与多余空字符
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   if (!text) {
     return ElMessage.warning('未能从 Word 文档中提取到文字内容，请确认文档非空')
@@ -673,21 +810,21 @@ async function parseTextOrDocFile(file: File) {
 
   parsing.value = true
   try {
-    // 优先使用客户端即时状态机高精解析
     const clientQuestions = parseWordQuestionsClient(text)
     if (clientQuestions.length > 0) {
       previewList.value = clientQuestions
+      await runBatchDuplicateCheck()
       ElMessage.success(`🎉 成功从 Word 文档解析出 ${clientQuestions.length} 道试题！`)
       return
     }
 
-    // 兜底调用后端 AI 解析
     const res = await parseQuestions({
       subjectId: selectedSubjectId.value,
       content: text,
     })
     if (res?.data?.questions && res.data.questions.length > 0) {
       previewList.value = res.data.questions
+      await runBatchDuplicateCheck()
       ElMessage.success(`🎉 成功从 Word 文档解析出 ${res.data.questions.length} 道试题！`)
     } else {
       ElMessage.warning('未能识别到有效题目，请参考标准模板调整 Word 试卷排版')
@@ -713,6 +850,7 @@ async function startAIParsing() {
     })
     if (res?.data?.questions && res.data.questions.length > 0) {
       previewList.value = res.data.questions
+      await runBatchDuplicateCheck()
       ElMessage.success(`AI 成功识别出 ${res.data.questions.length} 道题目！`)
     } else {
       ElMessage.warning('AI 未能识别出题目，请检查文本内容')
@@ -731,7 +869,7 @@ function removePreviewRow(idx: number) {
   })
 }
 
-// 确认全部入库
+// 确认入库
 async function commitImport() {
   if (previewList.value.length === 0) return
 
@@ -743,7 +881,7 @@ async function commitImport() {
   if (errorCount.value > 0) {
     try {
       await ElMessageBox.confirm(
-        `当前列表中有 ${errorCount.value} 道题目格式存在错误将被忽略，是否仅导入 ${toImport.length} 道合规试题？`,
+        `当前列表中有 ${errorCount.value} 道题目格式存在错误将被忽略，是否继续导入 ${toImport.length} 道合规试题？`,
         '提示',
         { confirmButtonText: '继续导入合规题目', cancelButtonText: '取消', type: 'warning' }
       )
@@ -760,11 +898,13 @@ async function commitImport() {
       subjectName: targetSub ? targetSub.label : '系统集成项目管理工程师',
       fileName: currentFileName.value || `${importMode.value}_批次导入_${Date.now()}`,
       type: importMode.value,
+      duplicateStrategy: duplicateStrategy.value,
       questions: toImport,
     })
 
     if (res?.data) {
-      ElMessage.success(`🎉 成功导入 ${toImport.length} 道题目到题库！`)
+      const note = res.data.note || `成功导入 ${res.data.success || toImport.length} 道题目！`
+      ElMessage.success({ message: `🎉 ${note}`, duration: 4000 })
       previewList.value = []
       aiText.value = ''
       loadRecords()
@@ -773,6 +913,59 @@ async function commitImport() {
     ElMessage.error(err.message || '入库失败，请稍后重试')
   } finally {
     importingLoading.value = false
+  }
+}
+
+// 打开题库查重对话框
+function openDedupScanDialog() {
+  dedupDialogVisible.value = true
+  runScanDuplicates()
+}
+
+// 扫描题库重复
+async function runScanDuplicates() {
+  dedupScanLoading.value = true
+  try {
+    const res = await scanDuplicates({ subjectId: selectedSubjectId.value })
+    if (res?.data) {
+      dedupResult.value = res.data
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '扫描题库重复失败')
+  } finally {
+    dedupScanLoading.value = false
+  }
+}
+
+// 执行一键清理重复
+async function executeCleanDuplicates(keepPolicy: 'keep_earliest' | 'keep_latest' = 'keep_earliest') {
+  if (!dedupResult.value || dedupResult.value.totalDuplicates === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要清理这 ${dedupResult.value.totalDuplicates} 道多余重复题目吗？清理后每组题目将仅保留 1 道（最早创建记录），其余副本将被永久删除。`,
+      '确认一键清理重复',
+      { type: 'warning', confirmButtonText: '确认清理', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  dedupCleanLoading.value = true
+  try {
+    const res = await cleanDuplicates({
+      subjectId: selectedSubjectId.value,
+      keepPolicy,
+    })
+    if (res?.data) {
+      ElMessage.success(`🎉 成功清理 ${res.data.deletedCount} 道多余重复题目！`)
+      await runScanDuplicates()
+      loadRecords()
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '清理失败')
+  } finally {
+    dedupCleanLoading.value = false
   }
 }
 
@@ -1156,6 +1349,98 @@ onMounted(() => {
     justify-content: space-between;
     font-size: 13px;
     color: var(--gray-7);
+  }
+}
+
+.dedup-summary-banner {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+
+  .dsb-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .stat-val {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--gray-6);
+    }
+  }
+
+  .dsb-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+.dedup-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+
+  .dedup-group-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 16px;
+
+    .dgc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+
+      .dgc-title {
+        font-weight: 600;
+        color: var(--gray-8);
+        font-size: 13px;
+        line-height: 1.5;
+        flex: 1;
+        margin-right: 12px;
+      }
+    }
+
+    .dgc-items {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+
+      .dgc-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 12px;
+        color: var(--gray-6);
+
+        .item-badge {
+          font-weight: 600;
+          color: var(--primary);
+        }
+
+        .item-ans strong {
+          color: #4338ca;
+        }
+      }
+    }
   }
 }
 </style>
