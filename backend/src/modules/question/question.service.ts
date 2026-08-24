@@ -13,12 +13,14 @@ import { QueryQuestionDto } from './dto/query-question.dto';
 import { ImportQuestionDto } from './dto/import-question.dto';
 
 const toDbType = (t?: string) => {
-  if (!t) return undefined;
-  if (t === 'single') return 'single_choice';
-  if (t === 'multiple') return 'multiple_choice';
-  if (t === 'judge') return 'true_false';
-  if (t === 'case') return 'case_analysis';
-  return t;
+  if (!t) return 'single_choice';
+  const str = String(t).toLowerCase();
+  if (str === 'single' || str === 'single_choice' || str === '单选' || str === '单选题') return 'single_choice';
+  if (str === 'multiple' || str === 'multiple_choice' || str === '多选' || str === '多选题') return 'multiple_choice';
+  if (str === 'judge' || str === 'true_false' || str === '判断' || str === '判断题') return 'true_false';
+  if (str === 'case' || str === 'case_analysis' || str === '案例' || str === '案例分析' || str === '案例题') return 'case_analysis';
+  if (str === 'essay' || str === 'subjective' || str === '问答' || str === '问答题' || str === '简答' || str === '论述') return 'subjective';
+  return 'single_choice';
 };
 
 const fromDbType = (t?: string) => {
@@ -27,6 +29,7 @@ const fromDbType = (t?: string) => {
   if (t === 'multiple_choice') return 'multiple';
   if (t === 'true_false') return 'judge';
   if (t === 'case_analysis') return 'case';
+  if (t === 'subjective') return 'essay';
   return t;
 };
 
