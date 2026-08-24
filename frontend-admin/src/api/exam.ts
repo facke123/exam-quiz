@@ -209,6 +209,26 @@ export function autoGeneratePaper(data: AutoPaperRule) {
   })
 }
 
+// 导入试卷
+export function importPaper(data: {
+  subjectId: number
+  name: string
+  type?: string
+  totalTime?: number
+  duration?: number
+  totalScore?: number
+  passScore?: number
+  questions?: any[]
+  questionIds?: number[]
+  year?: number
+}) {
+  return request<{ paperId: number; questionCount: number; message: string }>({
+    url: '/admin/papers/import',
+    method: 'post',
+    data,
+  })
+}
+
 // 从题库选题
 export function pickQuestionsToPaper(paperId: number, questionIds: number[]) {
   return request({

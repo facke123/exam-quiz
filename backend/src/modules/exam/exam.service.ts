@@ -576,4 +576,80 @@ export class ExamService implements OnModuleInit {
 
     return this.paperRepository.save(paper);
   }
+
+  /**
+   * 导入试卷（支持解析题目并建卷，或绑定已有题目建卷）
+   */
+  async importPaper(dto: any): Promise<any> {
+    const subjectId = Number(dto.subjectId || 1);
+    const questionIds: number[] = [];
+
+    if (Array.isArray(dto.questionIds)) {
+      questionIds.push(...dto.questionIds.map((id: any) => Number(id)));
+    }
+
+    // 如果携带了解析后的题目列表，则先写入题库并绑定
+    if (Array.isArray(dto.questions) && dto.questions.length > 0) {
+      for (const q of dto.questions) {
+        if (!q.content && !q.title) continue;
+        const newQ = this.questionRepository.create({
+          subjectId,
+          chapterId: q.chapterId ? Number(q.chapterId) : undefined,
+          knowledgePointIds: q.knowledgePointId ? [Number(q.knowledgePointId)] : [],
+          type: q.type || 'single',
+          difficulty: q.difficulty || 3,
+          content: q.content || q.title,
+          options: q.options || [],
+          answer: q.answer || 'A',
+          analysis: q.analysis || '',
+          tags: [],
+          status: 'published',
+          source: dto.name || '试卷导入',
+        } as any);
+        const savedQ: any = await this.questionRepository.save(newQ);
+        if (savedQ && savedQ.id) {
+          questionIds.push(Number(savedQ.id));
+        }
+      }
+    }
+
+    const totalQuestions = questionIds.length;
+    const totalScore = dto.totalScore || (totalQuestions > 0 ? totalQuestions : 75);
+
+    const paper = this.paperRepository.create({
+      subjectId,
+      name: dto.name,
+      year: dto.year || new Date().getFullYear(),
+      type: dto.type || 'real',
+      duration: dto.duration || dto.totalTime || 150,
+      totalScore,
+      questionIds,
+      status: 1,
+    });
+
+    const savedPaper = await this.paperRepository.save(paper);
+    return {
+      paperId: Number(savedPaper.id),
+      paper: savedPaper,
+      questionCount: questionIds.length,
+      message: '试卷导入成功',
+    };
+  }
+
+  /**
+   * 关联/添加题目至试卷
+   */
+  async addQuestionsToPaper(paperId: number, questionIds: number[]): Promise<Paper> {
+    const paper = await this.paperRepository.findOne({ where: { id: paperId } });
+    if (!paper) {
+      throw new NotFoundException('试卷不存在');
+    }
+    const currentIds = new Set(paper.questionIds || []);
+    for (const qId of questionIds) {
+      currentIds.add(Number(qId));
+    }
+    paper.questionIds = Array.from(currentIds);
+    paper.totalScore = paper.questionIds.length;
+    return this.paperRepository.save(paper);
+  }
 }

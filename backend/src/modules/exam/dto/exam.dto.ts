@@ -104,7 +104,6 @@ export class CreatePaperDto {
 
   @ApiPropertyOptional({ description: '年份' })
   @IsOptional()
-  @IsInt()
   year?: number;
 
   @ApiPropertyOptional({ description: '类型: real/mock/practice' })
@@ -114,13 +113,19 @@ export class CreatePaperDto {
 
   @ApiPropertyOptional({ description: '时长（分钟）' })
   @IsOptional()
-  @IsNumber()
   duration?: number;
+
+  @ApiPropertyOptional({ description: '时长（兼容 totalTime）' })
+  @IsOptional()
+  totalTime?: number;
 
   @ApiPropertyOptional({ description: '总分', example: 100 })
   @IsOptional()
-  @IsNumber()
   totalScore?: number;
+
+  @ApiPropertyOptional({ description: '及格分数' })
+  @IsOptional()
+  passScore?: number;
 
   @ApiPropertyOptional({ description: '题目ID列表', type: [Number] })
   @IsOptional()
@@ -145,19 +150,29 @@ export class GeneratePaperDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ description: '类型: real/mock/practice' })
+  @ApiPropertyOptional({ description: '类型: real/mock/practice' })
+  @IsOptional()
   @IsString()
-  @IsIn(['real', 'mock', 'practice'])
-  type: string;
+  type?: string;
 
-  @ApiProperty({ description: '时长（分钟）' })
-  @IsNumber()
-  duration: number;
+  @ApiPropertyOptional({ description: '时长（分钟）' })
+  @IsOptional()
+  duration?: number;
+
+  @ApiPropertyOptional({ description: '时长（兼容 totalTime）' })
+  @IsOptional()
+  totalTime?: number;
+
+  @ApiPropertyOptional({ description: '总分' })
+  @IsOptional()
+  totalScore?: number;
+
+  @ApiPropertyOptional({ description: '及格分数' })
+  @IsOptional()
+  passScore?: number;
 
   @ApiPropertyOptional({ description: '题目数量', example: 100 })
   @IsOptional()
-  @IsNumber()
-  @Min(1)
   questionCount?: number;
 
   @ApiPropertyOptional({ description: '章节ID列表', type: [Number] })
@@ -165,7 +180,55 @@ export class GeneratePaperDto {
   @IsArray()
   chapterIds?: number[];
 
+  @ApiPropertyOptional({ description: '组卷规则列表' })
+  @IsOptional()
+  rules?: any[];
+
   @ApiPropertyOptional({ description: '难度分布', example: { 1: 10, 2: 20, 3: 50, 4: 15, 5: 5 } })
   @IsOptional()
   difficultyDistribution?: Record<number, number>;
+}
+
+/**
+ * 导入试卷 DTO
+ */
+export class ImportPaperDto {
+  @ApiProperty({ description: '科目ID' })
+  @IsNumber()
+  subjectId: number;
+
+  @ApiProperty({ description: '试卷名称' })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiPropertyOptional({ description: '试卷类型: real/mock/practice' })
+  @IsOptional()
+  type?: string;
+
+  @ApiPropertyOptional({ description: '考试时长（分钟）' })
+  @IsOptional()
+  duration?: number;
+
+  @ApiPropertyOptional({ description: '总分' })
+  @IsOptional()
+  totalScore?: number;
+
+  @ApiPropertyOptional({ description: '及格分数' })
+  @IsOptional()
+  passScore?: number;
+
+  @ApiPropertyOptional({ description: '解析/导入的题目列表' })
+  @IsOptional()
+  @IsArray()
+  questions?: any[];
+
+  @ApiPropertyOptional({ description: '关联的已有题目ID列表' })
+  @IsOptional()
+  @IsArray()
+  questionIds?: number[];
+
+  @ApiPropertyOptional({ description: '试卷年份' })
+  @IsOptional()
+  year?: number;
 }

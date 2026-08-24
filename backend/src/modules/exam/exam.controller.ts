@@ -192,9 +192,24 @@ export class ExamController {
     return { message: '删除成功' };
   }
 
-  @Post(['exam/papers/generate', 'admin/papers/generate'])
+  @Post(['exam/papers/generate', 'admin/papers/generate', 'admin/papers/auto-generate', 'exam/papers/auto-generate'])
   @ApiOperation({ summary: '自动组卷' })
-  async generatePaper(@Body() dto: GeneratePaperDto) {
+  async generatePaper(@Body() dto: GeneratePaperDto | any) {
     return this.examService.generatePaper(dto);
+  }
+
+  @Post(['admin/papers/import', 'exam/papers/import'])
+  @ApiOperation({ summary: '导入试卷' })
+  async importPaper(@Body() dto: any) {
+    return this.examService.importPaper(dto);
+  }
+
+  @Post(['admin/papers/:id/questions', 'exam/papers/:id/questions'])
+  @ApiOperation({ summary: '为试卷添加/关联题目' })
+  async addQuestionsToPaper(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { questionIds: number[] },
+  ) {
+    return this.examService.addQuestionsToPaper(id, body.questionIds || []);
   }
 }
