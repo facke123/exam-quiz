@@ -17,43 +17,87 @@ export class ContentService {
     private readonly bannerRepository: Repository<Banner>,
   ) {}
 
+  async onModuleInit() {
+    try {
+      await this.announcementRepository.query(
+        "ALTER TABLE announcements MODIFY type VARCHAR(50) DEFAULT 'system', MODIFY status VARCHAR(20) DEFAULT 'published'",
+      );
+    } catch {
+      // ignore
+    }
+    try {
+      await this.bannerRepository.query(
+        "ALTER TABLE banners ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+      );
+    } catch {
+      // ignore
+    }
+  }
+
   // ==================== 公告管理 ====================
 
   /**
    * 获取公告列表（前台）
    */
-  async getAnnouncements(): Promise<Announcement[]> {
-    let list = await this.announcementRepository.find({
-      where: { status: 'published' },
-      order: { publishAt: 'DESC' },
-    });
-    if (list.length === 0) {
-      const defaults = [
+  async getAnnouncements(): Promise<any[]> {
+    try {
+      let list = await this.announcementRepository.find({
+        where: [
+          { status: 'published' },
+          { status: '1' as any },
+          { status: 1 as any },
+        ],
+        order: { publishAt: 'DESC', createdAt: 'DESC' },
+      });
+      if (list.length === 0) {
+        const defaults = [
+          {
+            title: '2026年下半年全国计算机技术与软件专业技术资格（水平）考试报名通知',
+            content:
+              '2026年下半年软考报名已开启，请各位考生密切关注考试时间及考区要求，合理安排刷题复习计划。',
+            type: 'system',
+            status: 'published',
+            publishAt: new Date(),
+          },
+          {
+            title: '软考刷题系统 1.0 版本正式上线',
+            content:
+              '涵盖系统集成项目管理工程师、软件设计师、网络工程师等科目真题、智能组卷、AI 解析等功能，助力高效通关！',
+            type: 'activity',
+            status: 'published',
+            publishAt: new Date(),
+          },
+        ];
+        for (const d of defaults) {
+          const item = this.announcementRepository.create(d as any);
+          await this.announcementRepository.save(item);
+        }
+        list = await this.announcementRepository.find({
+          order: { publishAt: 'DESC', createdAt: 'DESC' },
+        });
+      }
+      return list.map((a) => ({
+        id: Number(a.id),
+        title: a.title,
+        content: a.content,
+        type: a.type,
+        status: a.status,
+        publishAt: a.publishAt || a.createdAt,
+        createdAt: a.createdAt,
+      }));
+    } catch {
+      return [
         {
+          id: 1,
           title: '2026年下半年全国计算机技术与软件专业技术资格（水平）考试报名通知',
-          content: '2026年下半年软考报名已开启，请各位考生密切关注考试时间及考区要求，合理安排刷题复习计划。',
-          type: 'notice',
+          content:
+            '2026年下半年软考报名已开启，请各位考生密切关注考试时间及考区要求，合理安排刷题复习计划。',
+          type: 'system',
           status: 'published',
-          publishAt: new Date(),
-        },
-        {
-          title: '软考刷题系统 1.0 版本正式上线',
-          content: '涵盖软件设计师、网络工程师等科目真题、智能组卷、AI 解析等功能，助力高效通关！',
-          type: 'news',
-          status: 'published',
-          publishAt: new Date(),
+          publishAt: new Date().toISOString(),
         },
       ];
-      for (const d of defaults) {
-        const item = this.announcementRepository.create(d);
-        await this.announcementRepository.save(item);
-      }
-      list = await this.announcementRepository.find({
-        where: { status: 'published' },
-        order: { publishAt: 'DESC' },
-      });
     }
-    return list;
   }
 
   /**

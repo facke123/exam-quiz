@@ -52,6 +52,30 @@
       </div>
     </div>
 
+    <!-- 📢 官方通知公告条（后台内容管理同步） -->
+    <div v-if="announcements.length > 0" class="announcement-bar" @click="handleAnnouncementClick(announcements[0])">
+      <div class="ann-speaker">📢</div>
+      <div class="ann-content">
+        <span class="ann-badge">公告</span>
+        <span class="ann-title">{{ announcements[0].title }}</span>
+      </div>
+      <div class="ann-arrow">›</div>
+    </div>
+
+    <!-- 🖼️ 移动端轮播 Banner 模块（后台内容管理同步） -->
+    <div v-if="banners.length > 0" class="banner-carousel-wrap">
+      <van-swipe class="banner-swipe" :autoplay="4500" indicator-color="#6366f1" lazy-render>
+        <van-swipe-item v-for="b in banners" :key="b.id" @click="handleBannerClick(b)">
+          <div class="banner-card">
+            <img :src="b.imageUrl" :alt="b.title" class="banner-image" />
+            <div class="banner-gradient-mask">
+              <span class="banner-card-title">{{ b.title }}</span>
+            </div>
+          </div>
+        </van-swipe-item>
+      </van-swipe>
+    </div>
+
     <!-- 核心功能网格 (8格现代风格) -->
     <div class="section-title">
       <h3>核心功能</h3>
@@ -153,16 +177,42 @@
       </div>
     </div>
 
+    <!-- 📢 公告详情底部弹窗 -->
+    <van-popup
+      v-model:show="announcementPopupVisible"
+      round
+      closeable
+      position="bottom"
+      :style="{ maxHeight: '75%', minHeight: '280px' }"
+    >
+      <div v-if="selectedAnnouncement" class="ann-popup-body">
+        <div class="ap-header">
+          <div class="ap-type-badge">{{ selectedAnnouncement.type || '官方公告' }}</div>
+          <h3 class="ap-title">{{ selectedAnnouncement.title }}</h3>
+          <div class="ap-date">发布于：{{ formatDate(selectedAnnouncement.publishAt || selectedAnnouncement.createdAt) }}</div>
+        </div>
+        <div class="ap-content">
+          {{ selectedAnnouncement.content }}
+        </div>
+        <div class="ap-footer">
+          <button class="ap-confirm-btn" @click="announcementPopupVisible = false">我已了解</button>
+        </div>
+      </div>
+    </van-popup>
+
     <div style="height: 20px"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
 import { getOverview } from '@/api/stats'
+import { getBanners, getAnnouncements, type BannerItem, type AnnouncementItem } from '@/api/content'
 
+const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
 
@@ -173,11 +223,67 @@ const diffDays = Math.max(1, Math.ceil((targetExamDate.getTime() - now.getTime()
 const examDays = ref(diffDays)
 const reviewCount = ref(0)
 
+// 后台内容管理数据
+const banners = ref<BannerItem[]>([])
+const announcements = ref<AnnouncementItem[]>([])
+const selectedAnnouncement = ref<AnnouncementItem | null>(null)
+const announcementPopupVisible = ref(false)
+
 const stats = reactive({
   todayDone: 0,
   correctRate: 0,
   totalQuestions: 0,
 })
+
+function formatDate(d?: string) {
+  if (!d) return '近期'
+  try {
+    const dt = new Date(d)
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return d
+  }
+}
+
+async function fetchContentData() {
+  try {
+    const [bRes, aRes] = await Promise.allSettled([
+      getBanners(),
+      getAnnouncements(),
+    ])
+    if (bRes.status === 'fulfilled' && bRes.value?.data) {
+      banners.value = (bRes.value.data as any[]).filter(
+        (b) => b.status === 1 || b.status === '1' || b.status === 'online' || b.status === 'enabled'
+      )
+    }
+    if (aRes.status === 'fulfilled' && aRes.value?.data) {
+      announcements.value = aRes.value.data
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function handleBannerClick(banner: BannerItem) {
+  const url = banner.linkUrl || (banner as any).url || (banner as any).targetUrl
+  if (!url) return
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    window.location.href = url
+  } else {
+    router.push(url)
+  }
+}
+
+function handleAnnouncementClick(item?: AnnouncementItem) {
+  if (item) {
+    selectedAnnouncement.value = item
+  } else if (announcements.value.length > 0) {
+    selectedAnnouncement.value = announcements.value[0]
+  }
+  if (selectedAnnouncement.value) {
+    announcementPopupVisible.value = true
+  }
+}
 
 async function fetchHomeStats() {
   try {
@@ -209,7 +315,7 @@ onMounted(async () => {
   if (subjectStore.subjectList.length === 0) {
     await subjectStore.fetchSubjects()
   }
-  await fetchHomeStats()
+  await Promise.all([fetchHomeStats(), fetchContentData()])
   if (userStore.token && !userStore.userInfo) {
     try {
       await userStore.fetchProfile()
@@ -616,6 +722,189 @@ onMounted(async () => {
       font-size: 11px;
       color: var(--gray-5);
       margin-top: 2px;
+    }
+  }
+}
+
+/* 📢 官方通知公告条 */
+.announcement-bar {
+  margin: 10px 14px 0;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+
+  .ann-speaker {
+    font-size: 16px;
+    animation: bounce 2s infinite;
+  }
+
+  .ann-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .ann-badge {
+    background: #eef2ff;
+    color: #4f46e5;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .ann-title {
+    font-size: 13px;
+    color: var(--gray-8);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ann-arrow {
+    color: var(--gray-4);
+    font-size: 16px;
+  }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* 🖼️ 轮播 Banner 模块 */
+.banner-carousel-wrap {
+  margin: 12px 14px 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+
+  .banner-swipe {
+    width: 100%;
+    height: 130px;
+    border-radius: var(--radius);
+  }
+
+  .banner-slide {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .banner-card {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .banner-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .banner-gradient-mask {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 24px 14px 8px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .banner-card-title {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* 📢 公告弹窗内容区 */
+.ann-popup-body {
+  padding: 20px 20px 30px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .ap-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--gray-2);
+
+    .ap-type-badge {
+      display: inline-block;
+      background: #eef2ff;
+      color: #4f46e5;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+
+    .ap-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--gray-8);
+      line-height: 1.4;
+      margin: 0 0 6px;
+    }
+
+    .ap-date {
+      font-size: 12px;
+      color: var(--gray-5);
+    }
+  }
+
+  .ap-content {
+    font-size: 14px;
+    color: var(--gray-7);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0 20px;
+  }
+
+  .ap-footer {
+    padding-top: 10px;
+
+    .ap-confirm-btn {
+      width: 100%;
+      height: 44px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+      cursor: pointer;
+
+      &:active {
+        opacity: 0.9;
+        transform: scale(0.98);
+      }
     }
   }
 }

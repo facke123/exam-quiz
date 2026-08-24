@@ -64,9 +64,10 @@
           <div class="uci-text">系统设置</div>
           <div class="uci-arrow">›</div>
         </div>
-        <div class="uc-item" @click="showToast('暂无新通知')">
+        <div class="uc-item" @click="handleOpenAnnouncements">
           <div class="uci-icon" style="background: var(--pink-bg)">🔔</div>
           <div class="uci-text">消息通知</div>
+          <div class="uci-value" v-if="announcementList.length > 0">{{ announcementList.length }}条公告</div>
           <div class="uci-arrow">›</div>
         </div>
       </div>
@@ -89,6 +90,34 @@
       </div>
     </div>
 
+    <!-- 📢 消息通知弹窗 -->
+    <van-popup
+      v-model:show="noticePopupVisible"
+      round
+      closeable
+      position="bottom"
+      :style="{ maxHeight: '75%', minHeight: '300px' }"
+    >
+      <div class="notice-popup-body">
+        <h3 class="np-title">📢 官方通知公告</h3>
+        <div v-if="announcementList.length > 0" class="np-list">
+          <div
+            v-for="item in announcementList"
+            :key="item.id"
+            class="np-card"
+          >
+            <div class="np-card-header">
+              <span class="np-badge">{{ item.type || '公告' }}</span>
+              <span class="np-card-title">{{ item.title }}</span>
+            </div>
+            <div class="np-card-content">{{ item.content }}</div>
+            <div class="np-card-time">{{ item.publishAt ? item.publishAt.slice(0, 16).replace('T', ' ') : '' }}</div>
+          </div>
+        </div>
+        <div v-else class="np-empty">暂无新通知</div>
+      </div>
+    </van-popup>
+
     <div style="height: 40px"></div>
   </div>
 </template>
@@ -100,16 +129,35 @@ import { showConfirmDialog, showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
 import { getOverview } from '@/api/stats'
+import { getAnnouncements, type AnnouncementItem } from '@/api/content'
 
 const router = useRouter()
 const userStore = useUserStore()
 const subjectStore = useSubjectStore()
+
+const noticePopupVisible = ref(false)
+const announcementList = ref<AnnouncementItem[]>([])
 
 const overview = reactive({
   totalAnswered: 0,
   wrongCount: 0,
   favoriteCount: 0,
 })
+
+async function fetchAnnouncements() {
+  try {
+    const res = await getAnnouncements()
+    if (res?.data) {
+      announcementList.value = res.data
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function handleOpenAnnouncements() {
+  noticePopupVisible.value = true
+}
 
 async function fetchStats() {
   try {
@@ -129,6 +177,7 @@ onMounted(() => {
     userStore.fetchProfile()
   }
   fetchStats()
+  fetchAnnouncements()
 })
 
 async function onLogout() {
@@ -150,8 +199,8 @@ async function onLogout() {
 }
 
 .uc-header {
-  background: linear-gradient(140deg, #6366f1 0%, #7c3aed 50%, #8b5cf6 100%);
-  padding: calc(env(safe-area-inset-top) + 20px) 20px 28px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  padding: calc(env(safe-area-inset-top) + 20px) 20px 30px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -159,15 +208,15 @@ async function onLogout() {
   position: relative;
 
   .uc-avatar {
-    width: 56px;
-    height: 56px;
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 26px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.4);
     overflow: hidden;
 
     img {
@@ -183,6 +232,7 @@ async function onLogout() {
     .uc-name {
       font-size: 18px;
       font-weight: 700;
+      line-height: 1.2;
     }
 
     .uc-tag {
@@ -190,68 +240,72 @@ async function onLogout() {
       font-size: 11px;
       padding: 2px 8px;
       border-radius: 10px;
-      margin-top: 4px;
+      margin-top: 6px;
+      font-weight: 600;
+
+      &.vip {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: #fff;
+      }
 
       &.free {
         background: rgba(255, 255, 255, 0.2);
-      }
-
-      &.vip {
-        background: linear-gradient(135deg, #fbbf24, #f59e0b);
         color: #fff;
-        font-weight: 700;
       }
     }
   }
 
   .setting-btn {
-    font-size: 13px;
-    opacity: 0.9;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 6px 12px;
+    border-radius: 16px;
     cursor: pointer;
   }
 }
 
 .vip-banner {
-  margin: -14px 14px 14px;
-  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  margin: -16px 14px 0;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: var(--shadow-lg);
-  color: #fff;
-  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(30, 27, 75, 0.25);
   position: relative;
-  z-index: 10;
+  z-index: 2;
+  cursor: pointer;
 
-  .vb-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #fbbf24;
-  }
+  .vb-left {
+    .vb-title {
+      color: #fbbf24;
+      font-size: 14px;
+      font-weight: 700;
+    }
 
-  .vb-desc {
-    font-size: 11px;
-    color: var(--gray-4);
-    margin-top: 2px;
+    .vb-desc {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      margin-top: 3px;
+    }
   }
 
   .vb-btn {
     background: linear-gradient(135deg, #fbbf24, #f59e0b);
-    color: #1f2937;
+    color: #78350f;
     font-size: 12px;
     font-weight: 700;
-    padding: 6px 14px;
-    border-radius: 14px;
+    padding: 6px 12px;
+    border-radius: 16px;
   }
 }
 
 .uc-body {
-  padding: 0 14px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .uc-section {
@@ -264,19 +318,19 @@ async function onLogout() {
 .uc-item {
   display: flex;
   align-items: center;
-  gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid var(--gray-2);
+  gap: 12px;
   cursor: pointer;
+  border-bottom: 1px solid var(--gray-2);
 
   &:last-child {
     border-bottom: none;
   }
 
   .uci-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -286,8 +340,8 @@ async function onLogout() {
   .uci-text {
     flex: 1;
     font-size: 14px;
-    font-weight: 600;
     color: var(--gray-8);
+    font-weight: 500;
   }
 
   .uci-value {
@@ -318,6 +372,75 @@ async function onLogout() {
     &:active {
       background: var(--danger-bg);
     }
+  }
+}
+
+/* 📢 消息通知弹窗样式 */
+.notice-popup-body {
+  padding: 20px 16px 30px;
+
+  .np-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gray-8);
+    margin: 0 0 16px;
+    text-align: center;
+  }
+
+  .np-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .np-card {
+    background: var(--gray-1);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    border-left: 3px solid #6366f1;
+
+    .np-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+
+      .np-badge {
+        background: #eef2ff;
+        color: #4f46e5;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+
+      .np-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--gray-8);
+      }
+    }
+
+    .np-card-content {
+      font-size: 13px;
+      color: var(--gray-6);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .np-card-time {
+      font-size: 11px;
+      color: var(--gray-4);
+      margin-top: 8px;
+      text-align: right;
+    }
+  }
+
+  .np-empty {
+    text-align: center;
+    color: var(--gray-4);
+    padding: 40px 0;
+    font-size: 14px;
   }
 }
 </style>
