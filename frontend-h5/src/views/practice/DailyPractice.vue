@@ -1,24 +1,42 @@
 <template>
   <div class="daily-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">每日一练</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        每日一练
+      </div>
+      <div class="right" />
     </div>
 
     <div class="daily-content">
       <!-- 每日一练日期与进度卡片 -->
       <div class="daily-card">
         <div class="date-badge">
-          <div class="date-day">{{ day }}</div>
-          <div class="date-month">{{ month }}月</div>
+          <div class="date-day">
+            {{ day }}
+          </div>
+          <div class="date-month">
+            {{ month }}月
+          </div>
         </div>
         <div class="daily-info">
-          <div class="daily-title">今日 5 道核心考点精选题</div>
-          <div class="daily-desc">智能抽取薄弱知识点 · 碎片时间高效提分</div>
+          <div class="daily-title">
+            今日 5 道核心考点精选题
+          </div>
+          <div class="daily-desc">
+            智能抽取薄弱知识点 · 碎片时间高效提分
+          </div>
           <div class="daily-progress">
             <div class="dp-track">
-              <div class="dp-fill" style="width: 40%"></div>
+              <div
+                class="dp-fill"
+                style="width: 40%"
+              />
             </div>
             <span class="dp-text">已完成 2/5 题</span>
           </div>
@@ -27,7 +45,9 @@
 
       <!-- 连续打卡日历 -->
       <div class="streak-card">
-        <div class="sc-title">🔥 连续打卡 7 天</div>
+        <div class="sc-title">
+          🔥 连续打卡 7 天
+        </div>
         <div class="streak-grid">
           <div
             v-for="(d, i) in last7Days"
@@ -44,7 +64,12 @@
         </div>
       </div>
 
-      <button class="start-btn" @click="onStart">开始今日刷题</button>
+      <button
+        class="start-btn"
+        @click="onStart"
+      >
+        开始今日刷题
+      </button>
     </div>
   </div>
 </template>

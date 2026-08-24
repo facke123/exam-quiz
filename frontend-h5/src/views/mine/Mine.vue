@@ -3,90 +3,239 @@
     <!-- 用户中心顶部卡片 -->
     <div class="uc-header">
       <div class="uc-avatar">
-        <img v-if="userStore.userInfo?.avatar" :src="userStore.userInfo.avatar" alt="avatar" />
+        <img
+          v-if="userStore.userInfo?.avatar"
+          :src="userStore.userInfo.avatar"
+          alt="avatar"
+        >
         <span v-else>👤</span>
       </div>
       <div class="uc-info">
-        <div class="uc-name">{{ userStore.userInfo?.nickname || userStore.userInfo?.username || '软考学员' }}</div>
-        <div class="uc-tag" :class="userStore.isVip ? 'vip' : 'free'">
+        <div class="uc-name">
+          {{ userStore.userInfo?.nickname || userStore.userInfo?.username || '软考学员' }}
+        </div>
+        <div
+          class="uc-tag"
+          :class="userStore.isVip ? 'vip' : 'free'"
+        >
           {{ userStore.isVip ? '👑 VIP 会员' : '免费用户' }}
         </div>
       </div>
-      <div class="setting-btn" @click="$router.push('/settings')">⚙️ 设置</div>
+      <div
+        class="setting-btn"
+        @click="$router.push('/settings')"
+      >
+        ⚙️ 设置
+      </div>
     </div>
 
     <!-- VIP 横幅 -->
-    <div class="vip-banner" @click="$router.push('/vip')">
+    <div
+      class="vip-banner"
+      @click="$router.push('/vip')"
+    >
       <div class="vb-left">
-        <div class="vb-title">👑 {{ userStore.isVip ? 'VIP 会员尊享中' : '开通 VIP 会员' }}</div>
-        <div class="vb-desc">解锁全部题库 · AI智能解析 · 艾宾浩斯智能复习</div>
+        <div class="vb-title">
+          👑 {{ userStore.isVip ? 'VIP 会员尊享中' : '开通 VIP 会员' }}
+        </div>
+        <div class="vb-desc">
+          解锁全部题库 · AI智能解析 · 艾宾浩斯智能复习
+        </div>
       </div>
-      <div class="vb-btn">{{ userStore.isVip ? '立即续费' : '立即开通' }}</div>
+      <div class="vb-btn">
+        {{ userStore.isVip ? '立即续费' : '立即开通' }}
+      </div>
     </div>
 
     <!-- 菜单功能分组 -->
     <div class="uc-body">
       <div class="uc-section">
-        <div class="uc-item" @click="$router.push('/stats')">
-          <div class="uci-icon" style="background: var(--primary-bg)">📊</div>
-          <div class="uci-text">做题统计</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/stats')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--primary-bg)"
+          >
+            📊
+          </div>
+          <div class="uci-text">
+            做题统计
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="$router.push('/wrong')">
-          <div class="uci-icon" style="background: var(--danger-bg)">❌</div>
-          <div class="uci-text">错题本</div>
-          <div class="uci-value">{{ overview.wrongCount || 0 }}题</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/wrong')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--danger-bg)"
+          >
+            ❌
+          </div>
+          <div class="uci-text">
+            错题本
+          </div>
+          <div class="uci-value">
+            {{ overview.wrongCount || 0 }}题
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="$router.push('/notes')">
-          <div class="uci-icon" style="background: var(--warning-bg)">📓</div>
-          <div class="uci-text">我的笔记</div>
-          <div class="uci-value">0条</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/notes')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--warning-bg)"
+          >
+            📓
+          </div>
+          <div class="uci-text">
+            我的笔记
+          </div>
+          <div class="uci-value">
+            0条
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="$router.push('/records')">
-          <div class="uci-icon" style="background: var(--cyan-bg)">📋</div>
-          <div class="uci-text">做题记录</div>
-          <div class="uci-value">{{ overview.totalAnswered || 0 }}题</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/records')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--cyan-bg)"
+          >
+            📋
+          </div>
+          <div class="uci-text">
+            做题记录
+          </div>
+          <div class="uci-value">
+            {{ overview.totalAnswered || 0 }}题
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
       </div>
 
       <div class="uc-section">
-        <div class="uc-item" @click="$router.push('/subject')">
-          <div class="uci-icon" style="background: var(--success-bg)">🎯</div>
-          <div class="uci-text">考试科目</div>
-          <div class="uci-value">{{ subjectStore.currentSubject?.name || '选择科目' }}</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/subject')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--success-bg)"
+          >
+            🎯
+          </div>
+          <div class="uci-text">
+            考试科目
+          </div>
+          <div class="uci-value">
+            {{ subjectStore.currentSubject?.name || '选择科目' }}
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="$router.push('/settings')">
-          <div class="uci-icon" style="background: var(--purple-bg)">⚙️</div>
-          <div class="uci-text">系统设置</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="$router.push('/settings')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--purple-bg)"
+          >
+            ⚙️
+          </div>
+          <div class="uci-text">
+            系统设置
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="handleOpenAnnouncements">
-          <div class="uci-icon" style="background: var(--pink-bg)">🔔</div>
-          <div class="uci-text">消息通知</div>
-          <div class="uci-value" v-if="announcementList.length > 0">{{ announcementList.length }}条公告</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="handleOpenAnnouncements"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--pink-bg)"
+          >
+            🔔
+          </div>
+          <div class="uci-text">
+            消息通知
+          </div>
+          <div
+            v-if="announcementList.length > 0"
+            class="uci-value"
+          >
+            {{ announcementList.length }}条公告
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
       </div>
 
       <div class="uc-section">
-        <div class="uc-item" @click="showToast('客服微信：ruankao_helper')">
-          <div class="uci-icon" style="background: var(--cyan-bg)">❓</div>
-          <div class="uci-text">帮助与反馈</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="showToast('客服微信：ruankao_helper')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--cyan-bg)"
+          >
+            ❓
+          </div>
+          <div class="uci-text">
+            帮助与反馈
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
-        <div class="uc-item" @click="showToast('软考刷题系统 · 高效备考一战过关')">
-          <div class="uci-icon" style="background: var(--gray-2)">ℹ️</div>
-          <div class="uci-text">关于我们</div>
-          <div class="uci-arrow">›</div>
+        <div
+          class="uc-item"
+          @click="showToast('软考刷题系统 · 高效备考一战过关')"
+        >
+          <div
+            class="uci-icon"
+            style="background: var(--gray-2)"
+          >
+            ℹ️
+          </div>
+          <div class="uci-text">
+            关于我们
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
         </div>
       </div>
 
       <div class="logout-wrap">
-        <button class="logout-btn" @click="onLogout">退出登录</button>
+        <button
+          class="logout-btn"
+          @click="onLogout"
+        >
+          退出登录
+        </button>
       </div>
     </div>
 
@@ -99,8 +248,13 @@
       :style="{ maxHeight: '75%', minHeight: '300px' }"
     >
       <div class="notice-popup-body">
-        <h3 class="np-title">📢 官方通知公告</h3>
-        <div v-if="announcementList.length > 0" class="np-list">
+        <h3 class="np-title">
+          📢 官方通知公告
+        </h3>
+        <div
+          v-if="announcementList.length > 0"
+          class="np-list"
+        >
           <div
             v-for="item in announcementList"
             :key="item.id"
@@ -110,15 +264,24 @@
               <span class="np-badge">{{ item.type || '公告' }}</span>
               <span class="np-card-title">{{ item.title }}</span>
             </div>
-            <div class="np-card-content">{{ item.content }}</div>
-            <div class="np-card-time">{{ item.publishAt ? item.publishAt.slice(0, 16).replace('T', ' ') : '' }}</div>
+            <div class="np-card-content">
+              {{ item.content }}
+            </div>
+            <div class="np-card-time">
+              {{ item.publishAt ? item.publishAt.slice(0, 16).replace('T', ' ') : '' }}
+            </div>
           </div>
         </div>
-        <div v-else class="np-empty">暂无新通知</div>
+        <div
+          v-else
+          class="np-empty"
+        >
+          暂无新通知
+        </div>
       </div>
     </van-popup>
 
-    <div style="height: 40px"></div>
+    <div style="height: 40px" />
   </div>
 </template>
 

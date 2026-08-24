@@ -1,20 +1,35 @@
 <template>
   <div class="question-card">
     <div class="q-header">
-      <span class="question-type-tag" :class="`tag-${question.type}`">
+      <span
+        class="question-type-tag"
+        :class="`tag-${question.type}`"
+      >
         {{ typeText }}
       </span>
-      <span v-if="question.score" class="q-score">{{ question.score }}分</span>
-      <span v-if="question.difficulty" class="q-difficulty">
+      <span
+        v-if="question.score"
+        class="q-score"
+      >{{ question.score }}分</span>
+      <span
+        v-if="question.difficulty"
+        class="q-difficulty"
+      >
         难度: {{ difficultyText(question.difficulty) }}
       </span>
     </div>
 
     <!-- 题干 -->
-    <div class="question-content" v-html="renderedTitle"></div>
+    <div
+      class="question-content"
+      v-html="renderedTitle"
+    />
 
     <!-- 选项列表 -->
-    <div v-if="question.options?.length" class="options-list">
+    <div
+      v-if="question.options?.length"
+      class="options-list"
+    >
       <OptionItem
         v-for="opt in question.options"
         :key="opt.key"
@@ -28,14 +43,19 @@
     </div>
 
     <!-- 主观题/案例题输入 -->
-    <div v-else-if="question.type === 'subjective' || question.type === 'case'" class="subjective-wrap">
+    <div
+      v-else-if="question.type === 'subjective' || question.type === 'case'"
+      class="subjective-wrap"
+    >
       <textarea
         v-model="subjectiveAnswer"
         class="subjective-input"
         placeholder="请输入你的作答内容..."
         rows="5"
-      ></textarea>
-      <div class="subjective-hint">{{ subjectiveAnswer.length }} / 1000字</div>
+      />
+      <div class="subjective-hint">
+        {{ subjectiveAnswer.length }} / 1000字
+      </div>
     </div>
   </div>
 </template>

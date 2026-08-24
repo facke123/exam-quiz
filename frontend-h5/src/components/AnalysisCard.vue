@@ -4,11 +4,17 @@
     <div class="answer-row">
       <div class="answer-block">
         <span class="label">你的回答</span>
-        <span class="value" :class="isCorrect ? 'right' : 'wrong'">
+        <span
+          class="value"
+          :class="isCorrect ? 'right' : 'wrong'"
+        >
           {{ formatAnswer(myAnswer) || '未作答' }}
         </span>
       </div>
-      <van-icon name="arrow" class="arrow" />
+      <van-icon
+        name="arrow"
+        class="arrow"
+      />
       <div class="answer-block">
         <span class="label">正确答案</span>
         <span class="value right">{{ formatAnswer(correctAnswer) }}</span>
@@ -16,15 +22,23 @@
     </div>
 
     <!-- 结果 -->
-    <div class="result-badge" :class="isCorrect ? 'correct' : 'wrong'">
+    <div
+      class="result-badge"
+      :class="isCorrect ? 'correct' : 'wrong'"
+    >
       <van-icon :name="isCorrect ? 'checked' : 'warning'" />
       {{ isCorrect ? '回答正确' : '回答错误' }}
     </div>
 
     <!-- 详细解析 -->
     <div class="section">
-      <h4 class="section-title"><van-icon name="description" />解析</h4>
-      <div class="section-content" v-html="analysisHtml"></div>
+      <h4 class="section-title">
+        <van-icon name="description" />解析
+      </h4>
+      <div
+        class="section-content"
+        v-html="analysisHtml"
+      />
     </div>
 
     <!-- AI 深度分析 -->
@@ -32,14 +46,27 @@
       <h4 class="section-title">
         <span class="ai-badge">AI</span>深度分析
       </h4>
-      <div class="section-content">{{ aiAnalysis || 'AI 分析生成中...' }}</div>
+      <div class="section-content">
+        {{ aiAnalysis || 'AI 分析生成中...' }}
+      </div>
     </div>
 
     <!-- 考点标签 -->
-    <div v-if="knowledgePoints?.length" class="section">
-      <h4 class="section-title"><van-icon name="bookmark-o" />考点</h4>
+    <div
+      v-if="knowledgePoints?.length"
+      class="section"
+    >
+      <h4 class="section-title">
+        <van-icon name="bookmark-o" />考点
+      </h4>
       <div class="tag-list">
-        <van-tag v-for="(p, i) in knowledgePoints" :key="i" plain type="primary" size="medium">
+        <van-tag
+          v-for="(p, i) in knowledgePoints"
+          :key="i"
+          plain
+          type="primary"
+          size="medium"
+        >
           {{ p }}
         </van-tag>
       </div>

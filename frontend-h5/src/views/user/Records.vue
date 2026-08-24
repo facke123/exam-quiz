@@ -1,9 +1,16 @@
 <template>
   <div class="records-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">做题记录</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        做题记录
+      </div>
+      <div class="right" />
     </div>
 
     <div class="records-list">

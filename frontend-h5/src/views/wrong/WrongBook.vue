@@ -1,9 +1,21 @@
 <template>
   <div class="wrong-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
-      <div class="title">错题本</div>
-      <div class="right" @click="editMode = !editMode">{{ editMode ? '完成' : '管理' }}</div>
+      <div
+        class="back"
+        @click="$router.back()"
+      >
+        ‹
+      </div>
+      <div class="title">
+        错题本
+      </div>
+      <div
+        class="right"
+        @click="editMode = !editMode"
+      >
+        {{ editMode ? '完成' : '管理' }}
+      </div>
     </div>
 
     <!-- 题型过滤器 -->
@@ -22,20 +34,45 @@
     <!-- 错题统计与集中攻关 -->
     <div class="wrong-stats">
       <div>
-        <div class="ws-num">{{ filteredList.length }}</div>
-        <div class="ws-label">道错题待攻克</div>
+        <div class="ws-num">
+          {{ filteredList.length }}
+        </div>
+        <div class="ws-label">
+          道错题待攻克
+        </div>
       </div>
-      <div class="ws-btn" @click="startRedo">开始重做</div>
+      <div
+        class="ws-btn"
+        @click="startRedo"
+      >
+        开始重做
+      </div>
     </div>
 
     <!-- 错题卡片列表 -->
-    <div v-if="loading" class="loading-state" style="padding: 40px; text-align: center">
-      <van-loading type="spinner" color="var(--primary)">加载错题本中...</van-loading>
+    <div
+      v-if="loading"
+      class="loading-state"
+      style="padding: 40px; text-align: center"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        加载错题本中...
+      </van-loading>
     </div>
-    <div v-else-if="filteredList.length === 0" class="empty-state" style="padding: 40px; text-align: center">
+    <div
+      v-else-if="filteredList.length === 0"
+      class="empty-state"
+      style="padding: 40px; text-align: center"
+    >
       <van-empty description="暂无错题记录，继续保持全对哦！" />
     </div>
-    <div v-else class="wrong-list">
+    <div
+      v-else
+      class="wrong-list"
+    >
       <div
         v-for="item in filteredList"
         :key="item.id"
@@ -47,25 +84,47 @@
             <span class="wc-type">{{ item.typeText || item.type || '单选题' }}</span>
             <span class="wc-chapter">{{ item.chapterName || '核心章节' }}</span>
           </div>
-          <div class="wc-time">错 {{ item.wrongCount || 1 }} 次</div>
+          <div class="wc-time">
+            错 {{ item.wrongCount || 1 }} 次
+          </div>
         </div>
 
-        <div class="wc-content">{{ item.title }}</div>
-        <div v-if="item.myAnswer" class="wc-answer">
+        <div class="wc-content">
+          {{ item.title }}
+        </div>
+        <div
+          v-if="item.myAnswer"
+          class="wc-answer"
+        >
           ✗ 你的答案：{{ item.myAnswer }} ｜ 正确答案：{{ item.correctAnswer || 'A' }}
         </div>
 
         <div class="wc-footer">
           <div class="wc-actions">
-            <div class="wca" @click.stop="goAnalysis(item.questionId || item.id)">📖 查看解析</div>
-            <div class="wca" @click.stop="addNote(item)">📓 添加笔记</div>
+            <div
+              class="wca"
+              @click.stop="goAnalysis(item.questionId || item.id)"
+            >
+              📖 查看解析
+            </div>
+            <div
+              class="wca"
+              @click.stop="addNote(item)"
+            >
+              📓 添加笔记
+            </div>
           </div>
-          <div class="wca remove" @click.stop="remove(item.questionId || item.id)">移除</div>
+          <div
+            class="wca remove"
+            @click.stop="remove(item.questionId || item.id)"
+          >
+            移除
+          </div>
         </div>
       </div>
     </div>
 
-    <div style="height: 80px"></div>
+    <div style="height: 80px" />
   </div>
 </template>
 

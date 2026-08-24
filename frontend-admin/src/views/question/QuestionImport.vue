@@ -59,7 +59,7 @@
           :accept="importMode === 'excel' ? '.xlsx,.xls,.csv' : '.docx,.doc,.txt'"
           style="display: none"
           @change="onFileSelected"
-        />
+        >
         <div class="dz-icon">
           {{ importMode === 'excel' ? '📊' : '📑' }}
         </div>
@@ -155,7 +155,7 @@
           </template>
         </el-table-column>
         <el-table-column label="操作" width="90" align="center">
-          <template #default="{ row, $index }">
+          <template #default="{ $index }">
             <div class="row-ops">
               <el-button type="danger" link size="small" @click="removePreviewRow($index)">删除</el-button>
             </div>
@@ -619,6 +619,7 @@ async function parseExcelFile(file: File) {
 
 // 客户端状态机试卷解析算法
 function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信息化发展') {
+  // eslint-disable-next-line no-control-regex
   const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
 
@@ -628,7 +629,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
   let currentQ: any = null
 
   const extractOptionsFromLine = (line: string) => {
-    const optRegex = /(?:^|\s+|[\t　]+)(?:([A-Ea-e])[\.、．\s]|[（(]([A-Ea-e])[）)])\s*/g
+    const optRegex = /(?:^|\s+|[\t\u3000]+)(?:([A-Ea-e])[.、．\s]|[（(]([A-Ea-e])[）)])\s*/g
     const matches: Array<{ key: string; startIndex: number; contentStart: number }> = []
     let m: RegExpExecArray | null
     while ((m = optRegex.exec(line)) !== null) {
@@ -658,9 +659,9 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
     if (!q) return
     let content = q.stemLines.join('\n').trim()
     content = content.replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?\s*)+/i, '')
-    content = content.replace(/^\d+[\.、．\s]\s*/, '')
-    content = content.replace(/^第\d+题[\.、．\s]?\s*/, '')
-    content = content.replace(/^[（(]\d+[）)][\.、\s]?\s*/, '')
+    content = content.replace(/^\d+[.、．\s]\s*/, '')
+    content = content.replace(/^第\d+题[.、．\s]?\s*/, '')
+    content = content.replace(/^[（(]\d+[）)][.、\s]?\s*/, '')
 
     if (!content) return
 
@@ -727,7 +728,7 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       continue
     }
 
-    const isNewQuestionStart = /^(?:\d+[\.、．\s]|第\d+题|[（(]\d+[）)])\s*\S+/i.test(line)
+    const isNewQuestionStart = /^(?:\d+[.、．\s]|第\d+题|[（(]\d+[）)])\s*\S+/i.test(line)
 
     if (isNewQuestionStart) {
       finalizeQuestion(currentQ)
@@ -803,6 +804,7 @@ async function parseTextOrDocFile(file: File) {
     return ElMessage.error(`读取 Word/文本文件失败: ${readErr.message || '文件损坏'}`)
   }
 
+  // eslint-disable-next-line no-control-regex
   text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   if (!text) {
     return ElMessage.warning('未能从 Word 文档中提取到文字内容，请确认文档非空')

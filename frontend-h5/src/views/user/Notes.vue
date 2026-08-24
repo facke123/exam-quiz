@@ -1,28 +1,63 @@
 <template>
   <div class="notes-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">我的笔记</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        我的笔记
+      </div>
+      <div class="right" />
     </div>
 
-    <div v-if="list.length" class="notes-list">
-      <div v-for="note in list" :key="note.id" class="note-card">
+    <div
+      v-if="list.length"
+      class="notes-list"
+    >
+      <div
+        v-for="note in list"
+        :key="note.id"
+        class="note-card"
+      >
         <div class="nc-head">
           <span class="nc-tag">考点笔记</span>
           <span class="nc-time">{{ note.updatedAt }}</span>
-          <span class="nc-del" @click="onDelete(note.id)">删除</span>
+          <span
+            class="nc-del"
+            @click="onDelete(note.id)"
+          >删除</span>
         </div>
-        <div class="nc-title">{{ note.title }}</div>
-        <div class="nc-content">{{ note.content }}</div>
+        <div class="nc-title">
+          {{ note.title }}
+        </div>
+        <div class="nc-content">
+          {{ note.content }}
+        </div>
       </div>
     </div>
 
-    <div v-else class="empty-state">
-      <div class="es-icon">📓</div>
-      <div class="es-text">还没有笔记</div>
-      <div class="es-sub">做题时点击“笔记”按钮即可随时记录备考心得</div>
-      <button class="es-btn" @click="$router.push('/chapter')">去刷题记录</button>
+    <div
+      v-else
+      class="empty-state"
+    >
+      <div class="es-icon">
+        📓
+      </div>
+      <div class="es-text">
+        还没有笔记
+      </div>
+      <div class="es-sub">
+        做题时点击“笔记”按钮即可随时记录备考心得
+      </div>
+      <button
+        class="es-btn"
+        @click="$router.push('/chapter')"
+      >
+        去刷题记录
+      </button>
     </div>
   </div>
 </template>

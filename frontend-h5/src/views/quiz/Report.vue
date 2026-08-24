@@ -2,10 +2,19 @@
   <div class="report-page">
     <!-- 头部成绩卡片 -->
     <div class="report-header">
-      <div class="rh-label">软考模拟答卷 · 成绩报告</div>
-      <div class="score">{{ score }}</div>
-      <div class="score-label">分 / 满分100分</div>
-      <div class="pass-tag" :class="score >= 45 ? 'pass' : 'fail'">
+      <div class="rh-label">
+        软考模拟答卷 · 成绩报告
+      </div>
+      <div class="score">
+        {{ score }}
+      </div>
+      <div class="score-label">
+        分 / 满分100分
+      </div>
+      <div
+        class="pass-tag"
+        :class="score >= 45 ? 'pass' : 'fail'"
+      >
         {{ score >= 45 ? '✓ 达到合格线（45分合格）' : '✗ 暂未达到合格线' }}
       </div>
     </div>
@@ -13,75 +22,150 @@
     <!-- 数据指标统计 -->
     <div class="report-stats">
       <div class="rs-item">
-        <div class="rs-num green">{{ correctCount }}</div>
-        <div class="rs-label">答对</div>
+        <div class="rs-num green">
+          {{ correctCount }}
+        </div>
+        <div class="rs-label">
+          答对
+        </div>
       </div>
-      <div class="rs-divider"></div>
+      <div class="rs-divider" />
       <div class="rs-item">
-        <div class="rs-num red">{{ wrongCount }}</div>
-        <div class="rs-label">答错</div>
+        <div class="rs-num red">
+          {{ wrongCount }}
+        </div>
+        <div class="rs-label">
+          答错
+        </div>
       </div>
-      <div class="rs-divider"></div>
+      <div class="rs-divider" />
       <div class="rs-item">
-        <div class="rs-num">{{ correctRate }}<small>%</small></div>
-        <div class="rs-label">正确率</div>
+        <div class="rs-num">
+          {{ correctRate }}<small>%</small>
+        </div>
+        <div class="rs-label">
+          正确率
+        </div>
       </div>
-      <div class="rs-divider"></div>
+      <div class="rs-divider" />
       <div class="rs-item">
-        <div class="rs-num">12<small>分</small></div>
-        <div class="rs-label">用时</div>
+        <div class="rs-num">
+          12<small>分</small>
+        </div>
+        <div class="rs-label">
+          用时
+        </div>
       </div>
     </div>
 
     <!-- 题型分布卡片 -->
     <div class="analysis-card">
-      <div class="ac-title">📊 题型分布</div>
+      <div class="ac-title">
+        📊 题型分布
+      </div>
       <div class="type-breakdown">
         <div class="tb-row">
-          <div class="tb-label">单选题</div>
-          <div class="tb-bar">
-            <div class="tb-correct" style="width: 70%"></div>
-            <div class="tb-wrong" style="width: 30%"></div>
+          <div class="tb-label">
+            单选题
           </div>
-          <div class="tb-text">7/10 正确</div>
+          <div class="tb-bar">
+            <div
+              class="tb-correct"
+              style="width: 70%"
+            />
+            <div
+              class="tb-wrong"
+              style="width: 30%"
+            />
+          </div>
+          <div class="tb-text">
+            7/10 正确
+          </div>
         </div>
         <div class="tb-row">
-          <div class="tb-label">多选题</div>
-          <div class="tb-bar">
-            <div class="tb-correct" style="width: 50%"></div>
-            <div class="tb-wrong" style="width: 50%"></div>
+          <div class="tb-label">
+            多选题
           </div>
-          <div class="tb-text">1/2 正确</div>
+          <div class="tb-bar">
+            <div
+              class="tb-correct"
+              style="width: 50%"
+            />
+            <div
+              class="tb-wrong"
+              style="width: 50%"
+            />
+          </div>
+          <div class="tb-text">
+            1/2 正确
+          </div>
         </div>
         <div class="tb-row">
-          <div class="tb-label">判断题</div>
-          <div class="tb-bar">
-            <div class="tb-correct" style="width: 100%"></div>
+          <div class="tb-label">
+            判断题
           </div>
-          <div class="tb-text">3/3 正确</div>
+          <div class="tb-bar">
+            <div
+              class="tb-correct"
+              style="width: 100%"
+            />
+          </div>
+          <div class="tb-text">
+            3/3 正确
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 错题回顾卡片 -->
     <div class="analysis-card">
-      <div class="ac-title">📌 错题精细回顾</div>
-      <div class="wrong-review-item" @click="$router.push('/quiz/analysis/1')">
-        <div class="wr-title">1. [多选题] 项目范围管理的主要过程包括哪些？</div>
-        <div class="wr-ans">你的答案：ABC ｜ 正确答案：ABCD</div>
-        <div class="wr-kp">考点：项目范围管理过程</div>
+      <div class="ac-title">
+        📌 错题精细回顾
       </div>
-      <div class="wrong-review-item" @click="$router.push('/quiz/analysis/1')">
-        <div class="wr-title">2. [单选题] 制定项目章程的输入不包括以下哪项？</div>
-        <div class="wr-ans">你的答案：C ｜ 正确答案：B</div>
-        <div class="wr-kp">考点：项目章程输入输出</div>
+      <div
+        class="wrong-review-item"
+        @click="$router.push('/quiz/analysis/1')"
+      >
+        <div class="wr-title">
+          1. [多选题] 项目范围管理的主要过程包括哪些？
+        </div>
+        <div class="wr-ans">
+          你的答案：ABC ｜ 正确答案：ABCD
+        </div>
+        <div class="wr-kp">
+          考点：项目范围管理过程
+        </div>
+      </div>
+      <div
+        class="wrong-review-item"
+        @click="$router.push('/quiz/analysis/1')"
+      >
+        <div class="wr-title">
+          2. [单选题] 制定项目章程的输入不包括以下哪项？
+        </div>
+        <div class="wr-ans">
+          你的答案：C ｜ 正确答案：B
+        </div>
+        <div class="wr-kp">
+          考点：项目章程输入输出
+        </div>
       </div>
     </div>
 
     <!-- 底部操作按钮 -->
     <div class="bottom-actions">
-      <button class="btn-outline" @click="$router.push('/')">返回首页</button>
-      <button class="btn-primary" @click="$router.push('/wrong')">查看错题本</button>
+      <button
+        class="btn-outline"
+        @click="$router.push('/')"
+      >
+        返回首页
+      </button>
+      <button
+        class="btn-primary"
+        @click="$router.push('/wrong')"
+      >
+        查看错题本
+      </button>
     </div>
   </div>
 </template>

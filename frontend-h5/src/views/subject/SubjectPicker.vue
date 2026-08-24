@@ -1,20 +1,41 @@
 <template>
   <div class="subject-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">选择考试科目</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        选择考试科目
+      </div>
+      <div class="right" />
     </div>
 
-    <div v-if="subjectStore.loading" class="loading-state">
-      <van-loading type="spinner" color="var(--primary)">加载科目列表中...</van-loading>
+    <div
+      v-if="subjectStore.loading"
+      class="loading-state"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        加载科目列表中...
+      </van-loading>
     </div>
 
-    <div v-else-if="subjects.length === 0" class="empty-state">
+    <div
+      v-else-if="subjects.length === 0"
+      class="empty-state"
+    >
       <van-empty description="暂无可用的考试科目" />
     </div>
 
-    <div v-else class="subject-list">
+    <div
+      v-else
+      class="subject-list"
+    >
       <div
         v-for="sub in subjects"
         :key="sub.id"
@@ -22,14 +43,26 @@
         :class="{ active: String(sub.id) === String(currentSubjectId) }"
         @click="onSelect(sub)"
       >
-        <div class="sc-icon" :style="{ background: sub.bg || 'var(--primary-bg)' }">
+        <div
+          class="sc-icon"
+          :style="{ background: sub.bg || 'var(--primary-bg)' }"
+        >
           {{ sub.icon || '💻' }}
         </div>
         <div class="sc-info">
-          <div class="sc-name">{{ sub.name }}</div>
-          <div class="sc-meta">{{ sub.level }} · {{ sub.questionCount || 0 }}题</div>
+          <div class="sc-name">
+            {{ sub.name }}
+          </div>
+          <div class="sc-meta">
+            {{ sub.level }} · {{ sub.questionCount || 0 }}题
+          </div>
         </div>
-        <div v-if="String(sub.id) === String(currentSubjectId)" class="sc-check">✓</div>
+        <div
+          v-if="String(sub.id) === String(currentSubjectId)"
+          class="sc-check"
+        >
+          ✓
+        </div>
       </div>
     </div>
   </div>

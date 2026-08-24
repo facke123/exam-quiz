@@ -2,32 +2,74 @@
   <div class="quiz-page">
     <!-- 顶部状态栏 -->
     <div class="quiz-header">
-      <div class="back-btn" @click="$router.back()">‹</div>
-      <div class="q-progress"><strong>{{ currentIndex + 1 }}</strong> / {{ total }} 题</div>
+      <div
+        class="back-btn"
+        @click="$router.back()"
+      >
+        ‹
+      </div>
+      <div class="q-progress">
+        <strong>{{ currentIndex + 1 }}</strong> / {{ total }} 题
+      </div>
       <div class="q-actions">
-        <div class="qa-item" @click="sheetVisible = true">📋 答题卡</div>
-        <div class="qa-item" @click="onFavorite">{{ isFavorited() ? '⭐ 已收藏' : '☆ 收藏' }}</div>
+        <div
+          class="qa-item"
+          @click="sheetVisible = true"
+        >
+          📋 答题卡
+        </div>
+        <div
+          class="qa-item"
+          @click="onFavorite"
+        >
+          {{ isFavorited() ? '⭐ 已收藏' : '☆ 收藏' }}
+        </div>
       </div>
     </div>
 
     <!-- 计时器条（模考/真题时显示） -->
-    <div v-if="needCountdown" class="quiz-timer">
+    <div
+      v-if="needCountdown"
+      class="quiz-timer"
+    >
       ⏱️ {{ formatTime(remainingSeconds) }}
     </div>
 
-    <div v-if="loading" class="loading-state" style="padding: 60px 16px; text-align: center;">
-      <van-loading type="spinner" color="var(--primary)">正在组卷抽取考点试题...</van-loading>
+    <div
+      v-if="loading"
+      class="loading-state"
+      style="padding: 60px 16px; text-align: center;"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        正在组卷抽取考点试题...
+      </van-loading>
     </div>
-    <div v-else-if="questions.length === 0" class="empty-state" style="padding: 60px 16px; text-align: center;">
+    <div
+      v-else-if="questions.length === 0"
+      class="empty-state"
+      style="padding: 60px 16px; text-align: center;"
+    >
       <van-empty description="当前科目或章节暂无已发布试题" />
-      <van-button type="primary" size="small" round style="margin-top: 12px" @click="$router.push('/')">
+      <van-button
+        type="primary"
+        size="small"
+        round
+        style="margin-top: 12px"
+        @click="$router.push('/')"
+      >
         返回首页选择其他科目
       </van-button>
     </div>
-    <div v-else-if="currentQuestion" class="quiz-body">
+    <div
+      v-else-if="currentQuestion"
+      class="quiz-body"
+    >
       <QuestionCard
-        :question="currentQuestion"
         v-model="currentAnswer"
+        :question="currentQuestion"
         :show-result="false"
       />
     </div>

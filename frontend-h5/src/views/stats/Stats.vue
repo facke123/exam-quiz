@@ -1,29 +1,57 @@
 <template>
   <div class="stat-page">
     <div class="nav-bar">
-      <div class="back" @click="$router.back()">‹</div>
-      <div class="title">做题统计</div>
-      <div class="right" @click="onExport">导出</div>
+      <div
+        class="back"
+        @click="$router.back()"
+      >
+        ‹
+      </div>
+      <div class="title">
+        做题统计
+      </div>
+      <div
+        class="right"
+        @click="onExport"
+      >
+        导出
+      </div>
     </div>
 
     <!-- 数据总览 4格 -->
     <div class="stat-overview">
       <div class="so-grid">
         <div class="so-item">
-          <div class="so-num">{{ overview.totalAnswered || 0 }}<small>题</small></div>
-          <div class="so-label">累计刷题</div>
+          <div class="so-num">
+            {{ overview.totalAnswered || 0 }}<small>题</small>
+          </div>
+          <div class="so-label">
+            累计刷题
+          </div>
         </div>
         <div class="so-item">
-          <div class="so-num">{{ overview.correctRate || 0 }}<small>%</small></div>
-          <div class="so-label">平均正确率</div>
+          <div class="so-num">
+            {{ overview.correctRate || 0 }}<small>%</small>
+          </div>
+          <div class="so-label">
+            平均正确率
+          </div>
         </div>
         <div class="so-item">
-          <div class="so-num">{{ overview.wrongCount || 0 }}<small>题</small></div>
-          <div class="so-label">错题记录</div>
+          <div class="so-num">
+            {{ overview.wrongCount || 0 }}<small>题</small>
+          </div>
+          <div class="so-label">
+            错题记录
+          </div>
         </div>
         <div class="so-item">
-          <div class="so-num">{{ overview.streakDays || 0 }}<small>天</small></div>
-          <div class="so-label">连续打卡</div>
+          <div class="so-num">
+            {{ overview.streakDays || 0 }}<small>天</small>
+          </div>
+          <div class="so-label">
+            连续打卡
+          </div>
         </div>
       </div>
     </div>
@@ -33,11 +61,20 @@
       <div class="sc-title">
         <span>📈 刷题趋势</span>
         <div class="sc-switch">
-          <span :class="{ active: trendType === 'week' }" @click="trendType = 'week'">周</span>
-          <span :class="{ active: trendType === 'month' }" @click="trendType = 'month'">月</span>
+          <span
+            :class="{ active: trendType === 'week' }"
+            @click="trendType = 'week'"
+          >周</span>
+          <span
+            :class="{ active: trendType === 'month' }"
+            @click="trendType = 'month'"
+          >月</span>
         </div>
       </div>
-      <div v-if="trendList.length > 0" class="chart-placeholder">
+      <div
+        v-if="trendList.length > 0"
+        class="chart-placeholder"
+      >
         <div
           v-for="(t, idx) in trendList"
           :key="idx"
@@ -45,22 +82,40 @@
           :class="{ today: idx === trendList.length - 1 }"
           :style="{ height: Math.max(12, Math.min(100, Math.round((t.count / maxTrendCount) * 100))) + '%' }"
         >
-          <div class="bar-val">{{ t.count }}</div>
+          <div class="bar-val">
+            {{ t.count }}
+          </div>
         </div>
       </div>
-      <div v-else class="chart-empty" style="padding: 24px; text-align: center; color: var(--gray-5)">
+      <div
+        v-else
+        class="chart-empty"
+        style="padding: 24px; text-align: center; color: var(--gray-5)"
+      >
         暂无近期刷题记录，快去刷题吧～
       </div>
-      <div v-if="trendList.length > 0" class="chart-labels">
-        <span v-for="(t, idx) in trendList" :key="idx">{{ t.date }}</span>
+      <div
+        v-if="trendList.length > 0"
+        class="chart-labels"
+      >
+        <span
+          v-for="(t, idx) in trendList"
+          :key="idx"
+        >{{ t.date }}</span>
       </div>
     </div>
 
     <!-- 能力雷达图 -->
     <div class="stat-card">
-      <div class="sc-title">🎯 知识图谱与能力雷达</div>
+      <div class="sc-title">
+        🎯 知识图谱与能力雷达
+      </div>
       <div class="radar-svg-wrap">
-        <svg width="200" height="200" viewBox="0 0 200 200">
+        <svg
+          width="200"
+          height="200"
+          viewBox="0 0 200 200"
+        >
           <polygon
             points="100,20 170,60 170,140 100,180 30,140 30,60"
             fill="none"
@@ -85,18 +140,61 @@
             stroke="#6366F1"
             stroke-width="2"
           />
-          <text x="100" y="12" text-anchor="middle" font-size="10" fill="#6B7280">基础知识</text>
-          <text x="178" y="58" text-anchor="middle" font-size="10" fill="#6B7280">范围</text>
-          <text x="178" y="148" text-anchor="middle" font-size="10" fill="#6B7280">进度</text>
-          <text x="100" y="195" text-anchor="middle" font-size="10" fill="#6B7280">成本</text>
-          <text x="22" y="148" text-anchor="middle" font-size="10" fill="#6B7280">质量</text>
-          <text x="22" y="58" text-anchor="middle" font-size="10" fill="#6B7280">安全</text>
+          <text
+            x="100"
+            y="12"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >基础知识</text>
+          <text
+            x="178"
+            y="58"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >范围</text>
+          <text
+            x="178"
+            y="148"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >进度</text>
+          <text
+            x="100"
+            y="195"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >成本</text>
+          <text
+            x="22"
+            y="148"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >质量</text>
+          <text
+            x="22"
+            y="58"
+            text-anchor="middle"
+            font-size="10"
+            fill="#6B7280"
+          >安全</text>
         </svg>
       </div>
 
       <div class="radar-legend-grid">
-        <div v-for="(r, idx) in radarList" :key="idx" class="legend-item">
-          <div class="dot" :style="{ background: legendColors[idx % legendColors.length] }"></div>
+        <div
+          v-for="(r, idx) in radarList"
+          :key="idx"
+          class="legend-item"
+        >
+          <div
+            class="dot"
+            :style="{ background: legendColors[idx % legendColors.length] }"
+          />
           {{ r.dimension }} {{ r.value }}%
         </div>
       </div>
@@ -104,24 +202,43 @@
 
     <!-- 错题分布 -->
     <div class="stat-card">
-      <div class="sc-title">📉 错题高频分布</div>
-      <div v-if="wrongDistList.length > 0" class="wrong-dist-list">
-        <div v-for="(item, idx) in wrongDistList" :key="idx" class="dist-item">
+      <div class="sc-title">
+        📉 错题高频分布
+      </div>
+      <div
+        v-if="wrongDistList.length > 0"
+        class="wrong-dist-list"
+      >
+        <div
+          v-for="(item, idx) in wrongDistList"
+          :key="idx"
+          class="dist-item"
+        >
           <div class="di-head">
             <span class="name">{{ item.chapter }}</span>
-            <span class="num" :class="idx === 0 ? 'danger' : 'warning'">{{ item.count }}题</span>
+            <span
+              class="num"
+              :class="idx === 0 ? 'danger' : 'warning'"
+            >{{ item.count }}题</span>
           </div>
           <div class="di-track">
-            <div class="di-fill" :class="idx === 0 ? 'danger' : 'warning'" :style="{ width: Math.min(100, Math.round((item.count / maxWrongCount) * 100)) + '%' }"></div>
+            <div
+              class="di-fill"
+              :class="idx === 0 ? 'danger' : 'warning'"
+              :style="{ width: Math.min(100, Math.round((item.count / maxWrongCount) * 100)) + '%' }"
+            />
           </div>
         </div>
       </div>
-      <div v-else style="padding: 20px; text-align: center; color: var(--gray-5); font-size: 13px">
+      <div
+        v-else
+        style="padding: 20px; text-align: center; color: var(--gray-5); font-size: 13px"
+      >
         🎉 太棒了，当前暂无错题记录！
       </div>
     </div>
 
-    <div style="height: 80px"></div>
+    <div style="height: 80px" />
   </div>
 </template>
 

@@ -8,11 +8,13 @@
     :style="{ maxHeight: '70%' }"
   >
     <div class="answer-sheet">
-      <h3 class="sheet-title">答题卡</h3>
+      <h3 class="sheet-title">
+        答题卡
+      </h3>
       <div class="sheet-legend">
-        <span><i class="dot answered"></i>已答 {{ answered }}</span>
-        <span><i class="dot unanswered"></i>未答 {{ total - answered }}</span>
-        <span v-if="marked"><i class="dot marked"></i>标记 {{ marked }}</span>
+        <span><i class="dot answered" />已答 {{ answered }}</span>
+        <span><i class="dot unanswered" />未答 {{ total - answered }}</span>
+        <span v-if="marked"><i class="dot marked" />标记 {{ marked }}</span>
       </div>
       <div class="sheet-grid">
         <div

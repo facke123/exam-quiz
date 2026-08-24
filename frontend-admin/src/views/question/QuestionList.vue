@@ -265,7 +265,7 @@
         <div v-if="formData.type === 'single' || formData.type === 'multiple'" class="options-form">
           <div class="of-title">选项设置：</div>
           <div
-            v-for="(opt, idx) in formData.options"
+            v-for="opt in formData.options"
             :key="opt.key"
             class="option-row"
           >

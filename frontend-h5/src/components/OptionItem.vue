@@ -13,9 +13,22 @@
       <span v-else-if="showResult && selected && !correct">✗</span>
       <span v-else>{{ option.key }}</span>
     </div>
-    <div class="opt-text" v-html="renderedContent"></div>
-    <div v-if="showResult && correct" class="opt-icon correct">✓</div>
-    <div v-else-if="showResult && selected && !correct" class="opt-icon wrong">✗</div>
+    <div
+      class="opt-text"
+      v-html="renderedContent"
+    />
+    <div
+      v-if="showResult && correct"
+      class="opt-icon correct"
+    >
+      ✓
+    </div>
+    <div
+      v-else-if="showResult && selected && !correct"
+      class="opt-icon wrong"
+    >
+      ✗
+    </div>
   </div>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 

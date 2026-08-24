@@ -1,14 +1,20 @@
 <template>
   <div class="register-page">
     <div class="bg-decor">
-      <div class="circle c1"></div>
-      <div class="circle c2"></div>
+      <div class="circle c1" />
+      <div class="circle c2" />
     </div>
 
     <div class="logo-area">
-      <div class="logo">软</div>
-      <h1 class="title">创建账号</h1>
-      <p class="subtitle">开启你的备考之旅</p>
+      <div class="logo">
+        软
+      </div>
+      <h1 class="title">
+        创建账号
+      </h1>
+      <p class="subtitle">
+        开启你的备考之旅
+      </p>
     </div>
 
     <div class="form-card">
@@ -28,7 +34,13 @@
         class="input-field"
       >
         <template #button>
-          <van-button size="small" type="primary" plain @click="sendCode" :disabled="counting">
+          <van-button
+            size="small"
+            type="primary"
+            plain
+            :disabled="counting"
+            @click="sendCode"
+          >
             {{ codeText }}
           </van-button>
         </template>
@@ -41,9 +53,16 @@
         clearable
         class="input-field"
       />
-      <div v-if="form.password" class="strength-bar">
+      <div
+        v-if="form.password"
+        class="strength-bar"
+      >
         <div class="strength-segs">
-          <span v-for="i in 4" :key="i" :style="{ background: i <= score ? scoreColor : '' }"></span>
+          <span
+            v-for="i in 4"
+            :key="i"
+            :style="{ background: i <= score ? scoreColor : '' }"
+          />
         </div>
         <span class="strength-text">{{ strengthTextVal }}</span>
       </div>
@@ -68,7 +87,12 @@
       </van-button>
 
       <div class="form-actions">
-        <router-link to="/auth/login" class="link">已有账号？去登录</router-link>
+        <router-link
+          to="/auth/login"
+          class="link"
+        >
+          已有账号？去登录
+        </router-link>
       </div>
     </div>
   </div>

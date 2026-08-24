@@ -180,7 +180,7 @@
               accept=".docx,.xlsx,.xls,.txt"
               style="display: none"
               @change="onPaperFileSelected"
-            />
+            >
           </div>
         </el-form-item>
 
@@ -596,7 +596,7 @@ function parseTextToQuestions(rawText: string) {
     }
 
     // 选项识别 A/B/C/D
-    const optMatch = line.match(/^([A-Ea-e])[\.、．\s]\s*(.+)/) || line.match(/^[（(]([A-Ea-e])[）)]\s*(.+)/)
+    const optMatch = line.match(/^([A-Ea-e])[.、．\s]\s*(.+)/) || line.match(/^[（(]([A-Ea-e])[）)]\s*(.+)/)
     if (optMatch) {
       const key = optMatch[1].toUpperCase()
       currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
@@ -604,7 +604,7 @@ function parseTextToQuestions(rawText: string) {
     }
 
     // 多行选项识别（如 A. xxx B. yyy在一行）
-    const inlineOptRegex = /([A-Ea-e])[\.、．\s]\s*([^A-Ea-e]+)/g
+    const inlineOptRegex = /([A-Ea-e])[.、．\s]\s*([^A-Ea-e]+)/g
     let inlineM: RegExpExecArray | null
     let foundInline = false
     while ((inlineM = inlineOptRegex.exec(line)) !== null) {

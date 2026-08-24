@@ -1,45 +1,89 @@
 <template>
   <div class="chapter-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">章节练习</div>
-      <div class="right" @click="showFilter = true">筛选</div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        章节练习
+      </div>
+      <div
+        class="right"
+        @click="showFilter = true"
+      >
+        筛选
+      </div>
     </div>
 
     <!-- 整体进度卡片 -->
     <div class="chapter-progress">
-      <div class="cp-title">整体进度</div>
-      <div class="cp-num">{{ answeredCount }}<span> / {{ totalQuestions }} 题</span></div>
+      <div class="cp-title">
+        整体进度
+      </div>
+      <div class="cp-num">
+        {{ answeredCount }}<span> / {{ totalQuestions }} 题</span>
+      </div>
       <div class="progress-bar">
-        <div class="fill" :style="{ width: overallProgress + '%' }"></div>
+        <div
+          class="fill"
+          :style="{ width: overallProgress + '%' }"
+        />
       </div>
     </div>
 
     <!-- 章节列表 -->
-    <div v-if="loading" class="loading-box" style="padding: 40px; text-align: center;">
-      <van-loading type="spinner" color="var(--primary)">加载章节数据中...</van-loading>
+    <div
+      v-if="loading"
+      class="loading-box"
+      style="padding: 40px; text-align: center;"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        加载章节数据中...
+      </van-loading>
     </div>
-    <div v-else-if="chapters.length === 0" class="empty-box" style="padding: 40px; text-align: center;">
+    <div
+      v-else-if="chapters.length === 0"
+      class="empty-box"
+      style="padding: 40px; text-align: center;"
+    >
       <van-empty description="当前科目暂无章节数据" />
     </div>
-    <div v-else class="chapter-list">
+    <div
+      v-else
+      class="chapter-list"
+    >
       <div
         v-for="(ch, idx) in chapters"
         :key="ch.id"
         class="chapter-item"
         @click="enterChapter(ch)"
       >
-        <div class="ch-num">{{ idx + 1 }}</div>
+        <div class="ch-num">
+          {{ idx + 1 }}
+        </div>
         <div class="ch-info">
-          <div class="ch-name">{{ ch.name }}</div>
+          <div class="ch-name">
+            {{ ch.name }}
+          </div>
           <div class="ch-meta">
             <span>{{ ch.questionCount || 0 }}题</span>
             <span v-if="(ch.progress || 0) > 0">已做{{ Math.round(((ch.progress || 0) / 100) * (ch.questionCount || 0)) }}题</span>
             <span v-else>未开始</span>
-            <span v-if="(ch.progress || 0) > 0" class="rate">正确率{{ percent(ch.correctRate || 0) }}</span>
+            <span
+              v-if="(ch.progress || 0) > 0"
+              class="rate"
+            >正确率{{ percent(ch.correctRate || 0) }}</span>
           </div>
         </div>
-        <div class="ch-arrow">›</div>
+        <div class="ch-arrow">
+          ›
+        </div>
       </div>
     </div>
   </div>

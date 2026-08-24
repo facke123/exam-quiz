@@ -1,28 +1,50 @@
 <template>
   <div class="quiz-footer">
     <div class="footer-icons">
-      <div class="footer-icon" :class="{ active: favorited }" @click="$emit('toggle-favorite')">
+      <div
+        class="footer-icon"
+        :class="{ active: favorited }"
+        @click="$emit('toggle-favorite')"
+      >
         <span>{{ favorited ? '⭐' : '☆' }}</span>
         <span>{{ favorited ? '已收藏' : '收藏' }}</span>
       </div>
-      <div class="footer-icon" @click="$emit('note')">
+      <div
+        class="footer-icon"
+        @click="$emit('note')"
+      >
         <span>📓</span>
         <span>笔记</span>
       </div>
-      <div class="footer-icon" @click="$emit('report')">
+      <div
+        class="footer-icon"
+        @click="$emit('report')"
+      >
         <span>⚠️</span>
         <span>报错</span>
       </div>
     </div>
 
     <div class="footer-btns">
-      <button v-if="current > 0" class="btn-prev" @click="$emit('prev')">
+      <button
+        v-if="current > 0"
+        class="btn-prev"
+        @click="$emit('prev')"
+      >
         上一题
       </button>
-      <button v-if="current < total - 1" class="btn-next" @click="$emit('next')">
+      <button
+        v-if="current < total - 1"
+        class="btn-next"
+        @click="$emit('next')"
+      >
         下一题
       </button>
-      <button v-else class="btn-submit" @click="$emit('submit')">
+      <button
+        v-else
+        class="btn-submit"
+        @click="$emit('submit')"
+      >
         交卷
       </button>
     </div>

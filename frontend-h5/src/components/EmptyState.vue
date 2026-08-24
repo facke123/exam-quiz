@@ -3,8 +3,16 @@
     <div class="empty-icon">
       <van-icon :name="icon" />
     </div>
-    <p class="empty-text">{{ text }}</p>
-    <van-button v-if="actionText" type="primary" size="small" round @click="$emit('action')">
+    <p class="empty-text">
+      {{ text }}
+    </p>
+    <van-button
+      v-if="actionText"
+      type="primary"
+      size="small"
+      round
+      @click="$emit('action')"
+    >
       {{ actionText }}
     </van-button>
   </div>

@@ -149,7 +149,7 @@
                     width: (row.confidence || 95) + '%',
                     background: (row.confidence || 95) >= 90 ? 'var(--success)' : 'var(--warning)',
                   }"
-                ></div>
+                />
               </div>
               <span class="conf-text">{{ row.confidence || 95 }}%</span>
             </div>

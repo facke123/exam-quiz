@@ -1,51 +1,91 @@
 <template>
   <div class="case-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">案例分析</div>
-      <div class="right">{{ currentCaseIdx + 1 }}/{{ caseList.length }}</div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        案例分析
+      </div>
+      <div class="right">
+        {{ currentCaseIdx + 1 }}/{{ caseList.length }}
+      </div>
     </div>
 
     <div class="quiz-body">
       <span class="question-type-tag">案例分析题</span>
-      <div class="case-hint">📖 阅读以下案例材料，回答下方问题</div>
+      <div class="case-hint">
+        📖 阅读以下案例材料，回答下方问题
+      </div>
 
       <!-- 案例背景材料 -->
       <div class="analysis-content">
         <div class="ac-body">
-          <p class="case-sub-title"><strong>【案例背景】</strong></p>
+          <p class="case-sub-title">
+            <strong>【案例背景】</strong>
+          </p>
           <p>{{ currentCase.background }}</p>
           <div class="case-points">
-            <p v-for="(p, i) in currentCase.points" :key="i">{{ i + 1 }}. {{ p }}</p>
+            <p
+              v-for="(p, i) in currentCase.points"
+              :key="i"
+            >
+              {{ i + 1 }}. {{ p }}
+            </p>
           </div>
-          <p class="case-summary">{{ currentCase.summary }}</p>
+          <p class="case-summary">
+            {{ currentCase.summary }}
+          </p>
         </div>
       </div>
 
       <!-- 问答列表 -->
-      <div v-for="(q, idx) in currentCase.questions" :key="idx" class="question-box">
-        <div class="q-title">问题{{ idx + 1 }}：{{ q.title }}（{{ q.score }}分）</div>
+      <div
+        v-for="(q, idx) in currentCase.questions"
+        :key="idx"
+        class="question-box"
+      >
+        <div class="q-title">
+          问题{{ idx + 1 }}：{{ q.title }}（{{ q.score }}分）
+        </div>
         <textarea
           v-model="answers[idx]"
           class="subjective-input"
           placeholder="请输入你的作答要点..."
           rows="4"
-        ></textarea>
-        <div class="subjective-hint">{{ (answers[idx] || '').length }} / 1000字</div>
+        />
+        <div class="subjective-hint">
+          {{ (answers[idx] || '').length }} / 1000字
+        </div>
       </div>
     </div>
 
     <!-- 底部操作栏 -->
     <div class="quiz-footer">
-      <div class="footer-icon" :class="{ active: favorited }" @click="favorited = !favorited">
+      <div
+        class="footer-icon"
+        :class="{ active: favorited }"
+        @click="favorited = !favorited"
+      >
         <span>{{ favorited ? '⭐' : '☆' }}</span>
         <span>{{ favorited ? '已收藏' : '收藏' }}</span>
       </div>
-      <div class="footer-icon" @click="showToast('笔记已保存')">
+      <div
+        class="footer-icon"
+        @click="showToast('笔记已保存')"
+      >
         <span>📓</span>
         <span>笔记</span>
       </div>
-      <button class="btn-submit" @click="onSubmit">提交答案</button>
+      <button
+        class="btn-submit"
+        @click="onSubmit"
+      >
+        提交答案
+      </button>
     </div>
   </div>
 </template>

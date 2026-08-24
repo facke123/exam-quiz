@@ -8,7 +8,9 @@
     :style="{ maxHeight: '75%' }"
   >
     <div class="subject-picker">
-      <h3 class="picker-title">选择科目</h3>
+      <h3 class="picker-title">
+        选择科目
+      </h3>
       <div class="picker-list">
         <div
           v-for="item in subjects"
@@ -19,10 +21,18 @@
         >
           <span class="sub-icon">{{ item.icon }}</span>
           <div class="sub-info">
-            <p class="sub-name">{{ item.name }}</p>
-            <p class="sub-meta">{{ item.level }} · {{ item.category }}</p>
+            <p class="sub-name">
+              {{ item.name }}
+            </p>
+            <p class="sub-meta">
+              {{ item.level }} · {{ item.category }}
+            </p>
           </div>
-          <van-icon v-if="item.id === currentId" name="success" class="check-icon" />
+          <van-icon
+            v-if="item.id === currentId"
+            name="success"
+            class="check-icon"
+          />
         </div>
       </div>
     </div>

@@ -1,17 +1,30 @@
 <template>
   <div class="mock-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">全真模拟考试</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        全真模拟考试
+      </div>
+      <div class="right" />
     </div>
 
     <!-- 顶部横幅 -->
     <div class="mock-hero">
-      <div class="mh-icon">⏱️</div>
+      <div class="mh-icon">
+        ⏱️
+      </div>
       <div class="mh-info">
-        <div class="mh-title">全真考场模拟</div>
-        <div class="mh-desc">仿真出题 · 严格限时 · 考后精准估分</div>
+        <div class="mh-title">
+          全真考场模拟
+        </div>
+        <div class="mh-desc">
+          仿真出题 · 严格限时 · 考后精准估分
+        </div>
       </div>
     </div>
 
@@ -24,17 +37,26 @@
         @click="enterMock(mock)"
       >
         <div class="mc-head">
-          <div class="mc-title">{{ mock.name }}</div>
-          <span v-if="mock.isNew" class="mc-tag new">NEW</span>
+          <div class="mc-title">
+            {{ mock.name }}
+          </div>
+          <span
+            v-if="mock.isNew"
+            class="mc-tag new"
+          >NEW</span>
         </div>
-        <div class="mc-desc">{{ mock.desc }}</div>
+        <div class="mc-desc">
+          {{ mock.desc }}
+        </div>
         <div class="mc-footer">
           <div class="mc-meta">
             <span>⏱️ {{ mock.duration }}分钟</span>
             <span>📝 {{ mock.questionCount }}题</span>
             <span>👥 {{ mock.attendCount }}人参加</span>
           </div>
-          <button class="mc-btn">开始模考</button>
+          <button class="mc-btn">
+            开始模考
+          </button>
         </div>
       </div>
     </div>

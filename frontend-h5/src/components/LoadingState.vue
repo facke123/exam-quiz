@@ -1,6 +1,14 @@
 <template>
-  <div class="loading-state" :class="{ fullscreen }">
-    <van-loading type="spinner" color="#6366F1" :size="size" vertical>
+  <div
+    class="loading-state"
+    :class="{ fullscreen }"
+  >
+    <van-loading
+      type="spinner"
+      color="#6366F1"
+      :size="size"
+      vertical
+    >
       {{ text }}
     </van-loading>
   </div>

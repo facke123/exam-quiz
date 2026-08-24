@@ -4,12 +4,43 @@
       <component :is="Component" />
     </router-view>
 
-    <van-tabbar v-model="activeTab" :border="false" class="app-tabbar" @change="onTabChange">
-      <van-tabbar-item name="home" icon="home-o">首页</van-tabbar-item>
-      <van-tabbar-item name="chapter" icon="bookmark-o">题库</van-tabbar-item>
-      <van-tabbar-item name="wrong" icon="warning-o" :badge="wrongBadge">错题</van-tabbar-item>
-      <van-tabbar-item name="stats" icon="bar-chart-o">统计</van-tabbar-item>
-      <van-tabbar-item name="mine" icon="user-o">我的</van-tabbar-item>
+    <van-tabbar
+      v-model="activeTab"
+      :border="false"
+      class="app-tabbar"
+      @change="onTabChange"
+    >
+      <van-tabbar-item
+        name="home"
+        icon="home-o"
+      >
+        首页
+      </van-tabbar-item>
+      <van-tabbar-item
+        name="chapter"
+        icon="bookmark-o"
+      >
+        题库
+      </van-tabbar-item>
+      <van-tabbar-item
+        name="wrong"
+        icon="warning-o"
+        :badge="wrongBadge"
+      >
+        错题
+      </van-tabbar-item>
+      <van-tabbar-item
+        name="stats"
+        icon="bar-chart-o"
+      >
+        统计
+      </van-tabbar-item>
+      <van-tabbar-item
+        name="mine"
+        icon="user-o"
+      >
+        我的
+      </van-tabbar-item>
     </van-tabbar>
   </div>
 </template>

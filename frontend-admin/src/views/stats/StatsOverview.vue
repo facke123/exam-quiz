@@ -53,19 +53,19 @@
                 class="tb-bar active-bar"
                 :style="{ height: item.activeH + '%' }"
                 :title="`正确率: ${item.rate}%`"
-              ></div>
+              />
               <div
                 class="tb-bar question-bar"
                 :style="{ height: item.questionH + '%' }"
                 :title="`做题量: ${item.count}`"
-              ></div>
+              />
             </div>
             <span class="tb-day">{{ item.day }}</span>
           </div>
         </div>
         <div class="chart-legend">
-          <span class="legend-item"><span class="legend-dot" style="background: #4a6cf7"></span> 做题量</span>
-          <span class="legend-item"><span class="legend-dot" style="background: #8b5cf6"></span> 正确率</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #4a6cf7" /> 做题量</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #8b5cf6" /> 正确率</span>
         </div>
       </div>
 
@@ -81,7 +81,7 @@
               <span class="sr-rate">{{ sub.rate }}%</span>
             </div>
             <div class="sr-bar-track">
-              <div class="sr-bar-fill" :style="{ width: sub.rate + '%' }"></div>
+              <div class="sr-bar-fill" :style="{ width: sub.rate + '%' }" />
             </div>
           </div>
         </div>

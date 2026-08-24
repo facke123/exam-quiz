@@ -2,14 +2,20 @@
   <div class="login-page">
     <!-- 渐变背景 -->
     <div class="bg-decor">
-      <div class="circle c1"></div>
-      <div class="circle c2"></div>
+      <div class="circle c1" />
+      <div class="circle c2" />
     </div>
 
     <div class="logo-area">
-      <div class="logo">软</div>
-      <h1 class="title">软考刷题</h1>
-      <p class="subtitle">高效备考 · 一战过关</p>
+      <div class="logo">
+        软
+      </div>
+      <h1 class="title">
+        软考刷题
+      </h1>
+      <p class="subtitle">
+        高效备考 · 一战过关
+      </p>
     </div>
 
     <div class="form-card">
@@ -43,8 +49,18 @@
       </van-button>
 
       <div class="form-actions">
-        <router-link to="/auth/register" class="link">新用户注册</router-link>
-        <router-link to="/auth/forgot" class="link">找回密码</router-link>
+        <router-link
+          to="/auth/register"
+          class="link"
+        >
+          新用户注册
+        </router-link>
+        <router-link
+          to="/auth/forgot"
+          class="link"
+        >
+          找回密码
+        </router-link>
       </div>
     </div>
 

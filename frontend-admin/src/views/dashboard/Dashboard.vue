@@ -128,22 +128,22 @@
           </div>
           <div class="donut-info">
             <div class="di-item">
-              <span class="dot" style="background: #4A6CF7"></span>
+              <span class="dot" style="background: #4A6CF7" />
               <span>单选题 ({{ qDist.singlePercent || 0 }}%)</span>
               <span class="num">{{ qDist.single || 0 }} 道</span>
             </div>
             <div class="di-item">
-              <span class="dot" style="background: #22C55E"></span>
+              <span class="dot" style="background: #22C55E" />
               <span>多选题 ({{ qDist.multiplePercent || 0 }}%)</span>
               <span class="num">{{ qDist.multiple || 0 }} 道</span>
             </div>
             <div class="di-item">
-              <span class="dot" style="background: #F59E0B"></span>
+              <span class="dot" style="background: #F59E0B" />
               <span>判断题 ({{ qDist.judgePercent || 0 }}%)</span>
               <span class="num">{{ qDist.judge || 0 }} 道</span>
             </div>
             <div class="di-item">
-              <span class="dot" style="background: #8B5CF6"></span>
+              <span class="dot" style="background: #8B5CF6" />
               <span>案例题 ({{ qDist.casePercent || 0 }}%)</span>
               <span class="num">{{ qDist.case || 0 }} 道</span>
             </div>
@@ -199,7 +199,7 @@
             <span class="hs-rank" :class="'rank-' + (i + 1)">{{ i + 1 }}</span>
             <span class="hs-name">{{ sub.name }}</span>
             <div class="hs-bar-wrap">
-              <div class="hs-bar" :style="{ width: (sub.percent || 50) + '%' }"></div>
+              <div class="hs-bar" :style="{ width: (sub.percent || 50) + '%' }" />
             </div>
             <span class="hs-count">{{ sub.count }} 次刷题</span>
           </div>

@@ -1,9 +1,16 @@
 <template>
   <div class="real-exam-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">历年真题</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        历年真题
+      </div>
+      <div class="right" />
     </div>
 
     <!-- 年份与类型筛选 -->
@@ -28,21 +35,32 @@
         @click="enterExam(exam)"
       >
         <div class="ec-left">
-          <div class="ec-year">{{ exam.year }}</div>
-          <div class="ec-season">{{ exam.season }}</div>
+          <div class="ec-year">
+            {{ exam.year }}
+          </div>
+          <div class="ec-season">
+            {{ exam.season }}
+          </div>
         </div>
         <div class="ec-info">
-          <div class="ec-title">{{ exam.title }}</div>
+          <div class="ec-title">
+            {{ exam.title }}
+          </div>
           <div class="ec-meta">
             <span class="ec-tag">{{ exam.paperType }}</span>
             <span>⏱️ {{ exam.duration }}分钟</span>
             <span>{{ exam.questionCount }}题</span>
           </div>
-          <div v-if="exam.score > 0" class="ec-score">
+          <div
+            v-if="exam.score > 0"
+            class="ec-score"
+          >
             历史最高分：<strong>{{ exam.score }}分</strong>
           </div>
         </div>
-        <div class="ec-btn">开始</div>
+        <div class="ec-btn">
+          开始
+        </div>
       </div>
     </div>
   </div>

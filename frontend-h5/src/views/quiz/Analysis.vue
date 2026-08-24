@@ -1,21 +1,42 @@
 <template>
   <div class="analysis-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">题目解析</div>
-      <div class="right">{{ currentIndex + 1 }}/{{ totalCount }}</div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        题目解析
+      </div>
+      <div class="right">
+        {{ currentIndex + 1 }}/{{ totalCount }}
+      </div>
     </div>
 
-    <div v-if="analysis" class="analysis-body">
+    <div
+      v-if="analysis"
+      class="analysis-body"
+    >
       <div class="analysis-result-card">
         <!-- 结果横幅 -->
-        <div class="result-banner" :class="isCorrect ? 'correct' : 'wrong'">
-          <div class="rb-icon">{{ isCorrect ? '✓' : '✗' }}</div>
-          <div class="rb-text">{{ isCorrect ? '回答正确' : '回答错误' }}</div>
+        <div
+          class="result-banner"
+          :class="isCorrect ? 'correct' : 'wrong'"
+        >
+          <div class="rb-icon">
+            {{ isCorrect ? '✓' : '✗' }}
+          </div>
+          <div class="rb-text">
+            {{ isCorrect ? '回答正确' : '回答错误' }}
+          </div>
         </div>
 
         <span class="question-type-tag">{{ typeText }}</span>
-        <div class="question-content">{{ analysis.question?.title }}</div>
+        <div class="question-content">
+          {{ analysis.question?.title }}
+        </div>
 
         <!-- 选项对比 -->
         <div class="options-list">
@@ -28,29 +49,65 @@
               wrong: isOptionWrong(opt.key),
             }"
           >
-            <div class="opt-letter">{{ opt.key }}</div>
-            <div class="opt-text">{{ opt.content }}</div>
-            <div v-if="isOptionCorrect(opt.key)" class="opt-icon correct">✓</div>
-            <div v-else-if="isOptionWrong(opt.key)" class="opt-icon wrong">✗</div>
+            <div class="opt-letter">
+              {{ opt.key }}
+            </div>
+            <div class="opt-text">
+              {{ opt.content }}
+            </div>
+            <div
+              v-if="isOptionCorrect(opt.key)"
+              class="opt-icon correct"
+            >
+              ✓
+            </div>
+            <div
+              v-else-if="isOptionWrong(opt.key)"
+              class="opt-icon wrong"
+            >
+              ✗
+            </div>
           </div>
         </div>
 
         <!-- 标准解析 -->
         <div class="analysis-content">
-          <div class="ac-label">💡 正确答案</div>
+          <div class="ac-label">
+            💡 正确答案
+          </div>
           <div class="ac-body">
             <strong>{{ Array.isArray(analysis.correctAnswer) ? analysis.correctAnswer.join(', ') : analysis.correctAnswer }}</strong>
-            <span v-if="analysis.myAnswer" class="my-ans" :class="{ wrong: !isCorrect }">
+            <span
+              v-if="analysis.myAnswer"
+              class="my-ans"
+              :class="{ wrong: !isCorrect }"
+            >
               （你的答案：{{ Array.isArray(analysis.myAnswer) ? analysis.myAnswer.join(', ') : analysis.myAnswer }}）
             </span>
           </div>
 
-          <div class="ac-label">📖 试题解析</div>
-          <div class="ac-body">{{ analysis.analysis }}</div>
+          <div class="ac-label">
+            📖 试题解析
+          </div>
+          <div class="ac-body">
+            {{ analysis.analysis }}
+          </div>
 
-          <div v-if="analysis.knowledgePoints?.length" class="ac-label">🏷️ 核心考点</div>
-          <div v-if="analysis.knowledgePoints?.length" class="tag-row">
-            <span v-for="kp in analysis.knowledgePoints" :key="kp" class="tag">{{ kp }}</span>
+          <div
+            v-if="analysis.knowledgePoints?.length"
+            class="ac-label"
+          >
+            🏷️ 核心考点
+          </div>
+          <div
+            v-if="analysis.knowledgePoints?.length"
+            class="tag-row"
+          >
+            <span
+              v-for="kp in analysis.knowledgePoints"
+              :key="kp"
+              class="tag"
+            >{{ kp }}</span>
           </div>
         </div>
       </div>
@@ -58,17 +115,30 @@
       <!-- AI 深度分析卡片 -->
       <div class="ai-analysis-card">
         <div class="ai-analysis-header">
-          <div class="ai-icon">🤖</div>
-          <div class="ai-title-wrap">
-            <div class="ai-title">AI 智能深度解析</div>
-            <div class="ai-sub">基于大模型智能解析 · 个性化解题思路</div>
+          <div class="ai-icon">
+            🤖
           </div>
-          <div class="ai-badge" @click="onRegenAI">↻ 重新生成</div>
+          <div class="ai-title-wrap">
+            <div class="ai-title">
+              AI 智能深度解析
+            </div>
+            <div class="ai-sub">
+              基于大模型智能解析 · 个性化解题思路
+            </div>
+          </div>
+          <div
+            class="ai-badge"
+            @click="onRegenAI"
+          >
+            ↻ 重新生成
+          </div>
         </div>
 
         <div class="ai-analysis-body">
           <div class="ai-section">
-            <div class="ai-section-label">📊 题目难度评估</div>
+            <div class="ai-section-label">
+              📊 题目难度评估
+            </div>
             <div class="ai-difficulty">
               <span class="diff-label">难度等级</span>
               <div class="diff-stars">
@@ -83,30 +153,48 @@
           </div>
 
           <div class="ai-section">
-            <div class="ai-section-label">🧠 AI 解题思路与技巧</div>
+            <div class="ai-section-label">
+              🧠 AI 解题思路与技巧
+            </div>
             <div class="ai-section-text">
-              本题考查核心知识点的掌握。解题关键在于准确把握概念本质与典型特征。<br /><br />
+              本题考查核心知识点的掌握。解题关键在于准确把握概念本质与典型特征。<br><br>
               💡 <strong>解题技巧</strong>：排除法与概念特征对比是提高答题速度和准确率的有效方法。
             </div>
           </div>
 
           <div class="ai-section">
-            <div class="ai-section-label">⚠️ 易错点剖析</div>
+            <div class="ai-section-label">
+              ⚠️ 易错点剖析
+            </div>
             <div class="ai-mistake-item">
-              <div class="mi-icon">!</div>
-              <div class="mi-text">容易混淆相近概念的适用边界，注意审清题干的限定词与否定式问法。</div>
+              <div class="mi-icon">
+                !
+              </div>
+              <div class="mi-text">
+                容易混淆相近概念的适用边界，注意审清题干的限定词与否定式问法。
+              </div>
             </div>
           </div>
 
           <div class="ai-section">
-            <div class="ai-section-label">📚 AI 学习与备考建议</div>
-            <div class="ai-suggest-item">
-              <div class="si-icon">1</div>
-              <div class="si-text">建议回顾该章节核心考点思维导图，理清脉络。</div>
+            <div class="ai-section-label">
+              📚 AI 学习与备考建议
             </div>
             <div class="ai-suggest-item">
-              <div class="si-icon">2</div>
-              <div class="si-text">错题已自动加入艾宾浩斯智能复习库，系统将在最佳遗忘节点提醒复习。</div>
+              <div class="si-icon">
+                1
+              </div>
+              <div class="si-text">
+                建议回顾该章节核心考点思维导图，理清脉络。
+              </div>
+            </div>
+            <div class="ai-suggest-item">
+              <div class="si-icon">
+                2
+              </div>
+              <div class="si-text">
+                错题已自动加入艾宾浩斯智能复习库，系统将在最佳遗忘节点提醒复习。
+              </div>
             </div>
           </div>
         </div>
@@ -115,15 +203,27 @@
 
     <!-- 底部操作条 -->
     <div class="quiz-footer">
-      <div class="footer-icon" :class="{ active: favorited }" @click="favorited = !favorited">
+      <div
+        class="footer-icon"
+        :class="{ active: favorited }"
+        @click="favorited = !favorited"
+      >
         <span>{{ favorited ? '⭐' : '☆' }}</span>
         <span>{{ favorited ? '已收藏' : '收藏' }}</span>
       </div>
-      <div class="footer-icon" @click="onNote">
+      <div
+        class="footer-icon"
+        @click="onNote"
+      >
         <span>📓</span>
         <span>笔记</span>
       </div>
-      <button class="btn-submit" @click="$router.push('/quiz/report/1')">查看报告</button>
+      <button
+        class="btn-submit"
+        @click="$router.push('/quiz/report/1')"
+      >
+        查看报告
+      </button>
     </div>
   </div>
 </template>

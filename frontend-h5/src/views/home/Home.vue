@@ -3,18 +3,32 @@
     <!-- 顶部渐变 Header -->
     <div class="home-header">
       <div class="subject-bar">
-        <div class="subject-selector" @click="$router.push('/subject')">
+        <div
+          class="subject-selector"
+          @click="$router.push('/subject')"
+        >
           <span>{{ subjectStore.currentSubject?.name || '系统集成项目管理工程师' }}</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+          >
             <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
         <div class="top-actions">
-          <div class="icon-btn" @click="$router.push('/chapter')">
+          <div
+            class="icon-btn"
+            @click="$router.push('/chapter')"
+          >
             <span>🔍</span>
             <span>题库</span>
           </div>
-          <div class="icon-btn" @click="$router.push('/mine')">
+          <div
+            class="icon-btn"
+            @click="$router.push('/mine')"
+          >
             <span>👤</span>
             <span>我的</span>
           </div>
@@ -24,50 +38,101 @@
       <!-- 倒计时 + 复习卡片组合 -->
       <div class="hero-cards">
         <div class="countdown-card">
-          <div class="label">距离考试还有</div>
-          <div class="days">{{ examDays }}<span>天</span></div>
-          <div class="sub">2026年软考统一认证</div>
+          <div class="label">
+            距离考试还有
+          </div>
+          <div class="days">
+            {{ examDays }}<span>天</span>
+          </div>
+          <div class="sub">
+            2026年软考统一认证
+          </div>
         </div>
-        <div class="review-card-mini" @click="$router.push('/review')">
-          <div class="rm-icon">🧠</div>
-          <div class="rm-num">{{ reviewCount }}</div>
-          <div class="rm-label">待复习题目</div>
+        <div
+          class="review-card-mini"
+          @click="$router.push('/review')"
+        >
+          <div class="rm-icon">
+            🧠
+          </div>
+          <div class="rm-num">
+            {{ reviewCount }}
+          </div>
+          <div class="rm-label">
+            待复习题目
+          </div>
         </div>
       </div>
 
       <!-- 核心数据三卡片 -->
       <div class="data-cards">
         <div class="data-card">
-          <div class="num">{{ stats.todayDone }}<small>题</small></div>
-          <div class="label">今日刷题</div>
+          <div class="num">
+            {{ stats.todayDone }}<small>题</small>
+          </div>
+          <div class="label">
+            今日刷题
+          </div>
         </div>
         <div class="data-card">
-          <div class="num">{{ stats.correctRate }}<small>%</small></div>
-          <div class="label">正确率</div>
+          <div class="num">
+            {{ stats.correctRate }}<small>%</small>
+          </div>
+          <div class="label">
+            正确率
+          </div>
         </div>
         <div class="data-card">
-          <div class="num">{{ stats.totalQuestions }}<small>题</small></div>
-          <div class="label">总题数</div>
+          <div class="num">
+            {{ stats.totalQuestions }}<small>题</small>
+          </div>
+          <div class="label">
+            总题数
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 📢 官方通知公告条（后台内容管理同步） -->
-    <div v-if="announcements.length > 0" class="announcement-bar" @click="handleAnnouncementClick(announcements[0])">
-      <div class="ann-speaker">📢</div>
+    <div
+      v-if="announcements.length > 0"
+      class="announcement-bar"
+      @click="handleAnnouncementClick(announcements[0])"
+    >
+      <div class="ann-speaker">
+        📢
+      </div>
       <div class="ann-content">
         <span class="ann-badge">公告</span>
         <span class="ann-title">{{ announcements[0].title }}</span>
       </div>
-      <div class="ann-arrow">›</div>
+      <div class="ann-arrow">
+        ›
+      </div>
     </div>
 
     <!-- 🖼️ 移动端轮播 Banner 模块（后台内容管理同步） -->
-    <div v-if="banners.length > 0" class="banner-carousel-wrap">
-      <van-swipe class="banner-swipe" :autoplay="4500" indicator-color="#6366f1" lazy-render>
-        <van-swipe-item v-for="b in banners" :key="b.id" @click="handleBannerClick(b)">
+    <div
+      v-if="banners.length > 0"
+      class="banner-carousel-wrap"
+    >
+      <van-swipe
+        class="banner-swipe"
+        :autoplay="4500"
+        indicator-color="#6366f1"
+        lazy-render
+      >
+        <van-swipe-item
+          v-for="b in banners"
+          :key="b.id"
+          @click="handleBannerClick(b)"
+        >
           <div class="banner-card">
-            <img :src="b.imageUrl" :alt="b.title" class="banner-image" />
+            <img
+              :src="b.imageUrl"
+              :alt="b.title"
+              class="banner-image"
+            >
             <div class="banner-gradient-mask">
               <span class="banner-card-title">{{ b.title }}</span>
             </div>
@@ -79,58 +144,137 @@
     <!-- 核心功能网格 (8格现代风格) -->
     <div class="section-title">
       <h3>核心功能</h3>
-      <span class="more" @click="$router.push('/chapter')">全部题库 ›</span>
+      <span
+        class="more"
+        @click="$router.push('/chapter')"
+      >全部题库 ›</span>
     </div>
     <div class="function-grid">
-      <div class="func-item" @click="$router.push('/daily')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #fef3c7, #fde68a)">📝</div>
+      <div
+        class="func-item"
+        @click="$router.push('/daily')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #fef3c7, #fde68a)"
+        >
+          📝
+        </div>
         <span class="name">每日一练</span>
         <span class="badge">5题</span>
       </div>
-      <div class="func-item" @click="$router.push('/quiz/practice')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #cffafe, #a5f3fc)">🎯</div>
+      <div
+        class="func-item"
+        @click="$router.push('/quiz/practice')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #cffafe, #a5f3fc)"
+        >
+          🎯
+        </div>
         <span class="name">自主练习</span>
       </div>
-      <div class="func-item" @click="$router.push('/chapter')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #d1fae5, #a7f3d0)">📚</div>
+      <div
+        class="func-item"
+        @click="$router.push('/chapter')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #d1fae5, #a7f3d0)"
+        >
+          📚
+        </div>
         <span class="name">章节练习</span>
       </div>
-      <div class="func-item" @click="$router.push('/real')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #fee2e2, #fecaca)">📋</div>
+      <div
+        class="func-item"
+        @click="$router.push('/real')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #fee2e2, #fecaca)"
+        >
+          📋
+        </div>
         <span class="name">历年真题</span>
       </div>
-      <div class="func-item" @click="$router.push('/review')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #fed7aa, #fdba74)">🧠</div>
+      <div
+        class="func-item"
+        @click="$router.push('/review')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #fed7aa, #fdba74)"
+        >
+          🧠
+        </div>
         <span class="name">艾宾浩斯</span>
         <span class="vip-tag">VIP</span>
       </div>
-      <div class="func-item" @click="$router.push('/mock')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #e9d5ff, #c4b5fd)">⏱️</div>
+      <div
+        class="func-item"
+        @click="$router.push('/mock')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #e9d5ff, #c4b5fd)"
+        >
+          ⏱️
+        </div>
         <span class="name">模拟考试</span>
       </div>
-      <div class="func-item" @click="$router.push('/case')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #fbcfe8, #f9a8d4)">📊</div>
+      <div
+        class="func-item"
+        @click="$router.push('/case')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #fbcfe8, #f9a8d4)"
+        >
+          📊
+        </div>
         <span class="name">案例分析</span>
         <span class="vip-tag">VIP</span>
       </div>
-      <div class="func-item" @click="$router.push('/vip')">
-        <div class="func-icon" style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7)">👑</div>
+      <div
+        class="func-item"
+        @click="$router.push('/vip')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7)"
+        >
+          👑
+        </div>
         <span class="name">会员中心</span>
         <span class="vip-tag">VIP</span>
       </div>
     </div>
 
     <!-- 做题统计与能力雷达预览 -->
-    <div class="stat-section" @click="$router.push('/stats')">
+    <div
+      class="stat-section"
+      @click="$router.push('/stats')"
+    >
       <div class="stat-row">
         <div>
-          <div class="stat-title">做题统计与知识图谱</div>
-          <div class="stat-desc">查看刷题走势、能力雷达与薄弱考点诊断</div>
+          <div class="stat-title">
+            做题统计与知识图谱
+          </div>
+          <div class="stat-desc">
+            查看刷题走势、能力雷达与薄弱考点诊断
+          </div>
         </div>
-        <div class="arrow">›</div>
+        <div class="arrow">
+          ›
+        </div>
       </div>
       <div class="radar-preview">
-        <svg class="radar-chart" viewBox="0 0 100 100">
+        <svg
+          class="radar-chart"
+          viewBox="0 0 100 100"
+        >
           <polygon
             points="50,10 85,30 85,70 50,90 15,70 15,30"
             fill="none"
@@ -151,28 +295,66 @@
           />
         </svg>
         <div class="radar-info">
-          <div class="item"><div class="dot" style="background: #6366f1"></div>项目管理基础 78%</div>
-          <div class="item"><div class="dot" style="background: #10b981"></div>项目范围管理 85%</div>
-          <div class="item"><div class="dot" style="background: #f59e0b"></div>项目进度管理 52%</div>
-          <div class="item"><div class="dot" style="background: #ef4444"></div>项目成本管理 38%</div>
+          <div class="item">
+            <div
+              class="dot"
+              style="background: #6366f1"
+            />项目管理基础 78%
+          </div>
+          <div class="item">
+            <div
+              class="dot"
+              style="background: #10b981"
+            />项目范围管理 85%
+          </div>
+          <div class="item">
+            <div
+              class="dot"
+              style="background: #f59e0b"
+            />项目进度管理 52%
+          </div>
+          <div class="item">
+            <div
+              class="dot"
+              style="background: #ef4444"
+            />项目成本管理 38%
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 快捷入口卡片 (笔记与记录) -->
     <div class="note-record-section">
-      <div class="note-card" @click="$router.push('/notes')">
-        <div class="nr-icon">📓</div>
+      <div
+        class="note-card"
+        @click="$router.push('/notes')"
+      >
+        <div class="nr-icon">
+          📓
+        </div>
         <div class="nr-text">
-          <div class="t">我的笔记</div>
-          <div class="d">高频知识点随记</div>
+          <div class="t">
+            我的笔记
+          </div>
+          <div class="d">
+            高频知识点随记
+          </div>
         </div>
       </div>
-      <div class="record-card" @click="$router.push('/records')">
-        <div class="nr-icon">📋</div>
+      <div
+        class="record-card"
+        @click="$router.push('/records')"
+      >
+        <div class="nr-icon">
+          📋
+        </div>
         <div class="nr-text">
-          <div class="t">做题记录</div>
-          <div class="d">历史答卷回溯</div>
+          <div class="t">
+            做题记录
+          </div>
+          <div class="d">
+            历史答卷回溯
+          </div>
         </div>
       </div>
     </div>
@@ -185,22 +367,36 @@
       position="bottom"
       :style="{ maxHeight: '75%', minHeight: '280px' }"
     >
-      <div v-if="selectedAnnouncement" class="ann-popup-body">
+      <div
+        v-if="selectedAnnouncement"
+        class="ann-popup-body"
+      >
         <div class="ap-header">
-          <div class="ap-type-badge">{{ selectedAnnouncement.type || '官方公告' }}</div>
-          <h3 class="ap-title">{{ selectedAnnouncement.title }}</h3>
-          <div class="ap-date">发布于：{{ formatDate(selectedAnnouncement.publishAt || selectedAnnouncement.createdAt) }}</div>
+          <div class="ap-type-badge">
+            {{ selectedAnnouncement.type || '官方公告' }}
+          </div>
+          <h3 class="ap-title">
+            {{ selectedAnnouncement.title }}
+          </h3>
+          <div class="ap-date">
+            发布于：{{ formatDate(selectedAnnouncement.publishAt || selectedAnnouncement.createdAt) }}
+          </div>
         </div>
         <div class="ap-content">
           {{ selectedAnnouncement.content }}
         </div>
         <div class="ap-footer">
-          <button class="ap-confirm-btn" @click="announcementPopupVisible = false">我已了解</button>
+          <button
+            class="ap-confirm-btn"
+            @click="announcementPopupVisible = false"
+          >
+            我已了解
+          </button>
         </div>
       </div>
     </van-popup>
 
-    <div style="height: 20px"></div>
+    <div style="height: 20px" />
   </div>
 </template>
 

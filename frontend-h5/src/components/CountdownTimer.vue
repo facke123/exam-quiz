@@ -1,5 +1,8 @@
 <template>
-  <div class="countdown" :class="{ urgent: remaining <= 300 }">
+  <div
+    class="countdown"
+    :class="{ urgent: remaining <= 300 }"
+  >
     <van-icon name="clock-o" />
     <span class="time">{{ display }}</span>
   </div>

@@ -1,17 +1,30 @@
 <template>
   <div class="vip-page">
     <div class="nav-bar">
-      <div class="back" @click="onBack">‹</div>
-      <div class="title">会员中心</div>
-      <div class="right"></div>
+      <div
+        class="back"
+        @click="onBack"
+      >
+        ‹
+      </div>
+      <div class="title">
+        会员中心
+      </div>
+      <div class="right" />
     </div>
 
     <div class="vip-content">
       <!-- 头部尊享卡片 -->
       <div class="vip-hero">
-        <div class="crown">👑</div>
-        <div class="vh-title">软考刷题王 VIP</div>
-        <div class="vh-sub">解锁全部高级功能 · 助你高效通关</div>
+        <div class="crown">
+          👑
+        </div>
+        <div class="vh-title">
+          软考刷题王 VIP
+        </div>
+        <div class="vh-sub">
+          解锁全部高级功能 · 助你高效通关
+        </div>
       </div>
 
       <!-- 会员套餐选择 -->
@@ -22,10 +35,14 @@
           @click="activePlan = 'month'"
         >
           <div class="vp-left">
-            <div class="vp-name">月卡会员</div>
+            <div class="vp-name">
+              月卡会员
+            </div>
           </div>
           <div class="vp-right">
-            <div class="vp-price">¥29<small>/月</small></div>
+            <div class="vp-price">
+              ¥29<small>/月</small>
+            </div>
           </div>
         </div>
 
@@ -35,12 +52,20 @@
           @click="activePlan = 'quarter'"
         >
           <div class="vp-left">
-            <div class="vp-name">季卡会员</div>
-            <div class="vp-tag">🔥 最超值 · 立省28元</div>
+            <div class="vp-name">
+              季卡会员
+            </div>
+            <div class="vp-tag">
+              🔥 最超值 · 立省28元
+            </div>
           </div>
           <div class="vp-right">
-            <div class="vp-price">¥59<small>/季</small></div>
-            <div class="vp-original">¥87</div>
+            <div class="vp-price">
+              ¥59<small>/季</small>
+            </div>
+            <div class="vp-original">
+              ¥87
+            </div>
           </div>
         </div>
 
@@ -50,38 +75,67 @@
           @click="activePlan = 'year'"
         >
           <div class="vp-left">
-            <div class="vp-name">年卡会员</div>
+            <div class="vp-name">
+              年卡会员
+            </div>
           </div>
           <div class="vp-right">
-            <div class="vp-price">¥199<small>/年</small></div>
-            <div class="vp-original">¥348</div>
+            <div class="vp-price">
+              ¥199<small>/年</small>
+            </div>
+            <div class="vp-original">
+              ¥348
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 会员专属权益列表 -->
       <div class="vip-benefits">
-        <div class="vb-title">会员专属权益</div>
-        <div v-for="(b, i) in benefitList" :key="i" class="vip-benefit-item">
-          <div class="vbi-icon">{{ b.icon }}</div>
-          <div class="vbi-text">
-            <div class="t">{{ b.title }}</div>
-            <div class="d">{{ b.desc }}</div>
+        <div class="vb-title">
+          会员专属权益
+        </div>
+        <div
+          v-for="(b, i) in benefitList"
+          :key="i"
+          class="vip-benefit-item"
+        >
+          <div class="vbi-icon">
+            {{ b.icon }}
           </div>
-          <div class="vbi-check">✓</div>
+          <div class="vbi-text">
+            <div class="t">
+              {{ b.title }}
+            </div>
+            <div class="d">
+              {{ b.desc }}
+            </div>
+          </div>
+          <div class="vbi-check">
+            ✓
+          </div>
         </div>
       </div>
 
-      <div style="height: 80px"></div>
+      <div style="height: 80px" />
     </div>
 
     <!-- 底部悬浮购买栏 -->
     <div class="vip-buy-bar">
       <div class="price-info">
-        <div class="p">{{ currentPriceText }}</div>
-        <div class="d">{{ currentPlanHint }}</div>
+        <div class="p">
+          {{ currentPriceText }}
+        </div>
+        <div class="d">
+          {{ currentPlanHint }}
+        </div>
       </div>
-      <button class="btn-buy" @click="onBuy">立即开通</button>
+      <button
+        class="btn-buy"
+        @click="onBuy"
+      >
+        立即开通
+      </button>
     </div>
   </div>
 </template>

@@ -1,55 +1,137 @@
 <template>
   <div class="settings-page">
-    <van-nav-bar title="设置" left-arrow @click-left="$router.back()" />
+    <van-nav-bar
+      title="设置"
+      left-arrow
+      @click-left="$router.back()"
+    />
 
-    <van-cell-group inset class="group">
-      <van-cell title="账号与安全" icon="shield-o" is-link />
-      <van-cell title="修改密码" icon="lock" is-link @click="$router.push('/auth/forgot')" />
+    <van-cell-group
+      inset
+      class="group"
+    >
+      <van-cell
+        title="账号与安全"
+        icon="shield-o"
+        is-link
+      />
+      <van-cell
+        title="修改密码"
+        icon="lock"
+        is-link
+        @click="$router.push('/auth/forgot')"
+      />
     </van-cell-group>
 
-    <van-cell-group inset class="group">
-      <van-cell title="消息通知" icon="bell" is-link>
+    <van-cell-group
+      inset
+      class="group"
+    >
+      <van-cell
+        title="消息通知"
+        icon="bell"
+        is-link
+      >
         <template #right-icon>
-          <van-switch v-model="settings.notify" size="22px" />
+          <van-switch
+            v-model="settings.notify"
+            size="22px"
+          />
         </template>
       </van-cell>
-      <van-cell title="每日打卡提醒" icon="clock-o">
+      <van-cell
+        title="每日打卡提醒"
+        icon="clock-o"
+      >
         <template #right-icon>
-          <van-switch v-model="settings.dailyRemind" size="22px" />
+          <van-switch
+            v-model="settings.dailyRemind"
+            size="22px"
+          />
         </template>
       </van-cell>
-      <van-cell title="复习提醒" icon="underway-o">
+      <van-cell
+        title="复习提醒"
+        icon="underway-o"
+      >
         <template #right-icon>
-          <van-switch v-model="settings.reviewRemind" size="22px" />
+          <van-switch
+            v-model="settings.reviewRemind"
+            size="22px"
+          />
         </template>
       </van-cell>
     </van-cell-group>
 
-    <van-cell-group inset class="group">
-      <van-cell title="夜间模式" icon="browsing-history-o">
+    <van-cell-group
+      inset
+      class="group"
+    >
+      <van-cell
+        title="夜间模式"
+        icon="browsing-history-o"
+      >
         <template #right-icon>
-          <van-switch v-model="settings.darkMode" size="22px" />
+          <van-switch
+            v-model="settings.darkMode"
+            size="22px"
+          />
         </template>
       </van-cell>
-      <van-cell title="字体大小" icon="font" is-link :value="fontSizeText" @click="showFontSheet = true" />
-      <van-cell title="缓存清理" icon="delete-o" is-link :value="cacheSize" @click="onClearCache" />
+      <van-cell
+        title="字体大小"
+        icon="font"
+        is-link
+        :value="fontSizeText"
+        @click="showFontSheet = true"
+      />
+      <van-cell
+        title="缓存清理"
+        icon="delete-o"
+        is-link
+        :value="cacheSize"
+        @click="onClearCache"
+      />
     </van-cell-group>
 
-    <van-cell-group inset class="group">
-      <van-cell title="关于软考刷题" icon="info-o" is-link value="v1.0.0" />
-      <van-cell title="用户协议" icon="description" is-link />
-      <van-cell title="隐私政策" icon="warning-o" is-link />
+    <van-cell-group
+      inset
+      class="group"
+    >
+      <van-cell
+        title="关于软考刷题"
+        icon="info-o"
+        is-link
+        value="v1.0.0"
+      />
+      <van-cell
+        title="用户协议"
+        icon="description"
+        is-link
+      />
+      <van-cell
+        title="隐私政策"
+        icon="warning-o"
+        is-link
+      />
     </van-cell-group>
 
     <div class="logout">
-      <van-button block plain type="danger" @click="onLogout">退出登录</van-button>
+      <van-button
+        block
+        plain
+        type="danger"
+        @click="onLogout"
+      >
+        退出登录
+      </van-button>
     </div>
 
     <van-action-sheet
       v-model:show="showFontSheet"
       :actions="fontActions"
-      @select="onFontSelect"
       close-on-click-action
+      @select="onFontSelect"
     />
   </div>
 </template>

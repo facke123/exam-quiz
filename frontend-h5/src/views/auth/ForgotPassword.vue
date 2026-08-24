@@ -1,13 +1,20 @@
 <template>
   <div class="forgot-page">
     <div class="bg-decor">
-      <div class="circle c1"></div>
+      <div class="circle c1" />
     </div>
 
     <div class="logo-area">
-      <van-icon name="lock" class="lock-icon" />
-      <h1 class="title">找回密码</h1>
-      <p class="subtitle">通过验证码重置密码</p>
+      <van-icon
+        name="lock"
+        class="lock-icon"
+      />
+      <h1 class="title">
+        找回密码
+      </h1>
+      <p class="subtitle">
+        通过验证码重置密码
+      </p>
     </div>
 
     <div class="form-card">
@@ -27,7 +34,13 @@
         class="input-field"
       >
         <template #button>
-          <van-button size="small" type="primary" plain @click="sendCode" :disabled="counting">
+          <van-button
+            size="small"
+            type="primary"
+            plain
+            :disabled="counting"
+            @click="sendCode"
+          >
             {{ codeText }}
           </van-button>
         </template>
@@ -53,7 +66,12 @@
       </van-button>
 
       <div class="form-actions">
-        <router-link to="/auth/login" class="link">返回登录</router-link>
+        <router-link
+          to="/auth/login"
+          class="link"
+        >
+          返回登录
+        </router-link>
       </div>
     </div>
   </div>

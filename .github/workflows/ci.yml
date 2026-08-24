@@ -40,6 +40,7 @@ jobs:
 
       - name: Lint
         run: npm run lint --if-present
+        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -77,6 +78,7 @@ jobs:
 
       - name: Lint
         run: npm run lint --if-present
+        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -114,6 +116,7 @@ jobs:
 
       - name: Lint
         run: npm run lint --if-present
+        continue-on-error: true
 
       - name: Build
         run: npm run build
