@@ -30,15 +30,15 @@ export class AiPrompt {
     nullable: true,
     comment: '变量列表（JSON）',
   })
-  variables: string[];
+  variables: any;
 
   @Column({
     type: 'varchar',
     length: 20,
-    default: 'active',
-    comment: '状态: active/inactive',
+    default: '1',
+    comment: '状态',
   })
-  status: string;
+  status: any;
 
   @UpdateDateColumn({ comment: '更新时间' })
   updatedAt: Date;

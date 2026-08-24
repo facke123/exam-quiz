@@ -583,9 +583,23 @@ export class AiService implements OnModuleInit {
       difficulty: number;
     }> = [];
 
-    // 1. 尝试调用真实大模型
-    const systemPrompt = `你是一位中国计算机技术职业资格考试（软考）命题专家。
-请为软考科目【${subName}】的章节【${chName}】设计 ${count} 道专业、规范、严谨的软考真题级别试题。
+    // 1. 尝试调用真实大模型（优先应用已配置的综合一体化出题与解析 Prompt 模板）
+    const promptTpl = await this.promptRepository.findOne({
+      where: [{ type: 'generate_question', status: '1' as any }, { type: 'generate_question', status: 1 as any }, { type: 'generate_question', status: 'enabled' as any }],
+      order: { id: 'ASC' },
+    });
+    let systemPrompt = '';
+    if (promptTpl && promptTpl.content) {
+      systemPrompt = promptTpl.content
+        .replace(/\{\{subject\}\}/g, subName)
+        .replace(/\{\{chapter\}\}/g, chName)
+        .replace(/\{\{knowledge_point\}\}/g, dto.knowledgePoint || chName)
+        .replace(/\{\{difficulty\}\}/g, String(difficulty))
+        .replace(/\{\{count\}\}/g, String(count))
+        .replace(/\{\{type\}\}/g, type === 'single' ? '单选题' : type === 'multiple' ? '多选题' : type === 'judge' ? '判断题' : '案例分析题');
+    } else {
+      systemPrompt = `你是一位中国计算机技术职业资格考试（软考）命题专家。
+请为软考科目【${subName}】的章节【${chName}】设计 ${count} 道专业、规范、严谨的软考真题级别试题及深度名师解析。
 试题类型：${type}（single=单选, multiple=多选, judge=判断, case=案例分析题），难度等级为 ${difficulty} (1-5)。
 
 请严格输出 JSON 数组，格式如下：
@@ -599,10 +613,11 @@ export class AiService implements OnModuleInit {
       { "key": "D", "label": "D", "content": "选项D内容" }
     ],
     "answer": "A",
-    "analysis": "【AI智能解析】考点梳理与答题要点...",
+    "analysis": "【名师深度解析】考点定位、正确项依据与错误项陷阱辨析...",
     "difficulty": ${difficulty}
   }
 ]`;
+    }
 
     const llmResult = await this.callLlm(
       [
@@ -1019,30 +1034,205 @@ ${dto.content}`;
   /**
    * 获取 Prompt 模板列表
    */
-  async getPrompts(): Promise<AiPrompt[]> {
-    return this.promptRepository.find({
+  async getPrompts(): Promise<any[]> {
+    const prompts = await this.promptRepository.find({
       order: { id: 'ASC' },
+    });
+    return prompts.map((p) => {
+      let vars = p.variables || [];
+      if (Array.isArray(vars)) {
+        vars = vars.map((v: any) => {
+          if (typeof v === 'string') {
+            return { name: v, description: '' };
+          }
+          return { name: v.name || '', description: v.description || '' };
+        });
+      } else if (typeof vars === 'string') {
+        try {
+          const parsed = JSON.parse(vars);
+          vars = Array.isArray(parsed)
+            ? parsed.map((v: any) =>
+                typeof v === 'string' ? { name: v, description: '' } : v,
+              )
+            : [];
+        } catch {
+          vars = [];
+        }
+      }
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        content: p.content,
+        variables: vars,
+        status:
+          p.status === '1' ||
+          p.status === 'enabled' ||
+          p.status === 'active' ||
+          (p.status as any) === 1
+            ? 'enabled'
+            : 'disabled',
+        updatedAt: p.updatedAt,
+      };
     });
   }
 
   /**
    * 创建 Prompt 模板
    */
-  async createPrompt(dto: CreatePromptDto): Promise<AiPrompt> {
-    const prompt = this.promptRepository.create(dto as any);
-    return (await this.promptRepository.save(prompt as any)) as AiPrompt;
+  async createPrompt(dto: CreatePromptDto): Promise<any> {
+    const prompt = this.promptRepository.create({
+      name: dto.name,
+      type: this.normalizePromptType(dto.type),
+      content: dto.content,
+      variables: (dto.variables || []) as any,
+      status: (dto.status === 'disabled' || dto.status === '0' || (dto.status as any) === 0 ? 0 : 1) as any,
+    });
+    return this.promptRepository.save(prompt);
   }
 
   /**
    * 更新 Prompt 模板
    */
-  async updatePrompt(id: number, dto: Partial<CreatePromptDto>): Promise<AiPrompt> {
-    const prompt = await this.promptRepository.findOne({ where: { id } });
+  async updatePrompt(id: number, dto: Partial<CreatePromptDto>): Promise<any> {
+    const prompt = await this.promptRepository.findOne({ where: { id: Number(id) } });
     if (!prompt) {
       throw new NotFoundException('模板不存在');
     }
-    Object.assign(prompt, dto);
-    return (await this.promptRepository.save(prompt as any)) as AiPrompt;
+    if (dto.name !== undefined) prompt.name = dto.name;
+    if (dto.type !== undefined) prompt.type = this.normalizePromptType(dto.type);
+    if (dto.content !== undefined) prompt.content = dto.content;
+    if (dto.variables !== undefined) prompt.variables = dto.variables as any;
+    if (dto.status !== undefined) {
+      (prompt as any).status = (dto.status === 'disabled' || dto.status === '0' || (dto.status as any) === 0 ? 0 : 1);
+    }
+    return this.promptRepository.save(prompt);
+  }
+
+  /**
+   * 重置/初始化标准 Prompt 模板（将单选题与解析整合为一体化综合模板）
+   */
+  async resetPrompts(): Promise<any[]> {
+    await this.promptRepository.clear();
+    const defaultPrompts = [
+      {
+        name: '单选题与名师深度解析生成（综合标准模板）',
+        type: 'generate_question',
+        content: `你是一位国家软考资深命题专家与官方教材主编。请根据以下考点要求，生成一道标准单项选择题，并同步输出高水平的名师解题解析。
+
+【命题考点要求】
+考试科目: {{subject}}
+所属章节: {{chapter}}
+考查知识点: {{knowledge_point}}
+难度等级: {{difficulty}} (1-5星)
+
+【出题与解析规范】
+1. 题干严谨清晰、情境贴合实战，完全符合全国计算机技术与软件专业技术资格（水平）考试标准。
+2. 包含 A、B、C、D 四个规范互斥的选项，干扰项具有较强辨析度与迷惑性，严禁出现常识性纰漏。
+3. 明确指定唯一权威正确答案（如 A、B、C 或 D）。
+4. 深度解析必须涵盖：
+   - 【考点定位】：归纳考查的理论依据与教材核心知识域；
+   - 【答案剖析】：详述正确选项的推导逻辑与采分点；
+   - 【选项辨析】：逐一分析错误选项的陷阱与混淆点；
+   - 【名师点拨】：提供考前速记口诀或易错防坑指南。
+
+【输出格式】
+必须严格输出纯 JSON 格式：
+{
+  "content": "题干内容描述",
+  "options": [
+    {"key": "A", "label": "A", "content": "选项A具体描述"},
+    {"key": "B", "label": "B", "content": "选项B具体描述"},
+    {"key": "C", "label": "C", "content": "选项C具体描述"},
+    {"key": "D", "label": "D", "content": "选项D具体描述"}
+  ],
+  "answer": "A",
+  "analysis": "【考点定位】...\\n【答案剖析】...\\n【选项辨析】...\\n【名师点拨】..."
+}`,
+        variables: [
+          { name: 'subject', description: '考试科目名称' },
+          { name: 'chapter', description: '指定考点章节' },
+          { name: 'knowledge_point', description: '考查核心知识点' },
+          { name: 'difficulty', description: '难度等级 (1-5)' },
+        ],
+        status: 1,
+      },
+      {
+        name: '多选题与案例分析综合出题模板',
+        type: 'generate_question',
+        content: `你是一位国家软考资深命题专家。请根据以下考点要求，生成高质量的多选题或案例简答题，并附带权威评分标准与深度解析。
+
+【考点要求】
+科目: {{subject}}
+章节: {{chapter}}
+知识点: {{knowledge_point}}
+题型: {{type}}
+
+【输出格式】
+严格输出 JSON 格式：
+{
+  "content": "题干内容",
+  "options": [
+    {"key": "A", "label": "A", "content": "选项A"},
+    {"key": "B", "label": "B", "content": "选项B"},
+    {"key": "C", "label": "C", "content": "选项C"},
+    {"key": "D", "label": "D", "content": "选项D"}
+  ],
+  "answer": "ABC",
+  "analysis": "【核心解析】..."
+}`,
+        variables: [
+          { name: 'subject', description: '考试科目' },
+          { name: 'chapter', description: '考查章节' },
+          { name: 'knowledge_point', description: '考点名称' },
+          { name: 'type', description: '多选题/案例题' },
+        ],
+        status: 1,
+      },
+      {
+        name: 'Word/文本试卷智能结构化识别模板',
+        type: 'import',
+        content: `请对以下试卷文档内容进行结构化识别与数据清洗，自动提取题干、选项ABCD、标准答案及解析：
+{{content}}
+
+【输出格式】
+以标准 JSON 数组返回：
+[
+  {
+    "type": "single",
+    "content": "题干描述",
+    "options": [
+      {"key": "A", "label": "A", "content": "选项A"},
+      {"key": "B", "label": "B", "content": "选项B"},
+      {"key": "C", "label": "C", "content": "选项C"},
+      {"key": "D", "label": "D", "content": "选项D"}
+    ],
+    "answer": "A",
+    "analysis": "解析内容"
+  }
+]`,
+        variables: [
+          { name: 'content', description: '原始试卷文本内容' },
+          { name: 'subject', description: '所属科目名称' },
+        ],
+        status: 1,
+      },
+    ];
+
+    for (const p of defaultPrompts) {
+      const item = this.promptRepository.create(p as any);
+      await this.promptRepository.save(item);
+    }
+
+    return this.getPrompts();
+  }
+
+  private normalizePromptType(type: string): string {
+    if (!type) return 'generate_question';
+    if (type === 'generate' || type === 'generate_question') return 'generate_question';
+    if (type === 'analysis' || type === 'generate_analysis') return 'generate_analysis';
+    if (type === 'import' || type === 'import_parse') return 'import';
+    return type;
   }
 
   /**

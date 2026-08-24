@@ -171,6 +171,13 @@ export function deletePrompt(id: number) {
   })
 }
 
+export function resetPrompts() {
+  return request<{ message: string; list: PromptTemplate[]; total: number }>({
+    url: '/admin/ai/prompts/reset',
+    method: 'post',
+  })
+}
+
 // AI 大纲解析与考点归纳
 export function parseSyllabus(data: { subjectId: number; content: string; model?: string }) {
   return request<{

@@ -173,6 +173,17 @@ export class AiController {
     return this.aiService.updatePrompt(id, dto);
   }
 
+  @Post(['ai/prompts/reset', 'admin/ai/prompts/reset'])
+  @ApiOperation({ summary: '重置/恢复默认标准Prompt模板' })
+  async resetPrompts() {
+    const list = await this.aiService.resetPrompts();
+    return {
+      message: '已成功重置为标准模板',
+      list,
+      total: list.length,
+    };
+  }
+
   @Delete(['ai/prompts/:id', 'admin/ai/prompts/:id'])
   @ApiOperation({ summary: '删除Prompt模板' })
   async deletePrompt(@Param('id', ParseIntPipe) id: number) {
