@@ -889,8 +889,9 @@ onMounted(loadSubjects)
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  min-height: 480px;
-  max-height: 800px;
+  flex: 1;
+  min-height: 520px;
+  max-height: 840px;
 }
 
 .empty-tip {
@@ -908,12 +909,13 @@ onMounted(loadSubjects)
 }
 
 .chapter-node {
-  border: 1px solid var(--gray-2);
+  flex-shrink: 0;
+  width: 100%;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  overflow: hidden;
   background: #fff;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 
   &:hover {
     border-color: #cbd5e1;
@@ -957,6 +959,7 @@ onMounted(loadSubjects)
         justify-content: center;
         font-size: 11px;
         font-weight: 700;
+        flex-shrink: 0;
       }
 
       .ch-name {
@@ -971,6 +974,7 @@ onMounted(loadSubjects)
         color: var(--gray-6);
         padding: 1px 8px;
         border-radius: 10px;
+        flex-shrink: 0;
 
         &.kp-count-badge {
           background: #e0e7ff;
@@ -983,6 +987,7 @@ onMounted(loadSubjects)
     .ch-actions {
       display: flex;
       gap: 12px;
+      flex-shrink: 0;
 
       .op-link {
         font-size: 12px;
@@ -1005,14 +1010,14 @@ onMounted(loadSubjects)
     border-top: 1px solid #f1f5f9;
 
     .kp-empty-box {
-      padding: 12px 16px 12px 48px;
+      padding: 14px 16px 14px 48px;
       color: var(--gray-5);
       font-size: 12px;
     }
   }
 
   .kp-list {
-    padding: 10px 16px 12px 48px;
+    padding: 10px 16px 14px 44px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1021,11 +1026,13 @@ onMounted(loadSubjects)
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 7px 12px;
+      padding: 8px 12px;
       border-radius: 6px;
       background: #f8fafc;
       border: 1px solid #f1f5f9;
       font-size: 13px;
+      min-height: 38px;
+      flex-shrink: 0;
       transition: all 0.15s ease;
 
       &:hover {
@@ -1037,25 +1044,30 @@ onMounted(loadSubjects)
         display: flex;
         align-items: center;
         gap: 8px;
+        flex: 1;
 
         .kp-dot {
           font-size: 8px;
           color: var(--primary);
+          flex-shrink: 0;
         }
         .kp-name {
           color: var(--gray-8);
           font-weight: 500;
+          line-height: 1.5;
         }
         .kp-desc-tip {
           font-size: 11px;
           color: #f59e0b;
           cursor: help;
+          flex-shrink: 0;
         }
       }
 
       .kp-actions {
         display: flex;
         gap: 10px;
+        flex-shrink: 0;
 
         .op-link {
           font-size: 12px;
