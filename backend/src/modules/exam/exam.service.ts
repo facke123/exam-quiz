@@ -584,6 +584,20 @@ export class ExamService implements OnModuleInit {
     const subjectId = Number(dto.subjectId || 1);
     const questionIds: number[] = [];
 
+    const toDbType = (t?: string) => {
+      const str = String(t || '').toLowerCase().trim();
+      if (str === 'multiple' || str === 'multiple_choice' || str.includes('多选')) return 'multiple_choice';
+      if (str === 'judge' || str === 'true_false' || str.includes('判断')) return 'true_false';
+      if (str === 'case' || str === 'case_analysis' || str.includes('案例')) return 'case_analysis';
+      if (str === 'essay' || str === 'subjective' || str.includes('问答') || str.includes('简答') || str.includes('论述')) return 'subjective';
+      return 'single_choice';
+    };
+
+    const toPaperType = (t?: string) => {
+      if (['real', 'mock', 'practice'].includes(String(t))) return String(t);
+      return 'real';
+    };
+
     if (Array.isArray(dto.questionIds)) {
       questionIds.push(...dto.questionIds.map((id: any) => Number(id)));
     }
@@ -596,15 +610,15 @@ export class ExamService implements OnModuleInit {
           subjectId,
           chapterId: q.chapterId ? Number(q.chapterId) : undefined,
           knowledgePointIds: q.knowledgePointId ? [Number(q.knowledgePointId)] : [],
-          type: q.type || 'single',
-          difficulty: q.difficulty || 3,
+          type: toDbType(q.type),
+          difficulty: Number(q.difficulty) || 3,
           content: q.content || q.title,
           options: q.options || [],
           answer: q.answer || 'A',
           analysis: q.analysis || '',
           tags: [],
           status: 'published',
-          source: dto.name || '试卷导入',
+          source: 'word',
         } as any);
         const savedQ: any = await this.questionRepository.save(newQ);
         if (savedQ && savedQ.id) {
@@ -620,7 +634,7 @@ export class ExamService implements OnModuleInit {
       subjectId,
       name: dto.name,
       year: dto.year || new Date().getFullYear(),
-      type: dto.type || 'real',
+      type: toPaperType(dto.type) as any,
       duration: dto.duration || dto.totalTime || 150,
       totalScore,
       questionIds,
