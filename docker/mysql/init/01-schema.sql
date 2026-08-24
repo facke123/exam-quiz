@@ -318,7 +318,8 @@ CREATE TABLE IF NOT EXISTS banners (
   link_url VARCHAR(500),
   sort INT DEFAULT 0,
   status TINYINT DEFAULT 1,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Banner表';
 
 -- ------------------------------------------------------------

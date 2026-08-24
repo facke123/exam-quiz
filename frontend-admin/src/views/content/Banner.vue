@@ -19,20 +19,39 @@
 
         <el-table-column label="Banner 预览" width="160" align="center">
           <template #default="{ row }">
-            <div class="banner-thumb">
+            <el-image
+              v-if="row.imageUrl || row.image"
+              :src="row.imageUrl || row.image"
+              style="width: 120px; height: 48px; border-radius: 6px; display: block; margin: 0 auto"
+              fit="cover"
+            >
+              <template #error>
+                <div class="banner-thumb">
+                  <span class="thumb-tag">{{ row.title }}</span>
+                </div>
+              </template>
+            </el-image>
+            <div v-else class="banner-thumb">
               <span class="thumb-tag">{{ row.title }}</span>
             </div>
           </template>
         </el-table-column>
 
         <el-table-column prop="title" label="Banner 标题" min-width="180" />
-        <el-table-column prop="targetUrl" label="跳转链接 / 路由" min-width="180" />
+        <el-table-column label="跳转链接 / 路由" min-width="180">
+          <template #default="{ row }">
+            <span>{{ row.linkUrl || row.url || row.targetUrl || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="sort" label="排序权重" width="90" align="center" />
 
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <span class="status-badge" :class="row.status || 'enabled'">
-              {{ row.status === 'disabled' ? '已下线' : '展示中' }}
+            <span
+              class="status-badge"
+              :class="row.status === 'disabled' || row.status === 'offline' || row.status === 0 ? 'disabled' : 'enabled'"
+            >
+              {{ row.status === 'disabled' || row.status === 'offline' || row.status === 0 ? '已下线' : '展示中' }}
             </span>
           </template>
         </el-table-column>
@@ -49,19 +68,26 @@
     </div>
 
     <!-- 新增/编辑 Banner 弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑 Banner' : '新增轮播图'" width="500px">
-      <el-form :model="form" label-width="90px">
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑 Banner' : '新增轮播图'" width="520px">
+      <el-form :model="form" label-width="95px">
         <el-form-item label="Banner标题" required>
-          <el-input v-model="form.title" placeholder="如 2026年通关大礼包" />
+          <el-input v-model="form.title" placeholder="如 2026年软考冲刺刷题营" />
+        </el-form-item>
+        <el-form-item label="图片链接" required>
+          <el-input v-model="form.imageUrl" placeholder="如 https://... 或 /static/banner/banner1.png" />
         </el-form-item>
         <el-form-item label="跳转路由">
-          <el-input v-model="form.targetUrl" placeholder="如 /vip 或 /quiz/mock" />
+          <el-input v-model="form.linkUrl" placeholder="如 /practice/mock-exam 或 /vip" />
         </el-form-item>
         <el-form-item label="排序权重">
           <el-input-number v-model="form.sort" :min="0" :max="99" />
         </el-form-item>
         <el-form-item label="启用状态">
-          <el-switch v-model="form.status" active-value="enabled" inactive-value="disabled" />
+          <el-switch
+            v-model="form.status"
+            :active-value="1"
+            :inactive-value="0"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -86,45 +112,42 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getBannerList({ page: 1, pageSize: 50 })
-    if (res?.data?.list && res.data.list.length > 0) {
+    if (res?.data?.list) {
       list.value = res.data.list
-    } else {
-      throw new Error('empty')
     }
-  } catch {
-    list.value = [
-      {
-        id: 1,
-        title: '软考冲刺 · 全真模拟考',
-        targetUrl: '/quiz/mock',
-        sort: 1,
-        status: 'enabled',
-      },
-      {
-        id: 2,
-        title: 'VIP 会员尊享 7 大权益',
-        targetUrl: '/vip',
-        sort: 2,
-        status: 'enabled',
-      },
-    ]
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取 Banner 列表失败')
   } finally {
     loading.value = false
   }
 }
 
 function handleAdd() {
-  form.value = { sort: 0, status: 'enabled' }
+  form.value = {
+    title: '',
+    imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&auto=format&fit=crop&q=60',
+    linkUrl: '/practice/mock-exam',
+    sort: 1,
+    status: 1,
+  }
   dialogVisible.value = true
 }
 
 function handleEdit(row: any) {
-  form.value = { ...row }
+  form.value = {
+    id: row.id,
+    title: row.title,
+    imageUrl: row.imageUrl || row.image || '',
+    linkUrl: row.linkUrl || row.url || row.targetUrl || '',
+    sort: row.sort || 0,
+    status: row.status === 0 || row.status === 'offline' || row.status === 'disabled' ? 0 : 1,
+  }
   dialogVisible.value = true
 }
 
 async function handleSubmit() {
   if (!form.value.title) return ElMessage.warning('请输入标题')
+  if (!form.value.imageUrl) return ElMessage.warning('请输入图片链接')
   try {
     if (form.value.id) {
       await updateBanner(form.value.id, form.value)
@@ -134,10 +157,8 @@ async function handleSubmit() {
     ElMessage.success('Banner 保存成功')
     dialogVisible.value = false
     fetchList()
-  } catch {
-    ElMessage.success('保存成功')
-    dialogVisible.value = false
-    fetchList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '保存失败')
   }
 }
 
@@ -194,6 +215,7 @@ onMounted(fetchList)
   font-weight: 700;
   padding: 4px;
   text-align: center;
+  margin: 0 auto;
 }
 
 .status-badge {
