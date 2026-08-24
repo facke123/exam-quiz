@@ -1537,72 +1537,80 @@ ${cleanText.slice(0, 15000)}`;
       };
     }
 
-    // 2. 规则与正则表达式兜底解析器 (Rule-based Regex Parser)
-    const rawText = dto.content;
-    const questionBlocks = rawText
-      .split(/(?:^|\n)(?=(?:【?(?:单选|多选|判断|问答|案例)题?】?|\d+[\.、\s]|第\d+题))/i)
-      .map((b) => b.trim())
-      .filter((b) => b.length > 0);
+    // 2. 状态机结构化试卷解析器 (Robust State-Machine Exam Parser)
+    const lines = cleanText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
 
     const parsedQuestions: any[] = [];
+    let currentChapter = '第1章 信息化发展';
+    let currentTypeHint = 'single';
+    let currentQ: any = null;
 
-    for (let i = 0; i < questionBlocks.length; i++) {
-      const block = questionBlocks[i];
-      let type = 'single';
-      if (/多选|multiple/i.test(block)) type = 'multiple';
-      else if (/判断|true|false|对错/i.test(block)) type = 'judge';
-      else if (/简答|问答|案例|essay/i.test(block)) type = 'essay';
-
-      // 提取答案
-      let answer = 'A';
-      const ansMatch = block.match(/(?:【?答案】?|答案[：:]|正确答案[：:])\s*([A-Za-z对错正确错误√×]+)/i);
-      if (ansMatch) {
-        let rawAns = ansMatch[1].trim();
-        if (rawAns === '对' || rawAns === '√') rawAns = '正确';
-        if (rawAns === '错' || rawAns === '×') rawAns = '错误';
-        answer = rawAns.toUpperCase();
+    const extractOptionsFromLine = (line: string) => {
+      const optRegex = /(?:^|\s+|[\t　]+)(?:([A-Ea-e])[\.、．\s]|[（(]([A-Ea-e])[）)])\s*/g;
+      const matches: Array<{ key: string; startIndex: number; contentStart: number }> = [];
+      let m: RegExpExecArray | null;
+      while ((m = optRegex.exec(line)) !== null) {
+        matches.push({
+          key: (m[1] || m[2]).toUpperCase(),
+          startIndex: m.index,
+          contentStart: optRegex.lastIndex,
+        });
       }
+      if (matches.length === 0) return null;
 
-      // 提取解析
-      let analysis = '';
-      const anaMatch = block.match(/(?:【?解析】?|解析[：:]|考点分析[：:])\s*([\s\S]+?)(?=$|\n【)/i);
-      if (anaMatch) {
-        analysis = anaMatch[1].trim();
+      const opts: Array<{ key: string; label: string; content: string }> = [];
+      for (let i = 0; i < matches.length; i++) {
+        const curr = matches[i];
+        const nextStart = i + 1 < matches.length ? matches[i + 1].startIndex : line.length;
+        const content = line.substring(curr.contentStart, nextStart).trim();
+        opts.push({
+          key: curr.key,
+          label: curr.key,
+          content,
+        });
       }
+      return opts;
+    };
 
-      // 提取选项
-      const options: any[] = [];
-      const optLines = block.match(/(?:[A-Da-d][\.、\s]|[（(][A-Da-d][）)])\s*([^\n]+)/g);
-      if (optLines && optLines.length > 0) {
-        for (let o = 0; o < optLines.length; o++) {
-          const optStr = optLines[o].trim();
-          const keyMatch = optStr.match(/^([A-Da-d])/i);
-          const key = keyMatch ? keyMatch[1].toUpperCase() : String.fromCharCode(65 + o);
-          const optContent = optStr.replace(/^[A-Da-d][\.、\s]*/, '').replace(/^[（(][A-Da-d][）)]\s*/, '').trim();
-          options.push({ key, label: key, content: optContent });
+    const finalizeQuestion = (q: any) => {
+      if (!q) return;
+      let content = q.stemLines.join('\n').trim();
+      // 清理题干开头的题号和题型标签
+      content = content.replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?\s*)+/i, '');
+      content = content.replace(/^\d+[\.、．\s]\s*/, '');
+      content = content.replace(/^第\d+题[\.、．\s]?\s*/, '');
+      content = content.replace(/^[（(]\d+[）)][\.、\s]?\s*/, '');
+
+      if (!content) return;
+
+      let type = q.type || currentTypeHint;
+      const optCount = q.options.length;
+      if (optCount >= 2) {
+        if (q.answer && q.answer.length > 1 && /^[A-E]+$/.test(q.answer)) {
+          type = 'multiple';
+        } else {
+          type = 'single';
         }
-      }
-
-      // 提取题干 (去掉选项、答案、解析部分)
-      let content = block
-        .replace(/(?:【?答案】?|答案[：:]|正确答案[：:])[\s\S]*/i, '')
-        .replace(/(?:【?解析】?|解析[：:]|考点分析[：:])[\s\S]*/i, '')
-        .replace(/(?:^|\n)(?:[A-Da-d][\.、\s]|[（(][A-Da-d][）)])[\s\S]*/i, '')
-        .replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?|\d+[\.、\s]|第\d+题)\s*/, '')
-        .trim();
-
-      if (!content) {
-        content = block.split('\n')[0].replace(/^\d+[\.、\s]*/, '').trim();
+      } else if (/正确|错误|对|错|√|×/i.test(q.answer) || /判断/i.test(content) || /判断/i.test(q.rawType)) {
+        type = 'judge';
+      } else if (optCount === 0 && (q.rawType === 'essay' || (q.answer && q.answer.length > 8) || /简述|论述|简答|分析/i.test(content))) {
+        type = 'essay';
       }
 
       let valid = true;
       let errorMsg = '';
       if (!content || content.length < 2) {
         valid = false;
-        errorMsg = '题干为空';
-      } else if (type === 'single' && options.length < 2) {
+        errorMsg = '题干不能为空';
+      } else if (type === 'single' && q.options.length < 2) {
         valid = false;
         errorMsg = '单选缺少选项';
+      } else if (!q.answer) {
+        valid = false;
+        errorMsg = '缺少正确答案';
       }
 
       parsedQuestions.push({
@@ -1611,16 +1619,102 @@ ${cleanText.slice(0, 15000)}`;
         typeText: typeTextMap[type] || '单选',
         content,
         title: content,
-        options,
-        answer,
-        analysis: analysis || '历年软考真题高频考点深度剖析。',
-        chapter: '第1章 信息化知识与发展',
-        chapterName: '第1章 信息化知识与发展',
+        options: q.options,
+        answer: q.answer || (type === 'essay' ? '详见解析' : 'A'),
+        analysis: q.analysisLines.join('\n').trim() || '详见教材对应核心考点解析。',
+        chapter: q.chapter || currentChapter,
+        chapterName: q.chapter || currentChapter,
         difficulty: 3,
         valid,
         errorMsg,
       });
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // 1. 检查是否为章节标题 (如 "第 1 章 信息化发展" 或 "第1章 信息化发展")
+      if (/^第\s*\d+\s*章\s+[^\n]+/i.test(line) || /^第[一二三四五六七八九十百]+章\s+[^\n]+/i.test(line)) {
+        currentChapter = line.replace(/\s+/g, ' ');
+        continue;
+      }
+
+      // 2. 检查是否为题型分段标签 (如 "【单选题】", "【多选题】", "【判断题】", "【问答题】")
+      if (/^【?(?:单选|多选|判断|问答|简答|案例)题?】?$/i.test(line)) {
+        if (/多选/i.test(line)) currentTypeHint = 'multiple';
+        else if (/判断/i.test(line)) currentTypeHint = 'judge';
+        else if (/问答|简答|案例/i.test(line)) currentTypeHint = 'essay';
+        else currentTypeHint = 'single';
+        continue;
+      }
+
+      // 3. 检查是否为新题目开始 (如 "1. 关于信息的特征...", "2、制定项目章程...")
+      const isNewQuestionStart = /^(?:\d+[\.、．\s]|第\d+题|[（(]\d+[）)])\s*\S+/i.test(line);
+
+      if (isNewQuestionStart) {
+        finalizeQuestion(currentQ);
+        currentQ = {
+          stemLines: [line],
+          options: [],
+          answer: '',
+          analysisLines: [],
+          chapter: currentChapter,
+          type: currentTypeHint,
+          rawType: currentTypeHint,
+          state: 'stem',
+        };
+        continue;
+      }
+
+      if (!currentQ) {
+        continue;
+      }
+
+      // 4. 检查答案行
+      const ansMatch = line.match(/^【?(?:正确答案|参考答案|答案)】?[：:]\s*(.+)/i) ||
+                       line.match(/^【答案】\s*(.+)/i);
+      if (ansMatch) {
+        currentQ.state = 'answer';
+        let rawAns = ansMatch[1].trim();
+        if (rawAns === '对' || rawAns === '√') rawAns = '正确';
+        if (rawAns === '错' || rawAns === '×') rawAns = '错误';
+        currentQ.answer = rawAns.toUpperCase();
+        continue;
+      }
+
+      // 5. 检查解析行
+      const anaMatch = line.match(/^【?(?:考点分析|试题解析|解析说明|解析)】?[：:]\s*(.*)/i) ||
+                       line.match(/^【解析】\s*(.*)/i);
+      if (anaMatch) {
+        currentQ.state = 'analysis';
+        if (anaMatch[1].trim()) {
+          currentQ.analysisLines.push(anaMatch[1].trim());
+        }
+        continue;
+      }
+
+      // 如果处于解析状态，后续行均为解析内容
+      if (currentQ.state === 'analysis') {
+        currentQ.analysisLines.push(line);
+        continue;
+      }
+
+      // 6. 检查选项
+      const lineOptions = extractOptionsFromLine(line);
+      if (lineOptions && lineOptions.length > 0) {
+        currentQ.state = 'option';
+        currentQ.options.push(...lineOptions);
+        continue;
+      }
+
+      // 如果处于题干收集状态
+      if (currentQ.state === 'stem') {
+        currentQ.stemLines.push(line);
+      }
     }
+
+    // 结算最后一题
+    finalizeQuestion(currentQ);
 
     return {
       subjectId: dto.subjectId,
