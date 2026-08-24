@@ -1418,6 +1418,18 @@ ${dto.content}`;
     });
     const subjectName = subject ? subject.name : '软考专业科目';
 
+    const cleanText = String(dto.content || '')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      .trim();
+
+    if (!cleanText) {
+      return {
+        subjectId: dto.subjectId,
+        subjectName,
+        questions: [],
+      };
+    }
+
     // 1. 尝试大模型结构化解析
     const prompt = `你是一位国家软考命题组与题库结构化专家。请将以下科目【${subjectName}】的题目文本，精确识别解析为结构化试题 JSON 数组。
 
@@ -1446,12 +1458,17 @@ ${dto.content}`;
 ]
 
 待解析试题文本：
-${dto.content}`;
+${cleanText.slice(0, 15000)}`;
 
-    const llmQuestions = await this.callLlm(
-      [{ role: 'user', content: prompt }],
-      { json: true, model: dto.model },
-    );
+    let llmQuestions: any = null;
+    try {
+      llmQuestions = await this.callLlm(
+        [{ role: 'user', content: prompt }],
+        { json: true, model: dto.model },
+      );
+    } catch (llmErr: any) {
+      this.logger.warn(`AI LLM parse questions failed: ${llmErr.message}, falling back to regex parser`);
+    }
 
     const typeTextMap: Record<string, string> = {
       single: '单选',

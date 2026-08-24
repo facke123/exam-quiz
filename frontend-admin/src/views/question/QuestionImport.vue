@@ -179,6 +179,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
+import mammoth from 'mammoth'
 import { getAllSubjects } from '@/api/exam'
 import { getImportRecords, importQuestions } from '@/api/question'
 import { parseQuestions } from '@/api/ai'
@@ -385,10 +386,25 @@ async function parseExcelFile(file: File) {
 
 // 解析 Word / 纯文本文件
 async function parseTextOrDocFile(file: File) {
-  const text = await file.text()
-  if (!text.trim()) {
-    return ElMessage.warning('文本文件内容为空')
+  let text = ''
+  try {
+    if (file.name.endsWith('.docx')) {
+      const arrayBuffer = await file.arrayBuffer()
+      const result = await mammoth.extractRawText({ arrayBuffer })
+      text = result.value || ''
+    } else {
+      text = await file.text()
+    }
+  } catch (readErr: any) {
+    return ElMessage.error(`读取 Word/文本文件失败: ${readErr.message || '文件损坏'}`)
   }
+
+  // 清洗不可打印字符与多余空字符
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
+  if (!text) {
+    return ElMessage.warning('未能从 Word 文档中提取到文字内容，请确认文档非空')
+  }
+
   parsing.value = true
   try {
     const res = await parseQuestions({
@@ -397,9 +413,9 @@ async function parseTextOrDocFile(file: File) {
     })
     if (res?.data?.questions && res.data.questions.length > 0) {
       previewList.value = res.data.questions
-      ElMessage.success(`成功解析出 ${res.data.questions.length} 道试题！`)
+      ElMessage.success(`🎉 成功从 Word 文档解析出 ${res.data.questions.length} 道试题！`)
     } else {
-      ElMessage.warning('未能识别到有效题目，请参考标准模板调整文本结构')
+      ElMessage.warning('未能识别到有效题目，请参考标准模板调整 Word 试卷排版')
     }
   } catch (err: any) {
     ElMessage.error(err.message || '试卷识别失败')
