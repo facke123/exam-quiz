@@ -167,16 +167,27 @@ function handleEditRole(row: any) {
 }
 
 function handleResetPassword(row: any) {
-  ElMessageBox.confirm(`确定重置 [${row.username}] 登录密码为 admin123 吗？`, '重置确认', { type: 'warning' }).then(
-    async () => {
-      try {
-        await resetAdminPassword(row.id, 'admin123')
-        ElMessage.success('密码重置成功')
-      } catch {
-        ElMessage.success('重置成功')
-      }
+  ElMessageBox.prompt(
+    `请输入管理员 [${row.username}] 的新登录密码（至少6位）：`,
+    '自主重置管理员密码',
+    {
+      confirmButtonText: '确认重置',
+      cancelButtonText: '取消',
+      inputPlaceholder: '请输入新密码，例如 admin123',
+      inputValue: 'admin123',
+      inputValidator: (val) => {
+        if (!val || val.length < 6) return '密码长度不能少于 6 位'
+        return true
+      },
     }
-  )
+  ).then(async ({ value }) => {
+    try {
+      await resetAdminPassword(row.id, value)
+      ElMessage.success(`管理员 [${row.username}] 密码已成功重置为：${value}`)
+    } catch (err: any) {
+      ElMessage.error(err.message || '密码重置失败')
+    }
+  })
 }
 
 async function handleDelete(row: any) {

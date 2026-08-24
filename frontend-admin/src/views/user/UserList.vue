@@ -168,6 +168,49 @@
         <el-button type="primary" @click="handleCreateUser">确认创建</el-button>
       </template>
     </el-dialog>
+    <!-- 重置密码弹窗 -->
+    <el-dialog
+      v-model="resetPwdDialogVisible"
+      :title="`重置用户 [${resetPwdUser?.username || ''}] 的密码`"
+      width="480px"
+      append-to-body
+    >
+      <el-form label-width="100px" style="margin-top: 10px">
+        <el-form-item label="用户账号">
+          <el-input :model-value="resetPwdUser?.username || resetPwdUser?.phone || resetPwdUser?.email" disabled />
+        </el-form-item>
+        <el-form-item label="自定义新密码" required>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input
+              v-model="resetPwdForm.password"
+              type="text"
+              placeholder="请输入新的登录密码（至少6位）"
+              clearable
+            />
+            <el-button type="info" plain @click="generateRandomPassword">
+              🎲 随机密码
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="确认新密码">
+          <el-input
+            v-model="resetPwdForm.confirmPassword"
+            type="text"
+            placeholder="请再次确认新密码（选填）"
+            clearable
+          />
+        </el-form-item>
+        <div style="padding-left: 100px; margin-top: -10px; margin-bottom: 12px">
+          <span style="font-size: 12px; color: var(--gray-5)">
+            💡 管理员可自主填入任意自定义密码，提交后该用户登录凭证即时生效。
+          </span>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="resetPwdDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="resetPwdLoading" @click="confirmResetPwd">确认重置</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -181,6 +224,15 @@ const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
 const createDialogVisible = ref(false)
+
+// 自主重置密码相关
+const resetPwdDialogVisible = ref(false)
+const resetPwdLoading = ref(false)
+const resetPwdUser = ref<any>(null)
+const resetPwdForm = reactive({
+  password: '',
+  confirmPassword: '',
+})
 
 const query = reactive({
   page: 1,
@@ -249,16 +301,42 @@ function handleGiftVip(row: any) {
 }
 
 function handleResetPwd(row: any) {
-  ElMessageBox.confirm(`确定要重置用户 [${row.username}] 的登录密码为 123456 吗？`, '重置密码', {
-    type: 'warning',
-  }).then(async () => {
-    try {
-      await resetPassword(row.id, '123456')
-      ElMessage.success('密码重置成功，新密码为 123456')
-    } catch {
-      ElMessage.success('重置成功')
-    }
-  })
+  resetPwdUser.value = row
+  resetPwdForm.password = ''
+  resetPwdForm.confirmPassword = ''
+  resetPwdDialogVisible.value = true
+}
+
+function generateRandomPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  let pwd = ''
+  for (let i = 0; i < 8; i++) {
+    pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  resetPwdForm.password = pwd
+  resetPwdForm.confirmPassword = pwd
+}
+
+async function confirmResetPwd() {
+  if (!resetPwdForm.password) {
+    return ElMessage.warning('请输入自主填入的新密码')
+  }
+  if (resetPwdForm.password.length < 6) {
+    return ElMessage.warning('新密码长度不能少于 6 位')
+  }
+  if (resetPwdForm.confirmPassword && resetPwdForm.password !== resetPwdForm.confirmPassword) {
+    return ElMessage.warning('两次输入的新密码不一致，请核对')
+  }
+  resetPwdLoading.value = true
+  try {
+    await resetPassword(resetPwdUser.value.id, resetPwdForm.password)
+    ElMessage.success(`用户 [${resetPwdUser.value.username}] 的密码已成功重置为：${resetPwdForm.password}`)
+    resetPwdDialogVisible.value = false
+  } catch (err: any) {
+    ElMessage.error(err.message || '重置密码失败')
+  } finally {
+    resetPwdLoading.value = false
+  }
 }
 
 function handleBan(row: any) {
