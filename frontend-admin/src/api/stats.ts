@@ -20,20 +20,20 @@ export function getDashboardStats() {
 }
 
 // 用户增长趋势
-export function getUserGrowth(params: { startDate: string; endDate: string }) {
+export function getUserGrowth(params?: { startDate?: string; endDate?: string }) {
   return request<{ date: string; count: number }[]>({
     url: '/admin/stats/user-growth',
     method: 'get',
-    params,
+    params: params || {},
   })
 }
 
 // 做题统计
-export function getPracticeStats(params: { startDate: string; endDate: string }) {
+export function getPracticeStats(params?: { startDate?: string; endDate?: string }) {
   return request<{ date: string; count: number; correctRate: number }[]>({
     url: '/admin/stats/practice',
     method: 'get',
-    params,
+    params: params || {},
   })
 }
 
@@ -46,19 +46,20 @@ export function getQuestionQuality() {
 }
 
 // 高频错题 Top5
-export function getTopWrongQuestions(params?: { limit?: number }) {
+export function getTopWrongQuestions(params?: number | { limit?: number }) {
+  const queryParams = typeof params === 'number' ? { limit: params } : (params || {})
   return request<{ id: number; title: string; wrongCount: number; wrongRate: number }[]>({
     url: '/admin/stats/top-wrong-questions',
     method: 'get',
-    params,
+    params: queryParams,
   })
 }
 
 // 营收统计
-export function getRevenueStats(params: { startDate: string; endDate: string }) {
+export function getRevenueStats(params?: { startDate?: string; endDate?: string }) {
   return request<{ date: string; revenue: number; orders: number }[]>({
     url: '/admin/stats/revenue',
     method: 'get',
-    params,
+    params: params || {},
   })
 }

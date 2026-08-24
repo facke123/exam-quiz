@@ -141,15 +141,15 @@ async function fetchStats() {
       getDashboardStats(),
       getPracticeStats(),
       getQuestionQuality(),
-      getTopWrongQuestions(5),
+      getTopWrongQuestions({ limit: 5 }),
       getRevenueStats(),
     ])
 
     if (dashRes.status === 'fulfilled' && dashRes.value?.data) {
-      overview.value = dashRes.value.data
+      overview.value = dashRes.value.data || {}
     }
 
-    if (pracRes.status === 'fulfilled' && pracRes.value?.data) {
+    if (pracRes.status === 'fulfilled' && Array.isArray(pracRes.value?.data)) {
       const list = pracRes.value.data
       let maxCount = 1
       for (const item of list) {
@@ -164,18 +164,18 @@ async function fetchStats() {
       }))
     }
 
-    if (qualRes.status === 'fulfilled' && qualRes.value?.data) {
+    if (qualRes.status === 'fulfilled' && Array.isArray(qualRes.value?.data)) {
       subjectRates.value = qualRes.value.data.map((q: any) => ({
         name: q.subject,
         rate: q.avgCorrectRate || 75,
       }))
     }
 
-    if (wrongRes.status === 'fulfilled' && wrongRes.value?.data) {
+    if (wrongRes.status === 'fulfilled' && Array.isArray(wrongRes.value?.data)) {
       weakPoints.value = wrongRes.value.data
     }
 
-    if (revRes.status === 'fulfilled' && revRes.value?.data) {
+    if (revRes.status === 'fulfilled' && Array.isArray(revRes.value?.data)) {
       const revList = revRes.value.data
       totalRevenue.value = revList.reduce((sum: number, r: any) => sum + (r.revenue || 0), 0)
     }
