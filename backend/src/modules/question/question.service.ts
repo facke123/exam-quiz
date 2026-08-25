@@ -349,7 +349,7 @@ export class QuestionService implements OnModuleInit {
       qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
     }
 
-    if (mode === 'random') {
+    if (mode === 'random' || mode === 'daily' || mode === 'practice') {
       qb.orderBy('RAND()');
     } else {
       qb.orderBy('q.id', 'ASC');
@@ -358,7 +358,16 @@ export class QuestionService implements OnModuleInit {
     const takeCount = count ? Number(count) : Number(pageSize);
     qb.skip((page - 1) * takeCount).take(takeCount);
 
-    const [list, total] = await qb.getManyAndCount();
+    let [list, total] = await qb.getManyAndCount();
+    if (list.length === 0 && subjectId) {
+      // Fallback: 若该科目题库暂空，则从全平台已发布题库中随机抽取，确保每日一练和练习模式可用
+      const fallbackQb = this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.status = :status', { status: 'published' })
+        .orderBy('RAND()')
+        .take(takeCount);
+      list = await fallbackQb.getMany();
+    }
 
     const formatted = list.map((q) => {
       let options = q.options;

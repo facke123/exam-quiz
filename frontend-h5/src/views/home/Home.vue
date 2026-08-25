@@ -162,7 +162,7 @@
           📝
         </div>
         <span class="name">每日一练</span>
-        <span class="badge">5题</span>
+        <span class="badge">20题</span>
       </div>
       <div
         class="func-item"

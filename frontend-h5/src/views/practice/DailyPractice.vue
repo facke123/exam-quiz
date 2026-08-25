@@ -26,19 +26,19 @@
         </div>
         <div class="daily-info">
           <div class="daily-title">
-            今日 5 道核心考点精选题
+            今日 20 道核心考点精选题
           </div>
           <div class="daily-desc">
-            智能抽取薄弱知识点 · 碎片时间高效提分
+            智能抽取全科核心考点 · 碎片时间高效提分
           </div>
           <div class="daily-progress">
             <div class="dp-track">
               <div
                 class="dp-fill"
-                style="width: 40%"
+                style="width: 0%"
               />
             </div>
-            <span class="dp-text">已完成 2/5 题</span>
+            <span class="dp-text">每日精选 20 题随机自测</span>
           </div>
         </div>
       </div>
@@ -46,7 +46,7 @@
       <!-- 连续打卡日历 -->
       <div class="streak-card">
         <div class="sc-title">
-          🔥 连续打卡 7 天
+          🔥 坚持打卡 · 每日提分
         </div>
         <div class="streak-grid">
           <div
@@ -68,7 +68,7 @@
         class="start-btn"
         @click="onStart"
       >
-        开始今日刷题
+        开始今日刷题（20题）
       </button>
     </div>
   </div>
@@ -104,7 +104,8 @@ const last7Days = ref([
 ])
 
 function onStart() {
-  router.push(`/quiz/practice?mode=daily&subjectId=${subjectStore.currentSubjectId}`)
+  const subId = subjectStore.currentSubjectId || '4'
+  router.push(`/quiz/daily?mode=daily&subjectId=${subId}&count=20`)
 }
 </script>
 

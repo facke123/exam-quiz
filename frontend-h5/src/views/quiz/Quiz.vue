@@ -233,7 +233,7 @@ onMounted(async () => {
         }
       }
     } else {
-      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '4'
       const targetChapterId = route.query.chapterId ? String(route.query.chapterId) : undefined
       const count = route.query.count ? Number(route.query.count) : (['real', 'mock'].includes(mode.value) ? 75 : 20)
       const res = await getQuestions({
@@ -242,8 +242,14 @@ onMounted(async () => {
         mode: mode.value,
         count,
       })
-      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-        questions.value = res.data
+      if (res?.data) {
+        if (Array.isArray(res.data)) {
+          questions.value = res.data
+        } else if (Array.isArray((res.data as any).list)) {
+          questions.value = (res.data as any).list
+        } else {
+          questions.value = []
+        }
       } else {
         questions.value = []
       }
