@@ -51,6 +51,21 @@
             <el-option label="主观题" value="subjective" />
           </el-select>
 
+          <!-- 完整性健康度筛选 -->
+          <el-select
+            v-model="query.health"
+            placeholder="全部完整性"
+            clearable
+            class="filter-select"
+            style="width: 160px"
+            @change="fetchList"
+          >
+            <el-option label="全部完整性" :value="undefined" />
+            <el-option label="✅ 完备 (100分)" value="complete" />
+            <el-option label="⚡ 待补充解析" value="need_analysis" />
+            <el-option label="⚠️ 存在缺陷 / 异常" value="defective" />
+          </el-select>
+
           <el-select
             v-model="query.status"
             placeholder="全部状态"
@@ -130,7 +145,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="完整性检测" width="130" align="center">
+        <el-table-column label="完整性检测" width="140" align="center">
           <template #default="{ row }">
             <el-tooltip
               :content="checkQuestionQuality(row).issues.length ? checkQuestionQuality(row).issues.join('；') : '题目信息完备，题干/选项/答案/解析均正常'"
@@ -270,13 +285,19 @@
             <div
               class="check-item"
               :class="{
-                ok: ['single', 'multiple'].includes(currentPreviewQuestion.type) ? currentPreviewQuality.optionCount >= 4 : true,
-                bad: ['single', 'multiple'].includes(currentPreviewQuestion.type) && currentPreviewQuality.optionCount < 2
+                ok: ['single', 'multiple'].includes(currentPreviewQuestion.type) ? currentPreviewQuality.optionCount === 4 : true,
+                bad: ['single', 'multiple'].includes(currentPreviewQuestion.type) && (currentPreviewQuality.optionCount < 2 || currentPreviewQuality.optionCount > 4)
               }"
             >
-              <span class="c-icon">{{ ['single', 'multiple'].includes(currentPreviewQuestion.type) ? (currentPreviewQuality.optionCount >= 4 ? '✓' : '!') : '✓' }}</span>
+              <span class="c-icon">{{ ['single', 'multiple'].includes(currentPreviewQuestion.type) ? (currentPreviewQuality.optionCount === 4 ? '✓' : '!') : '✓' }}</span>
               <span class="c-label">选项配置：</span>
-              <span class="c-val">{{ currentPreviewQuality.optionCount ? `${currentPreviewQuality.optionCount} 个选项` : (['single', 'multiple'].includes(currentPreviewQuestion.type) ? '缺失选项' : '主观题型') }}</span>
+              <span class="c-val">
+                {{
+                  currentPreviewQuality.optionCount
+                    ? `${currentPreviewQuality.optionCount} 个选项${currentPreviewQuality.optionCount > 4 ? '（选项冗余过多）' : ''}`
+                    : (['single', 'multiple'].includes(currentPreviewQuestion.type) ? '缺失选项' : '主观题型')
+                }}
+              </span>
             </div>
 
             <div class="check-item" :class="{ ok: !!currentPreviewQuestion.answer, bad: !currentPreviewQuestion.answer }">
@@ -401,9 +422,30 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogType === 'create' ? '新增题目' : '编辑题目'"
-      width="780px"
+      width="820px"
       destroy-on-close
     >
+      <!-- 异常检测提示与一键修复按钮 -->
+      <el-alert
+        v-if="formData.options && (formData.options.length > 4 || formData.options.length < 2)"
+        type="error"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+        :title="`⚠️ 选项异常提示：当前题目存在 ${formData.options.length} 个选项（非标准4项），题干可能包含前题残留文本`"
+      >
+        <template #default>
+          <div style="margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <el-button type="danger" size="small" @click="autoCleanOptions">
+              🧹 一键规整选项（去重并保留前4项 A/B/C/D）
+            </el-button>
+            <el-button type="warning" size="small" @click="autoCleanStem">
+              ✨ 一键清洗题干前缀残留
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
+
       <el-form :model="formData" label-width="90px" class="dialog-form">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -457,24 +499,56 @@
         </el-row>
 
         <el-form-item label="题干内容" required>
-          <el-input
-            v-model="formData.content"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入题目描述，支持 LaTeX 数学公式，如 $E=mc^2$"
-          />
+          <div style="width: 100%;">
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
+              <el-button type="primary" link size="small" @click="autoCleanStem">
+                ✨ 智能清洗题干前缀残留
+              </el-button>
+            </div>
+            <el-input
+              v-model="formData.content"
+              type="textarea"
+              :rows="4"
+              placeholder="请输入题目描述，支持 LaTeX 数学公式，如 $E=mc^2$"
+            />
+          </div>
         </el-form-item>
 
-        <!-- 选项列表（单选/多选） -->
+        <!-- 选项列表（单选/多选/判断） -->
         <div v-if="formData.type === 'single' || formData.type === 'multiple'" class="options-form">
-          <div class="of-title">选项设置：</div>
+          <div class="of-header">
+            <div class="of-title">
+              <span>选项列表 (共 {{ formData.options?.length || 0 }} 项)：</span>
+            </div>
+            <div class="of-actions">
+              <el-button size="small" type="primary" link @click="addOption">
+                + 添加选项
+              </el-button>
+              <el-button size="small" type="warning" link @click="autoCleanOptions">
+                🧹 一键规整 (4项)
+              </el-button>
+              <el-button size="small" link @click="reindexOptions">
+                🔄 重新按 A-Z 编号
+              </el-button>
+            </div>
+          </div>
+
           <div
-            v-for="opt in formData.options"
-            :key="opt.key"
+            v-for="(opt, idx) in formData.options"
+            :key="idx"
             class="option-row"
           >
-            <span class="opt-label">{{ opt.key }}</span>
-            <el-input v-model="opt.content" placeholder="选项描述" style="flex: 1" />
+            <el-input
+              v-model="opt.key"
+              style="width: 48px; text-align: center;"
+              placeholder="A"
+              @input="updateAnswerFromOptions"
+            />
+            <el-input
+              v-model="opt.content"
+              placeholder="请输入选项描述..."
+              style="flex: 1"
+            />
             <el-checkbox
               v-if="formData.type === 'multiple'"
               v-model="opt.isAnswer"
@@ -486,15 +560,28 @@
               v-else
               v-model="formData.answer"
               :label="opt.key"
-              @change="formData.answerStr = opt.key"
+              @change="onSingleAnswerChange(opt.key)"
             >
               设为答案
             </el-radio>
+            <el-button
+              type="danger"
+              link
+              size="small"
+              title="删除此选项"
+              @click="removeOption(idx)"
+            >
+              🗑️
+            </el-button>
           </div>
         </div>
 
         <el-form-item label="正确答案" required>
-          <el-input v-model="formData.answerStr" placeholder="如 A 或 ABCD" />
+          <el-input
+            v-model="formData.answerStr"
+            placeholder="如 A 或 ABCD"
+            @input="syncAnswerToOptions"
+          />
         </el-form-item>
 
         <el-form-item label="解析内容">
@@ -549,6 +636,7 @@ const query = reactive<any>({
   chapterId: undefined,
   type: undefined,
   status: undefined,
+  health: undefined,
 })
 
 const subjects = ref<{ label: string; value: number }[]>([])
@@ -590,7 +678,7 @@ const formData = reactive<any>({
   difficulty: 3,
   content: '',
   options: [
-    { key: 'A', content: '', isAnswer: false },
+    { key: 'A', content: '', isAnswer: true },
     { key: 'B', content: '', isAnswer: false },
     { key: 'C', content: '', isAnswer: false },
     { key: 'D', content: '', isAnswer: false },
@@ -636,6 +724,8 @@ function checkQuestionQuality(row: any) {
   if (['single', 'multiple'].includes(type)) {
     if (options.length === 0) {
       issues.push('未配置选择题选项')
+    } else if (options.length > 6) {
+      issues.push(`选项过多(${options.length}项)，疑似多题合并异常`)
     } else {
       const emptyOpts = options.filter((o: any) => !(o.content || o.text || '').trim())
       if (emptyOpts.length > 0) {
@@ -658,16 +748,17 @@ function checkQuestionQuality(row: any) {
   }
 
   let score = 100
-  if (!content) score -= 30
-  if (['single', 'multiple'].includes(type) && options.length < 2) score -= 30
+  if (!content || content.length < 5) score -= 30
+  if (['single', 'multiple'].includes(type) && (options.length < 2 || options.length > 6)) score -= 30
   if (!answer) score -= 25
   if (!analysis) score -= 15
   score = Math.max(0, score)
 
   const hasSeriousIssue =
     !content ||
+    content.length < 5 ||
     (!answer && type !== 'subjective') ||
-    (['single', 'multiple'].includes(type) && options.length < 2)
+    (['single', 'multiple'].includes(type) && (options.length < 2 || options.length > 6))
 
   return {
     isComplete: issues.length === 0,
@@ -710,6 +801,148 @@ function isOptionCorrect(key: string, answer?: string) {
   const cleanAns = String(answer).trim().toUpperCase()
   const cleanKey = String(key).trim().toUpperCase()
   return cleanAns.includes(cleanKey)
+}
+
+// 智能清洗题干前缀残留
+function autoCleanStem() {
+  let text = (formData.content || '').trim()
+  if (!text) {
+    ElMessage.warning('题干内容为空')
+    return
+  }
+
+  // 1. 如果包含标准软考真题标识 "【20xx年...】" 且前面有残留文本
+  const bracketMatch = text.match(/(?:试题\s*\d+[\s\S]*?|(?:\d+[\.、\s]+))?(【\d{4}年[\s\S]+)/)
+  if (bracketMatch && bracketMatch[1] && text.indexOf(bracketMatch[1]) > 5) {
+    formData.content = bracketMatch[1].trim()
+    ElMessage.success('已自动清洗前序题目的残留前缀！')
+    return
+  }
+
+  // 2. 如果包含 "试题XX- "
+  const examNumMatch = text.match(/试题\s*\d+[-—\s]+([\s\S]+)/)
+  if (examNumMatch && examNumMatch[1] && text.indexOf(examNumMatch[0]) > 5) {
+    formData.content = examNumMatch[0].trim()
+    ElMessage.success('已自动清洗前序题目的残留前缀！')
+    return
+  }
+
+  // 3. 如果开头有 "xxx。 试题xx"
+  const dotSplit = text.split(/。\s+(?=【|\d+[\.、]|试题)/)
+  if (dotSplit.length > 1) {
+    formData.content = dotSplit.slice(1).join('。 ').trim()
+    ElMessage.success('已自动清洗前序题目的残留前缀！')
+    return
+  }
+
+  ElMessage.info('题干结构正常，未检测到明显残留前缀')
+}
+
+// 一键智能规整选项（去重并保留前4项）
+function autoCleanOptions() {
+  if (!Array.isArray(formData.options) || formData.options.length === 0) {
+    formData.options = [
+      { key: 'A', content: '', isAnswer: true },
+      { key: 'B', content: '', isAnswer: false },
+      { key: 'C', content: '', isAnswer: false },
+      { key: 'D', content: '', isAnswer: false },
+    ]
+    return
+  }
+
+  const seenContents = new Set<string>()
+  const cleaned: any[] = []
+  for (const opt of formData.options) {
+    const c = (opt.content || '').trim()
+    if (c && !seenContents.has(c)) {
+      seenContents.add(c)
+      cleaned.push({
+        key: String.fromCharCode(65 + cleaned.length),
+        content: c,
+        isAnswer: opt.isAnswer || false,
+      })
+    }
+    if (cleaned.length >= 4) break
+  }
+
+  while (cleaned.length < 4) {
+    cleaned.push({
+      key: String.fromCharCode(65 + cleaned.length),
+      content: '',
+      isAnswer: false,
+    })
+  }
+
+  formData.options = cleaned
+
+  // 确保有且仅有一个正确答案（或单选设默认）
+  const ansKey = formData.options.find((o: any) => o.isAnswer)?.key || 'A'
+  formData.answer = ansKey
+  formData.answerStr = ansKey
+  formData.options.forEach((o: any) => {
+    o.isAnswer = o.key === ansKey
+  })
+
+  ElMessage.success('已一键规整为标准 4 项选项 (A/B/C/D)')
+}
+
+function addOption() {
+  const nextKey = String.fromCharCode(65 + formData.options.length)
+  formData.options.push({
+    key: nextKey,
+    content: '',
+    isAnswer: false,
+  })
+}
+
+function removeOption(index: number) {
+  if (formData.options.length <= 2) {
+    ElMessage.warning('选择题至少需要保留 2 个选项')
+    return
+  }
+  formData.options.splice(index, 1)
+  reindexOptions()
+}
+
+function reindexOptions() {
+  formData.options.forEach((opt: any, idx: number) => {
+    opt.key = String.fromCharCode(65 + idx)
+  })
+  updateAnswerFromOptions()
+}
+
+function onSingleAnswerChange(key: string) {
+  formData.answer = key
+  formData.answerStr = key
+  formData.options.forEach((o: any) => {
+    o.isAnswer = o.key === key
+  })
+}
+
+function updateMultipleAnswer() {
+  const ans = formData.options.filter((o: any) => o.isAnswer).map((o: any) => o.key)
+  formData.answerStr = ans.join('')
+  formData.answer = ans.join('')
+}
+
+function updateAnswerFromOptions() {
+  if (formData.type === 'multiple') {
+    updateMultipleAnswer()
+  } else {
+    const current = formData.options.find((o: any) => o.isAnswer)
+    if (current) {
+      formData.answer = current.key
+      formData.answerStr = current.key
+    }
+  }
+}
+
+function syncAnswerToOptions() {
+  const val = (formData.answerStr || '').trim().toUpperCase()
+  formData.answer = val
+  formData.options.forEach((o: any) => {
+    o.isAnswer = val.includes(o.key)
+  })
 }
 
 async function loadSubjects() {
@@ -779,6 +1012,7 @@ function resetQuery() {
   query.chapterId = undefined
   query.type = undefined
   query.status = undefined
+  query.health = undefined
   fetchList()
 }
 
@@ -898,12 +1132,6 @@ async function handleExport() {
   } catch {
     ElMessage.success('导出任务已提交')
   }
-}
-
-function updateMultipleAnswer() {
-  const ans = formData.options.filter((o: any) => o.isAnswer).map((o: any) => o.key)
-  formData.answerStr = ans.join('')
-  formData.answer = ans.join('')
 }
 
 async function handleSubmit() {
@@ -1145,13 +1373,26 @@ onMounted(() => {
 .options-form {
   margin: 10px 0 16px;
   background: var(--gray-1);
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-radius: 6px;
+  border: 1px solid #e2e8f0;
 
-  .of-title {
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 8px;
+  .of-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+
+    .of-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    .of-actions {
+      display: flex;
+      gap: 10px;
+    }
   }
 
   .option-row {
@@ -1159,12 +1400,6 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
-
-    .opt-label {
-      font-weight: 700;
-      width: 20px;
-      color: var(--primary);
-    }
   }
 }
 

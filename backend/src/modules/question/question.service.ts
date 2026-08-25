@@ -445,7 +445,7 @@ export class QuestionService implements OnModuleInit {
     page: number;
     pageSize: number;
   }> {
-    const { page = 1, pageSize = 10, keyword, subjectId, chapterId, type, difficulty, status, source } = dto;
+    const { page = 1, pageSize = 10, keyword, subjectId, chapterId, type, difficulty, status, source, health } = dto;
     const qb = this.questionRepository.createQueryBuilder('q');
 
     if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
@@ -458,6 +458,24 @@ export class QuestionService implements OnModuleInit {
     if (status) qb.andWhere('q.status = :status', { status });
     if (source) qb.andWhere('q.source = :source', { source });
     if (keyword) qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
+
+    if (health === 'complete') {
+      qb.andWhere("CHAR_LENGTH(TRIM(IFNULL(q.content, ''))) >= 5");
+      qb.andWhere("TRIM(IFNULL(q.answer, '')) != ''");
+      qb.andWhere("TRIM(IFNULL(q.analysis, '')) != ''");
+      qb.andWhere("(q.type NOT IN ('single_choice', 'multiple_choice') OR (JSON_VALID(q.options) AND JSON_LENGTH(q.options) >= 2 AND JSON_LENGTH(q.options) <= 6))");
+    } else if (health === 'need_analysis') {
+      qb.andWhere("CHAR_LENGTH(TRIM(IFNULL(q.content, ''))) >= 5");
+      qb.andWhere("TRIM(IFNULL(q.answer, '')) != ''");
+      qb.andWhere("TRIM(IFNULL(q.analysis, '')) = ''");
+      qb.andWhere("(q.type NOT IN ('single_choice', 'multiple_choice') OR (JSON_VALID(q.options) AND JSON_LENGTH(q.options) >= 2 AND JSON_LENGTH(q.options) <= 6))");
+    } else if (health === 'defective') {
+      qb.andWhere(
+        "(CHAR_LENGTH(TRIM(IFNULL(q.content, ''))) < 5 " +
+        "OR TRIM(IFNULL(q.answer, '')) = '' " +
+        "OR (q.type IN ('single_choice', 'multiple_choice') AND (!JSON_VALID(q.options) OR JSON_LENGTH(q.options) < 2 OR JSON_LENGTH(q.options) > 6)))"
+      );
+    }
 
     qb.skip((page - 1) * pageSize)
       .take(pageSize)
