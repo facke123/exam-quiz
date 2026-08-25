@@ -53,10 +53,11 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: '题目导入', icon: 'Upload', keepAlive: true },
       },
       {
-        path: 'error-report',
+        path: 'feedback',
+        alias: ['error-report'],
         name: 'ErrorReport',
         component: () => import('@/views/question/ErrorReport.vue'),
-        meta: { title: '纠错审核', icon: 'Warning', keepAlive: true },
+        meta: { title: '纠错反馈', icon: 'Warning', keepAlive: true },
       },
     ],
   },
