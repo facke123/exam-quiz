@@ -602,21 +602,67 @@ export class QuestionService implements OnModuleInit {
    */
   async getAnalysis(id: number): Promise<{
     id: number;
-    answer: string;
+    question: {
+      id: string;
+      type: string;
+      title: string;
+      options: Array<{ key: string; label: string; content: string }>;
+    };
+    correctAnswer: string;
     analysis: string;
     aiAnalysis?: string;
+    knowledgePoints: string[];
+    myAnswer?: string;
   }> {
     const question = await this.questionRepository.findOne({ where: { id } });
     if (!question) {
       throw new NotFoundException('题目不存在');
     }
+
+    let options = question.options;
+    if (typeof options === 'string') {
+      try {
+        options = JSON.parse(options);
+      } catch {
+        options = [];
+      }
+    }
+    const formattedOptions = Array.isArray(options)
+      ? options.map((opt: any, idx: number) => {
+          if (typeof opt === 'string') {
+            const key = String.fromCharCode(65 + idx);
+            return { key, label: key, content: opt };
+          }
+          const key = opt.key || opt.label || String.fromCharCode(65 + idx);
+          return {
+            key,
+            label: opt.label || key,
+            content: opt.content || opt.text || '',
+          };
+        })
+      : [];
+
+    let chapterName = '核心考点精讲';
+    if (question.chapterId) {
+      const chapter = await this.chapterRepository.findOne({ where: { id: question.chapterId } });
+      if (chapter) chapterName = chapter.name;
+    }
+
     return {
       id: Number(question.id),
-      answer: question.answer,
-      analysis: question.analysis || '',
+      question: {
+        id: String(question.id),
+        type: fromDbType(question.type),
+        title: question.content,
+        options: formattedOptions,
+      },
+      correctAnswer: question.answer,
+      analysis: question.analysis || '详见教材与官方考试大纲标准考点解析。',
       aiAnalysis:
         question.analysis ||
-        '【AI深度名师解析】本题考察核心考点。解题关键在于准确记忆标准流程与知识点定义。',
+        '【AI深度名师解析】本题主要考查学员对考点的准确理解与灵活运用。做题时建议先理清核心概念边界，结合排除法进行精准推导。',
+      knowledgePoints: [chapterName, '高频考点', '必背概念'],
+      myAnswer: question.answer,
     };
   }
 

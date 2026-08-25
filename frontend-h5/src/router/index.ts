@@ -172,4 +172,16 @@ router.beforeEach((to, _from, next) => {
   next()
 })
 
+// 处理动态导入模块失败（如发版后老客户端访问旧hash chunk）
+router.onError((error, to) => {
+  const msg = error?.message || ''
+  if (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('error loading dynamically imported module')
+  ) {
+    window.location.href = to.fullPath
+  }
+})
+
 export default router

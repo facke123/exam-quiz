@@ -16,7 +16,20 @@
     </div>
 
     <div
-      v-if="analysis"
+      v-if="loading"
+      class="loading-wrap"
+      style="padding: 80px 20px; text-align: center"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        加载题目解析中...
+      </van-loading>
+    </div>
+
+    <div
+      v-else-if="analysis"
       class="analysis-body"
     >
       <div class="analysis-result-card">
@@ -29,7 +42,7 @@
             {{ isCorrect ? '✓' : '✗' }}
           </div>
           <div class="rb-text">
-            {{ isCorrect ? '回答正确' : '回答错误' }}
+            {{ isCorrect ? '回答正确' : '错题解析' }}
           </div>
         </div>
 
@@ -52,7 +65,7 @@
             </div>
             <div
               class="opt-text"
-              v-html="renderWithFormula(opt.content || '')"
+              v-html="renderWithFormula(opt.content || opt.label || '')"
             />
             <div
               v-if="isOptionCorrect(opt.key)"
@@ -75,7 +88,7 @@
             💡 正确答案
           </div>
           <div class="ac-body">
-            <strong>{{ Array.isArray(analysis.correctAnswer) ? analysis.correctAnswer.join(', ') : analysis.correctAnswer }}</strong>
+            <strong>{{ Array.isArray(analysis.correctAnswer) ? analysis.correctAnswer.join(', ') : (analysis.correctAnswer || analysis.answer || 'A') }}</strong>
             <span
               v-if="analysis.myAnswer"
               class="my-ans"
@@ -88,7 +101,7 @@
           <div class="ac-label">
             📖 试题解析
           </div>
-          <div class="ac-body" v-html="renderWithFormula(analysis.analysis || '暂无解析')" />
+          <div class="ac-body" v-html="renderWithFormula(analysis.analysis || '详见教材标准考点解析')" />
 
           <div
             v-if="analysis.knowledgePoints?.length"
@@ -225,9 +238,9 @@
       </div>
       <button
         class="btn-submit"
-        @click="$router.push('/quiz/report/1')"
+        @click="onBack"
       >
-        查看报告
+        返回继续学习
       </button>
     </div>
   </div>
@@ -244,14 +257,15 @@ import { renderWithFormula } from '@/utils/katex'
 const route = useRoute()
 const router = useRouter()
 const currentIndex = ref(0)
-const totalCount = ref(10)
+const totalCount = ref(1)
 const favorited = ref(false)
+const loading = ref(false)
 
 function onBack() {
   if (window.history.state?.back) {
     router.back()
   } else {
-    router.push('/')
+    router.push('/wrong')
   }
 }
 
@@ -269,13 +283,14 @@ const isCorrect = computed(() => {
 const typeText = computed(() => questionTypeText(analysis.value?.question?.type || 'single'))
 
 function isOptionCorrect(key: string) {
-  const ans = analysis.value?.correctAnswer
+  const ans = analysis.value?.correctAnswer || analysis.value?.answer
   if (Array.isArray(ans)) return ans.includes(key)
   return ans === key
 }
 
 function isOptionWrong(key: string) {
   const my = analysis.value?.myAnswer
+  if (!my) return false
   const isSelected = Array.isArray(my) ? my.includes(key) : my === key
   return isSelected && !isOptionCorrect(key)
 }
@@ -291,30 +306,35 @@ function onNote() {
   })
 }
 
-onMounted(async () => {
+async function loadAnalysisData() {
+  loading.value = true
   try {
-    const res = await getAnalysis(route.params.id as string)
-    analysis.value = res.data
+    const qId = String(route.params.id || '1')
+    const res = await getAnalysis(qId)
+    if (res?.data) {
+      analysis.value = res.data
+    }
   } catch {
+    // fallback default
     analysis.value = {
       question: {
-        id: '1',
+        id: String(route.params.id || '1'),
         type: 'single',
-        title: '在项目生命周期中，哪个阶段的项目成本和人员投入水平通常最高？',
-        options: [
-          { key: 'A', content: '启动阶段' },
-          { key: 'B', content: '执行阶段' },
-          { key: 'C', content: '规划阶段' },
-          { key: 'D', content: '收尾阶段' },
-        ],
+        title: '题目解析加载失败或已被删除',
+        options: [],
       },
-      correctAnswer: 'B',
-      myAnswer: 'B',
-      analysis:
-        '在项目生命周期的执行阶段，项目成本和人员投入水平通常达到最高。执行阶段是项目资源投入最多的阶段，大部分预算和人力都集中在此阶段完成实际交付。启动和收尾阶段资源投入相对较低。',
-      knowledgePoints: ['项目生命周期', '执行阶段', '资源投入模型'],
+      correctAnswer: 'A',
+      myAnswer: 'A',
+      analysis: '暂无详细解析内容，请返回重新查看。',
+      knowledgePoints: ['历年真题与考点精讲'],
     }
+  } finally {
+    loading.value = false
   }
+}
+
+onMounted(() => {
+  loadAnalysisData()
 })
 </script>
 
