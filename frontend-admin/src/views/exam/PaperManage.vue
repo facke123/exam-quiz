@@ -886,8 +886,17 @@ function onTotalScoreChange(val: number) {
 }
 
 function getQuestionTypeCount(type: string): number {
+  if (type === 'single') {
+    return paperForm.selectedQuestions.filter((q) => q.type === 'single' || q.type === 'single_choice').length
+  }
+  if (type === 'multiple') {
+    return paperForm.selectedQuestions.filter((q) => q.type === 'multiple' || q.type === 'multiple_choice').length
+  }
+  if (type === 'judge') {
+    return paperForm.selectedQuestions.filter((q) => q.type === 'judge' || q.type === 'true_false').length
+  }
   if (type === 'case') {
-    return paperForm.selectedQuestions.filter((q) => q.type === 'case' || q.type === 'subjective' || q.type === 'essay').length
+    return paperForm.selectedQuestions.filter((q) => q.type === 'case' || q.type === 'case_analysis' || q.type === 'subjective' || q.type === 'essay').length
   }
   return paperForm.selectedQuestions.filter((q) => q.type === type).length
 }
@@ -1408,9 +1417,13 @@ function formatType(type: string) {
 function formatQType(type: string) {
   const map: Record<string, string> = {
     single: '单选题',
+    single_choice: '单选题',
     multiple: '多选题',
+    multiple_choice: '多选题',
     judge: '判断题',
+    true_false: '判断题',
     case: '案例分析',
+    case_analysis: '案例分析',
     subjective: '问答题',
     essay: '问答题',
   }
@@ -1418,14 +1431,19 @@ function formatQType(type: string) {
 }
 
 function getTypeTagType(type: string) {
-  if (type === 'single') return 'primary'
-  if (type === 'multiple') return 'warning'
-  if (type === 'judge') return 'info'
-  if (type === 'case' || type === 'subjective') return 'danger'
+  if (type === 'single' || type === 'single_choice') return 'primary'
+  if (type === 'multiple' || type === 'multiple_choice') return 'warning'
+  if (type === 'judge' || type === 'true_false') return 'info'
+  if (type === 'case' || type === 'case_analysis' || type === 'subjective' || type === 'essay') return 'danger'
   return ''
 }
 
-function formatDifficulty(diff: string) {
+function formatDifficulty(diff: any) {
+  if (typeof diff === 'number') {
+    if (diff <= 2) return '简单'
+    if (diff === 3) return '中等'
+    return '较难'
+  }
   const map: Record<string, string> = {
     easy: '简单',
     medium: '中等',
