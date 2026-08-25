@@ -118,11 +118,35 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="题干摘要" min-width="260">
+        <el-table-column label="题干内容（点击预览）" min-width="280">
           <template #default="{ row }">
-            <div class="stem-text" :title="row.content || row.title">
+            <div
+              class="stem-text clickable"
+              :title="row.content || row.title"
+              @click="handlePreview(row)"
+            >
               {{ row.content || row.title }}
             </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="完整性检测" width="130" align="center">
+          <template #default="{ row }">
+            <el-tooltip
+              :content="checkQuestionQuality(row).issues.length ? checkQuestionQuality(row).issues.join('；') : '题目信息完备，题干/选项/答案/解析均正常'"
+              placement="top"
+            >
+              <span
+                class="health-tag"
+                :class="{
+                  perfect: checkQuestionQuality(row).isComplete,
+                  error: checkQuestionQuality(row).hasSeriousIssue,
+                  warning: !checkQuestionQuality(row).isComplete && !checkQuestionQuality(row).hasSeriousIssue
+                }"
+              >
+                {{ checkQuestionQuality(row).isComplete ? '✅ 完备 (100%)' : checkQuestionQuality(row).hasSeriousIssue ? '⚠️ 存在缺陷' : '⚡ 待补充解析' }}
+              </span>
+            </el-tooltip>
           </template>
         </el-table-column>
 
@@ -130,7 +154,7 @@
           <template #default="{ row }">
             <div class="sub-chapter">
               <span class="sc-subject">{{ row.subjectName || '系统集成项目管理工程师' }}</span>
-              <span class="sc-chapter">{{ row.chapterName || '第6章 项目整体管理' }}</span>
+              <span class="sc-chapter">{{ row.chapterName || '第1章 信息化与发展' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -138,19 +162,14 @@
         <el-table-column label="难度" width="110" align="center">
           <template #default="{ row }">
             <span class="star-rating">
-              {{ '⭐'.repeat(Math.min(5, Math.max(1, row.difficulty || 2))) }}
+              {{ '⭐'.repeat(Math.min(5, Math.max(1, typeof row.difficulty === 'number' ? row.difficulty : 3))) }}
             </span>
           </template>
         </el-table-column>
 
-        <el-table-column label="正确率" width="90" align="center">
+        <el-table-column label="正确答案" width="100" align="center">
           <template #default="{ row }">
-            <span
-              class="rate-text"
-              :class="{ low: (row.correctRate || 75) < 60 }"
-            >
-              {{ row.correctRate || 75 }}%
-            </span>
+            <span class="answer-badge">{{ row.answer || '-' }}</span>
           </template>
         </el-table-column>
 
@@ -160,7 +179,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <span class="status-badge" :class="row.status || 'published'">
               {{ statusMap[row.status] || '已发布' }}
@@ -171,8 +190,8 @@
         <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <div class="table-ops">
+              <span class="op-link view" @click="handlePreview(row)">🔍 预览</span>
               <span class="op-link" @click="handleEdit(row)">编辑</span>
-              <span class="op-link view" @click="handlePreview(row)">预览</span>
               <span class="op-link del" @click="handleDelete(row)">删除</span>
             </div>
           </template>
@@ -192,6 +211,191 @@
         />
       </div>
     </div>
+
+    <!-- 题目全真预览与质量诊断抽屉 -->
+    <el-drawer
+      v-model="previewDrawerVisible"
+      title="题目详情预览与质量体检"
+      size="720px"
+      direction="rtl"
+      destroy-on-close
+      class="question-preview-drawer"
+    >
+      <template #header>
+        <div class="drawer-custom-header">
+          <div class="header-left">
+            <span class="preview-id">#{{ currentPreviewQuestion?.id }}</span>
+            <span class="type-tag" :class="currentPreviewQuestion?.type">
+              {{ typeMap[currentPreviewQuestion?.type] || '单选' }}
+            </span>
+            <span class="preview-title-sub">{{ currentPreviewQuestion?.subjectName }}</span>
+          </div>
+          <div class="header-right">
+            <el-tag
+              :type="currentPreviewQuality.isComplete ? 'success' : currentPreviewQuality.hasSeriousIssue ? 'danger' : 'warning'"
+              size="small"
+            >
+              {{ currentPreviewQuality.isComplete ? '✅ 完整可用 (100分)' : currentPreviewQuality.hasSeriousIssue ? '⚠️ 存在缺陷' : '⚡ 待补充解析' }}
+            </el-tag>
+          </div>
+        </div>
+      </template>
+
+      <div v-if="currentPreviewQuestion" class="preview-content-wrap">
+        <!-- 题目完整性诊断面板 -->
+        <div
+          class="diagnostic-card"
+          :class="{
+            complete: currentPreviewQuality.isComplete,
+            warning: !currentPreviewQuality.isComplete && !currentPreviewQuality.hasSeriousIssue,
+            danger: currentPreviewQuality.hasSeriousIssue
+          }"
+        >
+          <div class="diag-top">
+            <div class="diag-title">
+              <span class="icon">🩺</span> 题目完整性体检诊断
+            </div>
+            <div class="diag-score">
+              健康度得分：<strong>{{ currentPreviewQuality.score }}</strong> / 100
+            </div>
+          </div>
+
+          <div class="diag-checklist">
+            <div class="check-item" :class="{ ok: currentPreviewQuality.stemLength >= 5, bad: currentPreviewQuality.stemLength < 5 }">
+              <span class="c-icon">{{ currentPreviewQuality.stemLength >= 5 ? '✓' : '✗' }}</span>
+              <span class="c-label">题干内容：</span>
+              <span class="c-val">{{ currentPreviewQuality.stemLength ? `${currentPreviewQuality.stemLength} 字` : '缺失题干' }}</span>
+            </div>
+
+            <div
+              class="check-item"
+              :class="{
+                ok: ['single', 'multiple'].includes(currentPreviewQuestion.type) ? currentPreviewQuality.optionCount >= 4 : true,
+                bad: ['single', 'multiple'].includes(currentPreviewQuestion.type) && currentPreviewQuality.optionCount < 2
+              }"
+            >
+              <span class="c-icon">{{ ['single', 'multiple'].includes(currentPreviewQuestion.type) ? (currentPreviewQuality.optionCount >= 4 ? '✓' : '!') : '✓' }}</span>
+              <span class="c-label">选项配置：</span>
+              <span class="c-val">{{ currentPreviewQuality.optionCount ? `${currentPreviewQuality.optionCount} 个选项` : (['single', 'multiple'].includes(currentPreviewQuestion.type) ? '缺失选项' : '主观题型') }}</span>
+            </div>
+
+            <div class="check-item" :class="{ ok: !!currentPreviewQuestion.answer, bad: !currentPreviewQuestion.answer }">
+              <span class="c-icon">{{ currentPreviewQuestion.answer ? '✓' : '✗' }}</span>
+              <span class="c-label">参考答案：</span>
+              <span class="c-val">{{ currentPreviewQuestion.answer || '未设置答案' }}</span>
+            </div>
+
+            <div class="check-item" :class="{ ok: currentPreviewQuality.analysisLength > 0, bad: !currentPreviewQuality.analysisLength }">
+              <span class="c-icon">{{ currentPreviewQuality.analysisLength > 0 ? '✓' : '!' }}</span>
+              <span class="c-label">考点解析：</span>
+              <span class="c-val">{{ currentPreviewQuality.analysisLength ? `${currentPreviewQuality.analysisLength} 字` : '暂无解析' }}</span>
+            </div>
+          </div>
+
+          <div v-if="currentPreviewQuality.issues.length > 0" class="diag-issues">
+            <span class="issue-tip">待完善事项：</span>
+            <el-tag
+              v-for="(iss, idx) in currentPreviewQuality.issues"
+              :key="idx"
+              size="small"
+              type="danger"
+              effect="plain"
+              class="issue-tag"
+            >
+              {{ iss }}
+            </el-tag>
+          </div>
+        </div>
+
+        <!-- 基础元数据栏 -->
+        <div class="meta-row-card">
+          <div class="meta-item">
+            <span class="m-label">所属科目：</span>
+            <span class="m-val">{{ currentPreviewQuestion.subjectName }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="m-label">所属章节：</span>
+            <span class="m-val">{{ currentPreviewQuestion.chapterName }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="m-label">难度等级：</span>
+            <span class="m-val">{{ '⭐'.repeat(Math.min(5, Math.max(1, typeof currentPreviewQuestion.difficulty === 'number' ? currentPreviewQuestion.difficulty : 3))) }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="m-label">试题来源：</span>
+            <span class="m-val">{{ currentPreviewQuestion.source || '历年真题' }}</span>
+          </div>
+        </div>
+
+        <!-- 题目全真排版展示区 -->
+        <div class="paper-simulator-box">
+          <div class="sim-stem-title">
+            <span class="stem-badge">{{ typeMap[currentPreviewQuestion.type] || '单选题' }}</span>
+            <div class="stem-text-full">{{ currentPreviewQuestion.content || currentPreviewQuestion.title }}</div>
+          </div>
+
+          <!-- 选项列表 -->
+          <div v-if="getNormalizedOptions(currentPreviewQuestion).length > 0" class="sim-options-list">
+            <div
+              v-for="opt in getNormalizedOptions(currentPreviewQuestion)"
+              :key="opt.key"
+              class="sim-option-card"
+              :class="{
+                'is-correct': isOptionCorrect(opt.key, currentPreviewQuestion.answer)
+              }"
+            >
+              <div class="opt-prefix">{{ opt.key }}</div>
+              <div class="opt-text">{{ opt.content }}</div>
+              <div v-if="isOptionCorrect(opt.key, currentPreviewQuestion.answer)" class="opt-correct-badge">
+                ✔️ 正确答案
+              </div>
+            </div>
+          </div>
+
+          <!-- 答案与考点深度解析面板 -->
+          <div class="answer-analysis-panel">
+            <div class="correct-answer-box">
+              <span class="tag-bold">🎯 【正确答案】</span>
+              <span class="ans-badge">{{ currentPreviewQuestion.answer || '暂未设置' }}</span>
+            </div>
+
+            <div class="analysis-box">
+              <div class="ana-header">
+                <span class="tag-bold">💡 【试题解析 / 考点说明】</span>
+              </div>
+              <div v-if="currentPreviewQuestion.analysis" class="ana-content">
+                {{ currentPreviewQuestion.analysis }}
+              </div>
+              <div v-else class="ana-empty">
+                ⚠️ 本题暂无官方解析，建议点击下方【编辑此题】进行补充完善。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="preview-drawer-footer">
+          <div class="footer-nav">
+            <el-button :disabled="currentPreviewIndex <= 0" @click="prevPreviewQuestion">
+              ‹ 上一题
+            </el-button>
+            <span class="nav-indicator">{{ currentPreviewIndex + 1 }} / {{ list.length }} 题</span>
+            <el-button :disabled="currentPreviewIndex >= list.length - 1" @click="nextPreviewQuestion">
+              下一题 ›
+            </el-button>
+          </div>
+          <div class="footer-actions">
+            <el-button type="primary" @click="handleEditFromPreview">
+              ✏️ 编辑此题
+            </el-button>
+            <el-button @click="previewDrawerVisible = false">
+              关闭
+            </el-button>
+          </div>
+        </div>
+      </template>
+    </el-drawer>
 
     <!-- 题目新增/编辑弹窗 -->
     <el-dialog
@@ -282,6 +486,7 @@
               v-else
               v-model="formData.answer"
               :label="opt.key"
+              @change="formData.answerStr = opt.key"
             >
               设为答案
             </el-radio>
@@ -317,7 +522,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getQuestionList,
@@ -364,6 +569,16 @@ const statusMap: Record<string, string> = {
   offline: '已下架',
 }
 
+// 预览抽屉状态
+const previewDrawerVisible = ref(false)
+const currentPreviewQuestion = ref<any>(null)
+const currentPreviewIndex = ref(0)
+
+const currentPreviewQuality = computed(() => {
+  return checkQuestionQuality(currentPreviewQuestion.value)
+})
+
+// 弹窗状态
 const dialogVisible = ref(false)
 const dialogType = ref<'create' | 'edit'>('create')
 const editId = ref<number | null>(null)
@@ -385,6 +600,117 @@ const formData = reactive<any>({
   analysis: '',
   source: '历年真题',
 })
+
+// 题目质量体检算法
+function checkQuestionQuality(row: any) {
+  if (!row) {
+    return {
+      isComplete: false,
+      hasSeriousIssue: true,
+      issues: ['无数据'],
+      score: 0,
+      stemLength: 0,
+      optionCount: 0,
+      analysisLength: 0,
+    }
+  }
+  const issues: string[] = []
+  const content = (row.content || row.title || '').trim()
+  if (!content) {
+    issues.push('题干内容为空')
+  } else if (content.length < 5) {
+    issues.push('题干内容过短')
+  }
+
+  const type = row.type || 'single'
+  let options = row.options
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options)
+    } catch {
+      options = []
+    }
+  }
+  if (!Array.isArray(options)) options = []
+
+  if (['single', 'multiple'].includes(type)) {
+    if (options.length === 0) {
+      issues.push('未配置选择题选项')
+    } else {
+      const emptyOpts = options.filter((o: any) => !(o.content || o.text || '').trim())
+      if (emptyOpts.length > 0) {
+        issues.push(`存在 ${emptyOpts.length} 个空选项`)
+      }
+      if (options.length < 2) {
+        issues.push('选项少于 2 个')
+      }
+    }
+  }
+
+  const answer = (row.answer || '').trim()
+  if (!answer) {
+    issues.push('未设置参考答案')
+  }
+
+  const analysis = (row.analysis || '').trim()
+  if (!analysis) {
+    issues.push('未填写考点解析')
+  }
+
+  let score = 100
+  if (!content) score -= 30
+  if (['single', 'multiple'].includes(type) && options.length < 2) score -= 30
+  if (!answer) score -= 25
+  if (!analysis) score -= 15
+  score = Math.max(0, score)
+
+  const hasSeriousIssue =
+    !content ||
+    (!answer && type !== 'subjective') ||
+    (['single', 'multiple'].includes(type) && options.length < 2)
+
+  return {
+    isComplete: issues.length === 0,
+    hasSeriousIssue,
+    issues,
+    score,
+    stemLength: content.length,
+    optionCount: options.length,
+    analysisLength: analysis.length,
+  }
+}
+
+function getNormalizedOptions(row: any) {
+  if (!row) return []
+  let options = row.options
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options)
+    } catch {
+      options = []
+    }
+  }
+  if (!Array.isArray(options)) return []
+  return options.map((opt: any, idx: number) => {
+    if (typeof opt === 'string') {
+      const key = String.fromCharCode(65 + idx)
+      return { key, label: key, content: opt }
+    }
+    const key = opt.key || opt.label || String.fromCharCode(65 + idx)
+    return {
+      key,
+      label: opt.label || key,
+      content: opt.content || opt.text || '',
+    }
+  })
+}
+
+function isOptionCorrect(key: string, answer?: string) {
+  if (!answer || !key) return false
+  const cleanAns = String(answer).trim().toUpperCase()
+  const cleanKey = String(key).trim().toUpperCase()
+  return cleanAns.includes(cleanKey)
+}
 
 async function loadSubjects() {
   try {
@@ -434,6 +760,11 @@ async function fetchList() {
     if (res?.data) {
       list.value = res.data.list || []
       total.value = res.data.total || 0
+      // 如果当前预览题目在列表中，同步刷新数据
+      if (currentPreviewQuestion.value) {
+        const found = list.value.find((q) => q.id === currentPreviewQuestion.value.id)
+        if (found) currentPreviewQuestion.value = found
+      }
     }
   } catch (err: any) {
     ElMessage.error(err.message || '获取题目列表失败')
@@ -461,24 +792,72 @@ function openCreateDialog() {
   formData.content = ''
   formData.analysis = ''
   formData.answerStr = 'A'
+  formData.answer = 'A'
+  formData.options = [
+    { key: 'A', content: '', isAnswer: true },
+    { key: 'B', content: '', isAnswer: false },
+    { key: 'C', content: '', isAnswer: false },
+    { key: 'D', content: '', isAnswer: false },
+  ]
   dialogVisible.value = true
+}
+
+function handlePreview(row: any) {
+  currentPreviewQuestion.value = row
+  currentPreviewIndex.value = list.value.findIndex((q) => q.id === row.id)
+  previewDrawerVisible.value = true
+}
+
+function prevPreviewQuestion() {
+  if (currentPreviewIndex.value > 0) {
+    currentPreviewIndex.value--
+    currentPreviewQuestion.value = list.value[currentPreviewIndex.value]
+  }
+}
+
+function nextPreviewQuestion() {
+  if (currentPreviewIndex.value < list.value.length - 1) {
+    currentPreviewIndex.value++
+    currentPreviewQuestion.value = list.value[currentPreviewIndex.value]
+  }
+}
+
+function handleEditFromPreview() {
+  if (currentPreviewQuestion.value) {
+    handleEdit(currentPreviewQuestion.value)
+  }
 }
 
 function handleEdit(row: any) {
   dialogType.value = 'edit'
   editId.value = row.id
+  formData.subjectId = row.subjectId || 1
+  formData.chapterId = row.chapterId || 1
   formData.content = row.content || row.title
   formData.type = row.type || 'single'
-  formData.difficulty = row.difficulty || 3
+  formData.difficulty = typeof row.difficulty === 'number' ? row.difficulty : 3
   formData.analysis = row.analysis || ''
+  formData.answer = row.answer || 'A'
   formData.answerStr = row.answer || 'A'
-  dialogVisible.value = true
-}
+  formData.source = row.source || '历年真题'
 
-function handlePreview(row: any) {
-  ElMessageBox.alert(row.content || row.title, `题目详情 [ID: ${row.id}]`, {
-    confirmButtonText: '确定',
-  })
+  const normalized = getNormalizedOptions(row)
+  if (normalized.length > 0) {
+    formData.options = normalized.map((o: any) => ({
+      key: o.key,
+      content: o.content,
+      isAnswer: isOptionCorrect(o.key, row.answer),
+    }))
+  } else {
+    formData.options = [
+      { key: 'A', content: '', isAnswer: false },
+      { key: 'B', content: '', isAnswer: false },
+      { key: 'C', content: '', isAnswer: false },
+      { key: 'D', content: '', isAnswer: false },
+    ]
+  }
+
+  dialogVisible.value = true
 }
 
 async function handleDelete(row: any) {
@@ -488,6 +867,9 @@ async function handleDelete(row: any) {
     })
     await deleteQuestion(row.id)
     ElMessage.success('删除成功')
+    if (currentPreviewQuestion.value?.id === row.id) {
+      previewDrawerVisible.value = false
+    }
     fetchList()
   } catch {
     // cancel
@@ -521,6 +903,7 @@ async function handleExport() {
 function updateMultipleAnswer() {
   const ans = formData.options.filter((o: any) => o.isAnswer).map((o: any) => o.key)
   formData.answerStr = ans.join('')
+  formData.answer = ans.join('')
 }
 
 async function handleSubmit() {
@@ -528,7 +911,7 @@ async function handleSubmit() {
   try {
     const payload = {
       ...formData,
-      answer: formData.answerStr,
+      answer: formData.answerStr || formData.answer,
     }
     if (dialogType.value === 'create') {
       await createQuestion(payload)
@@ -625,6 +1008,31 @@ onMounted(() => {
   }
 }
 
+.health-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &.perfect {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+  }
+  &.warning {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1px solid #fde68a;
+  }
+  &.error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+}
+
 .stem-text {
   font-size: 13px;
   color: var(--gray-8);
@@ -632,6 +1040,14 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 380px;
+
+  &.clickable {
+    cursor: pointer;
+    color: var(--primary);
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 }
 
 .sub-chapter {
@@ -651,14 +1067,14 @@ onMounted(() => {
   }
 }
 
-.rate-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--success);
-
-  &.low {
-    color: var(--danger);
-  }
+.answer-badge {
+  font-family: monospace;
+  font-weight: 700;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
 .source-tag {
@@ -697,7 +1113,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 
   .op-link {
     font-size: 13px;
@@ -705,7 +1121,8 @@ onMounted(() => {
     cursor: pointer;
 
     &.view {
-      color: var(--gray-6);
+      color: #0284c7;
+      font-weight: 600;
     }
     &.del {
       color: var(--danger);
@@ -748,6 +1165,336 @@ onMounted(() => {
       width: 20px;
       color: var(--primary);
     }
+  }
+}
+
+// 预览抽屉样式
+.drawer-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 20px;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .preview-id {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--gray-8);
+    }
+
+    .preview-title-sub {
+      font-size: 13px;
+      color: var(--gray-6);
+    }
+  }
+}
+
+.preview-content-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.diagnostic-card {
+  border-radius: 8px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+
+  &.complete {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+  &.warning {
+    background: #fffbeb;
+    border-color: #fef08a;
+  }
+  &.danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+  }
+
+  .diag-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+
+    .diag-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #1e293b;
+    }
+
+    .diag-score {
+      font-size: 13px;
+      color: #475569;
+      strong {
+        color: #059669;
+        font-size: 16px;
+      }
+    }
+  }
+
+  .diag-checklist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+
+      .c-icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 11px;
+      }
+
+      &.ok .c-icon {
+        background: #dcfce7;
+        color: #15803d;
+      }
+
+      &.bad .c-icon {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+
+      .c-label {
+        color: #64748b;
+      }
+
+      .c-val {
+        font-weight: 600;
+        color: #1e293b;
+      }
+    }
+  }
+
+  .diag-issues {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    .issue-tip {
+      font-size: 12px;
+      color: #b91c1c;
+      font-weight: 600;
+    }
+  }
+}
+
+.meta-row-card {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+
+  .meta-item {
+    font-size: 13px;
+    .m-label {
+      color: #64748b;
+    }
+    .m-val {
+      font-weight: 600;
+      color: #334155;
+    }
+  }
+}
+
+.paper-simulator-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+
+  .sim-stem-title {
+    font-size: 15px;
+    line-height: 1.6;
+    color: #1e293b;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+
+    .stem-badge {
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #e0e7ff;
+      color: #4338ca;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .stem-text-full {
+      flex: 1;
+      white-space: pre-wrap;
+    }
+  }
+
+  .sim-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 18px;
+
+    .sim-option-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #fafafa;
+      transition: all 0.2s;
+
+      .opt-prefix {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #e2e8f0;
+        color: #475569;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+
+      .opt-text {
+        font-size: 14px;
+        color: #334155;
+        flex: 1;
+      }
+
+      &.is-correct {
+        background: #ecfdf5;
+        border-color: #34d399;
+        box-shadow: 0 0 0 1px #34d399;
+
+        .opt-prefix {
+          background: #059669;
+          color: #ffffff;
+        }
+
+        .opt-text {
+          color: #065f46;
+          font-weight: 600;
+        }
+
+        .opt-correct-badge {
+          font-size: 11px;
+          font-weight: 700;
+          color: #047857;
+          background: #d1fae5;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+      }
+    }
+  }
+
+  .answer-analysis-panel {
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    .correct-answer-box {
+      background: #ecfdf5;
+      padding: 10px 14px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .tag-bold {
+        font-weight: 700;
+        color: #047857;
+        font-size: 13px;
+      }
+
+      .ans-badge {
+        font-size: 15px;
+        font-weight: 800;
+        color: #065f46;
+        letter-spacing: 1px;
+      }
+    }
+
+    .analysis-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 12px 14px;
+
+      .ana-header {
+        font-weight: 700;
+        color: #0369a1;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+
+      .ana-content {
+        font-size: 13px;
+        line-height: 1.6;
+        color: #1e293b;
+        white-space: pre-wrap;
+      }
+
+      .ana-empty {
+        font-size: 12px;
+        color: #d97706;
+      }
+    }
+  }
+}
+
+.preview-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+
+  .footer-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .nav-indicator {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+    }
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 8px;
   }
 }
 </style>

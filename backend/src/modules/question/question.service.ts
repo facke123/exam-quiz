@@ -303,11 +303,37 @@ export class QuestionService implements OnModuleInit {
     }
     const subject = await this.subjectRepository.findOne({ where: { id: question.subjectId } });
     const chapter = await this.chapterRepository.findOne({ where: { id: question.chapterId } });
+    let options = question.options;
+    if (typeof options === 'string') {
+      try {
+        options = JSON.parse(options);
+      } catch {
+        options = [];
+      }
+    }
+    const formattedOptions = Array.isArray(options)
+      ? options.map((opt: any, idx: number) => {
+          if (typeof opt === 'string') {
+            const key = String.fromCharCode(65 + idx);
+            return { key, label: key, content: opt };
+          }
+          const key = opt.key || opt.label || String.fromCharCode(65 + idx);
+          return {
+            key,
+            label: opt.label || key,
+            content: opt.content || opt.text || '',
+            isCorrect: opt.isCorrect ?? false,
+          };
+        })
+      : [];
+
     return {
       ...question,
       id: Number(question.id),
       type: fromDbType(question.type),
       title: question.content,
+      options: formattedOptions,
+      difficulty: typeof question.difficulty === 'number' ? question.difficulty : 3,
       subjectName: subject ? subject.name : '',
       chapterName: chapter ? chapter.name : '',
     };
@@ -455,6 +481,22 @@ export class QuestionService implements OnModuleInit {
           options = [];
         }
       }
+      const formattedOptions = Array.isArray(options)
+        ? options.map((opt: any, idx: number) => {
+            if (typeof opt === 'string') {
+              const key = String.fromCharCode(65 + idx);
+              return { key, label: key, content: opt };
+            }
+            const key = opt.key || opt.label || String.fromCharCode(65 + idx);
+            return {
+              key,
+              label: opt.label || key,
+              content: opt.content || opt.text || '',
+              isCorrect: opt.isCorrect ?? false,
+            };
+          })
+        : [];
+
       return {
         id: Number(q.id),
         subjectId: Number(q.subjectId),
@@ -462,10 +504,11 @@ export class QuestionService implements OnModuleInit {
         chapterId: Number(q.chapterId),
         chapterName: chapterMap.get(Number(q.chapterId)) || '第1章 信息化与发展',
         type: fromDbType(q.type),
-        difficulty: typeof q.difficulty === 'number' ? diffMap[q.difficulty] || 'medium' : q.difficulty,
+        difficulty: typeof q.difficulty === 'number' ? q.difficulty : 3,
+        difficultyLevel: typeof q.difficulty === 'number' ? diffMap[q.difficulty] || 'medium' : q.difficulty,
         title: q.content,
         content: q.content,
-        options: options || [],
+        options: formattedOptions,
         answer: q.answer,
         analysis: q.analysis || '',
         correctRate: 75,
