@@ -6,6 +6,8 @@
 name: Deploy
 
 on:
+  push:
+    branches: [main]
   # 支持在 GitHub Actions 手动触发部署
   workflow_dispatch:
 
