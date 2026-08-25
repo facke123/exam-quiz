@@ -1,133 +1,87 @@
 # ============================================================
-# 软考刷题系统 - 持续部署 (CD)
-# 触发: push 到 main 分支
-# 流程: 构建 Docker 镜像 -> 推送到镜像仓库 -> SSH 部署到服务器
+# 软考刷题系统 - 持续部署 (CD) 到 Google Cloud 线上环境
+# 触发: push 到 main 分支 或 手动触发
+# 流程: SSH 登录 Google Cloud VM -> git pull -> docker compose up --build
 # ============================================================
-name: Deploy
+name: Deploy to Google Cloud
 
 on:
   push:
     branches: [main]
-  # 支持在 GitHub Actions 手动触发部署
   workflow_dispatch:
 
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
-env:
-  REGISTRY: ${{ secrets.DOCKER_REGISTRY || 'registry.cn-hangzhou.aliyuncs.com' }}
-  NAMESPACE: ${{ secrets.DOCKER_NAMESPACE || 'exam-quiz' }}
-
 jobs:
-  # -------------------- 构建并推送镜像 --------------------
-  build-and-push:
-    name: Build & Push Docker Images
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract short SHA
-        id: sha
-        run: echo "SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Build & Push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.backend
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/backend:latest
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/backend:${{ steps.sha.outputs.SHORT }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & Push H5
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.h5
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/h5:latest
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/h5:${{ steps.sha.outputs.SHORT }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build & Push Admin
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.admin
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/admin:latest
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/admin:${{ steps.sha.outputs.SHORT }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # -------------------- 部署到服务器 --------------------
   deploy:
-    name: Deploy to Server
+    name: Deploy to Google Cloud VM
     runs-on: ubuntu-latest
-    needs: build-and-push
-    environment: production
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create deployment files
+      - name: 检查必要 Secrets 配置
         run: |
-          cp docker/docker-compose.prod.yml docker-compose.server.yml
-          # 用云镜像覆盖 build
-          sed -i 's|build:.*|image: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/backend:latest|' docker-compose.server.yml 2>/dev/null || true
-        env:
-          REGISTRY: ${{ secrets.DOCKER_REGISTRY || 'registry.cn-hangzhou.aliyuncs.com' }}
-          NAMESPACE: ${{ secrets.DOCKER_NAMESPACE || 'exam-quiz' }}
+          if [ -z "${{ secrets.SSH_HOST }}" ] || [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ [配置错误] 缺少必要的 SSH 部署 Secrets！"
+            echo "请前往 GitHub 仓库配置以下 Secrets (路径: Settings -> Secrets and variables -> Actions):"
+            echo "  - SSH_HOST: Google Cloud 虚拟机的外部公网 IP"
+            echo "  - SSH_USER: SSH 登录用户名（如 root、ubuntu 或您的 GCP 用户名）"
+            echo "  - SSH_PRIVATE_KEY: 对应的 SSH 私钥全文 (包含 -----BEGIN ... -----)"
+            echo "  - SSH_PORT (可选): SSH 端口，默认为 22"
+            exit 1
+          fi
 
-      - name: Copy compose file to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: "docker-compose.server.yml,docker/nginx/"
-          target: ${{ secrets.DEPLOY_PATH || '/opt/exam-quiz' }}
-          strip_components: 0
-
-      - name: SSH deploy
+      - name: SSH 登录 Google Cloud VM 并自动更新服务
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
+          username: ${{ secrets.SSH_USER || 'root' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            cd ${{ secrets.DEPLOY_PATH || '/opt/exam-quiz' }}
-            echo ">>> 登录镜像仓库"
-            docker login ${{ secrets.DOCKER_REGISTRY || 'registry.cn-hangzhou.aliyuncs.com' }} -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-            echo ">>> 拉取最新镜像"
-            docker-compose -f docker-compose.server.yml pull
-            echo ">>> 滚动重启服务"
-            docker-compose -f docker-compose.server.yml up -d --remove-orphans
-            echo ">>> 清理旧镜像"
+            set -e
+            echo "=========================================="
+            echo "🚀 正在更新 Google Cloud 线上应用版本..."
+            echo "=========================================="
+            
+            # 1. 查找项目根目录
+            TARGET_DIR="/opt/app/exam-quiz"
+            if [ ! -d "$TARGET_DIR" ] && [ -d "/opt/exam-quiz" ]; then
+              TARGET_DIR="/opt/exam-quiz"
+            fi
+            
+            if [ ! -d "$TARGET_DIR" ]; then
+              echo ">>> 项目目录不存在，正在克隆仓库..."
+              mkdir -p /opt/app
+              git clone https://github.com/facke123/exam-quiz.git /opt/app/exam-quiz
+              TARGET_DIR="/opt/app/exam-quiz"
+            fi
+            
+            cd "$TARGET_DIR"
+            echo ">>> 工作目录: $TARGET_DIR"
+            
+            # 2. 拉取最新代码
+            echo ">>> 同步最新 main 分支代码..."
+            git fetch --all
+            git reset --hard origin/main
+            
+            # 3. 执行 Docker 容器热更新
+            cd "$TARGET_DIR/docker"
+            echo ">>> 重新构建并启动服务容器..."
+            if [ -f "docker-compose.gcp.yml" ]; then
+              docker compose -f docker-compose.gcp.yml up -d --build
+            elif [ -f "docker-compose.prod.yml" ]; then
+              docker compose -f docker-compose.prod.yml up -d --build
+            else
+              docker compose up -d --build
+            fi
+            
+            # 4. 清理旧构建缓存与无用悬空镜像
+            echo ">>> 清理悬空镜像..."
             docker image prune -f
-            echo ">>> 部署完成"
-            docker-compose -f docker-compose.server.yml ps
+            
+            echo "=========================================="
+            echo "🎉 Google Cloud 线上版本发布成功！"
+            echo "📱 前台: https://quiz.wothat.com"
+            echo "🖥️ 后台: https://admin.wothat.com"
+            echo "=========================================="
