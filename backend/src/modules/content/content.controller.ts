@@ -24,6 +24,15 @@ import { Public } from '@/common/decorators/public.decorator';
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
+  // ==================== 公共系统配置 ====================
+
+  @Public()
+  @Get(['content/config', 'system/config', 'public/config'])
+  @ApiOperation({ summary: '获取公开系统配置（倒计时/网站信息等）' })
+  async getPublicConfig() {
+    return this.contentService.getPublicConfigs();
+  }
+
   // ==================== 公告 ====================
 
   @Public()

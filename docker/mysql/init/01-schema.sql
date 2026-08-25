@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS subjects (
   code VARCHAR(50) UNIQUE NOT NULL COMMENT '科目编码',
   description TEXT,
   icon VARCHAR(500),
+  exam_date VARCHAR(50) DEFAULT '2026-11-08 09:00:00' COMMENT '考试时间',
+  exam_title VARCHAR(100) DEFAULT '2026年下半年软考统一认证' COMMENT '考试名称/副标题',
   sort INT DEFAULT 0,
   status TINYINT DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

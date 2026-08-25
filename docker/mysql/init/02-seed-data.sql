@@ -23,10 +23,10 @@ INSERT INTO admins (username, password, real_name, role, status) VALUES
 -- ------------------------------------------------------------
 -- 软考科目 (3个)
 -- ------------------------------------------------------------
-INSERT INTO subjects (name, code, description, icon, sort, status) VALUES
-('软件设计师', 'ruankao_soft_designer', '中级职称, 考察软件设计、数据结构、算法、面向对象等', NULL, 1, 1),
-('网络工程师', 'ruankao_network_engineer', '中级职称, 考察网络体系结构、协议、路由交换、网络安全等', NULL, 2, 1),
-('信息系统监理师', 'ruankao_info_supervisor', '中级职称, 考察信息系统工程监理的理论与方法', NULL, 3, 1);
+INSERT INTO subjects (name, code, description, icon, exam_date, exam_title, sort, status) VALUES
+('软件设计师', 'ruankao_soft_designer', '中级职称, 考察软件设计、数据结构、算法、面向对象等', NULL, '2026-11-08 09:00:00', '2026年下半年软考统一认证', 1, 1),
+('网络工程师', 'ruankao_network_engineer', '中级职称, 考察网络体系结构、协议、路由交换、网络安全等', NULL, '2026-11-08 09:00:00', '2026年下半年软考统一认证', 2, 1),
+('信息系统监理师', 'ruankao_info_supervisor', '中级职称, 考察信息系统工程监理的理论与方法', NULL, '2026-11-08 09:00:00', '2026年下半年软考统一认证', 3, 1);
 
 -- ------------------------------------------------------------
 -- 会员套餐 (3个)
@@ -93,6 +93,8 @@ INSERT INTO ai_prompts (name, type, content, variables, status) VALUES
 -- 系统配置 (默认)
 -- ------------------------------------------------------------
 INSERT INTO system_configs (config_key, config_value, config_type, description) VALUES
+('exam_countdown_date', '2026-11-08 09:00:00', 'string', '全局考试倒计时目标时间'),
+('exam_countdown_title', '2026年软考统一认证', 'string', '全局考试倒计时副标题'),
 ('site_name', '软考刷题宝', 'string', '站点名称'),
 ('site_icp', '粤ICP备XXXXXXXX号', 'string', '备案号'),
 ('register_enabled', '1', 'boolean', '是否开放注册'),

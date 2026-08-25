@@ -48,6 +48,8 @@ export class ExamService implements OnModuleInit {
           code: 'ruankao_soft',
           icon: 'FolderOpened',
           description: '全国计算机技术与软件专业技术资格（水平）考试 - 中级资格',
+          examDate: '2026-11-08 09:00:00',
+          examTitle: '2026年下半年软考统一认证',
           sort: 1,
           status: 1,
         },
@@ -56,6 +58,8 @@ export class ExamService implements OnModuleInit {
           code: 'ruankao_high',
           icon: 'DocumentChecked',
           description: '全国计算机技术与软件专业技术资格（水平）考试 - 高级资格',
+          examDate: '2026-11-08 09:00:00',
+          examTitle: '2026年下半年软考统一认证',
           sort: 2,
           status: 1,
         },
@@ -64,6 +68,8 @@ export class ExamService implements OnModuleInit {
           code: 'ruankao_designer',
           icon: 'Notebook',
           description: '计算机软件与工程设计专业技能水平认证 - 中级资格',
+          examDate: '2026-11-08 09:00:00',
+          examTitle: '2026年下半年软考统一认证',
           sort: 3,
           status: 1,
         },
@@ -72,6 +78,8 @@ export class ExamService implements OnModuleInit {
           code: 'ruankao_network',
           icon: 'Connection',
           description: '计算机网络系统架构设计与运维管理 - 中级资格',
+          examDate: '2026-11-08 09:00:00',
+          examTitle: '2026年下半年软考统一认证',
           sort: 4,
           status: 1,
         },
@@ -198,6 +206,8 @@ export class ExamService implements OnModuleInit {
         code: sub.code,
         icon: sub.icon,
         description: sub.description,
+        examDate: sub.examDate || '',
+        examTitle: sub.examTitle || '',
         sort: sub.sort,
         status: sub.status === 1 ? 'enabled' : 'disabled',
         questionCount: qCount,
@@ -227,6 +237,8 @@ export class ExamService implements OnModuleInit {
       code: dto.code || dto.name.toLowerCase(),
       description: dto.description || '',
       icon: dto.icon || '',
+      examDate: dto.examDate || '',
+      examTitle: dto.examTitle || '',
       sort: dto.sort || 0,
       status: dto.status === 'disabled' || dto.status === 0 ? 0 : 1,
     });
@@ -242,6 +254,8 @@ export class ExamService implements OnModuleInit {
     if (dto.code !== undefined) subject.code = dto.code;
     if (dto.description !== undefined) subject.description = dto.description;
     if (dto.icon !== undefined) subject.icon = dto.icon;
+    if (dto.examDate !== undefined) subject.examDate = dto.examDate;
+    if (dto.examTitle !== undefined) subject.examTitle = dto.examTitle;
     if (dto.sort !== undefined) subject.sort = dto.sort;
     if (dto.status !== undefined) subject.status = dto.status === 'disabled' || dto.status === 0 ? 0 : 1;
     return this.subjectRepository.save(subject);

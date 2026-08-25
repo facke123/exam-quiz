@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Announcement } from '@/database/entities/announcement.entity';
 import { Banner } from '@/database/entities/banner.entity';
+import { SystemConfig } from '@/database/entities/system-config.entity';
 import { CreateAnnouncementDto, CreateBannerDto } from './dto/content.dto';
 
 /**
@@ -15,7 +16,29 @@ export class ContentService {
     private readonly announcementRepository: Repository<Announcement>,
     @InjectRepository(Banner)
     private readonly bannerRepository: Repository<Banner>,
+    @InjectRepository(SystemConfig)
+    private readonly configRepository: Repository<SystemConfig>,
   ) {}
+
+  /**
+   * 获取前台公开配置（考试倒计时目标时间、副标题、站点名称等）
+   */
+  async getPublicConfigs(): Promise<Record<string, string>> {
+    const result: Record<string, string> = {
+      exam_countdown_date: '2026-11-08 09:00:00',
+      exam_countdown_title: '2026年软考统一认证',
+      site_name: '软考刷题宝',
+    };
+    try {
+      const list = await this.configRepository.find();
+      for (const item of list) {
+        result[item.key] = item.value;
+      }
+    } catch {
+      // ignore
+    }
+    return result;
+  }
 
   async onModuleInit() {
     try {

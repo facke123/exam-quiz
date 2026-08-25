@@ -44,6 +44,16 @@ export class CreateSubjectDto {
   @ApiPropertyOptional({ description: '状态' })
   @IsOptional()
   status?: string | number;
+
+  @ApiPropertyOptional({ description: '考试日期时间，如 2026-11-08 09:00:00' })
+  @IsOptional()
+  @IsString()
+  examDate?: string;
+
+  @ApiPropertyOptional({ description: '考试名称/副标题，如 2026年下半年软考统一认证' })
+  @IsOptional()
+  @IsString()
+  examTitle?: string;
 }
 
 /**

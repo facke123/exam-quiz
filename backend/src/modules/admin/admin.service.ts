@@ -742,22 +742,54 @@ export class AdminService {
    * 获取系统配置列表
    */
   async getConfigs(): Promise<SystemConfig[]> {
-    const configs = await this.configRepository.find();
-    if (configs.length === 0) {
-      // 预置默认系统配置
-      const defaults = [
-        { key: 'daily_question_count', value: '5', description: '每日一练题目数量' },
-        { key: 'free_wrong_limit', value: '100', description: '免费用户错题本上限' },
-        { key: 'free_mock_monthly_limit', value: '1', description: '免费用户每月模考次数' },
-        { key: 'ai_daily_limit', value: '50', description: 'AI每日出题配额' },
-      ];
-      for (const d of defaults) {
+    let configs = await this.configRepository.find({ order: { id: 'ASC' } });
+    // 预置默认系统配置项
+    const defaults = [
+      { key: 'exam_countdown_date', value: '2026-11-08 09:00:00', description: '全局考试倒计时目标时间', type: 'string' },
+      { key: 'exam_countdown_title', value: '2026年软考统一认证', description: '全局考试倒计时副标题', type: 'string' },
+      { key: 'site_name', value: '软考刷题宝', description: '站点名称', type: 'string' },
+      { key: 'daily_question_count', value: '5', description: '每日一练题目数量', type: 'number' },
+      { key: 'free_wrong_limit', value: '100', description: '免费用户错题本上限', type: 'number' },
+      { key: 'free_mock_monthly_limit', value: '1', description: '免费用户每月模考次数', type: 'number' },
+      { key: 'ai_daily_limit', value: '50', description: 'AI每日出题配额', type: 'number' },
+    ];
+
+    for (const d of defaults) {
+      const existing = configs.find((c) => c.key === d.key);
+      if (!existing) {
         const item = this.configRepository.create(d);
         await this.configRepository.save(item);
       }
-      return this.configRepository.find();
     }
+    configs = await this.configRepository.find({ order: { id: 'ASC' } });
     return configs;
+  }
+
+  /**
+   * 获取公开系统配置字典 (供前台 H5 / Web 免登录获取)
+   */
+  async getPublicConfigs(): Promise<Record<string, string>> {
+    const configs = await this.getConfigs();
+    const publicKeys = [
+      'site_name',
+      'site_icp',
+      'exam_countdown_date',
+      'exam_countdown_title',
+      'app_version',
+      'daily_question_count',
+      'vip_enabled',
+      'ai_enabled',
+    ];
+    const result: Record<string, string> = {
+      exam_countdown_date: '2026-11-08 09:00:00',
+      exam_countdown_title: '2026年软考统一认证',
+    };
+    for (const c of configs) {
+      if (publicKeys.includes(c.key)) {
+        result[c.key] = c.value;
+      }
+    }
+    return result;
   }
 
   /**
@@ -770,14 +802,27 @@ export class AdminService {
   /**
    * 更新系统配置
    */
-  async updateConfig(dto: SystemConfigDto | { key: string; value: string }): Promise<SystemConfig> {
-    let config = await this.configRepository.findOne({
-      where: { key: dto.key },
-    });
+  async updateConfig(dto: SystemConfigDto | { id?: number; key?: string; value: string; description?: string; type?: string } | any): Promise<SystemConfig> {
+    let config: SystemConfig | null = null;
+    if (dto.id) {
+      config = await this.configRepository.findOne({ where: { id: Number(dto.id) } });
+    }
+    if (!config && dto.key) {
+      config = await this.configRepository.findOne({ where: { key: dto.key } });
+    }
     if (config) {
-      Object.assign(config, dto);
+      if (dto.value !== undefined) config.value = String(dto.value);
+      if (dto.description !== undefined) config.description = dto.description;
+      if (dto.type !== undefined) config.type = dto.type;
+    } else if (dto.key) {
+      config = this.configRepository.create({
+        key: dto.key,
+        value: String(dto.value || ''),
+        description: dto.description || '',
+        type: dto.type || 'string',
+      });
     } else {
-      config = this.configRepository.create(dto);
+      throw new NotFoundException('配置项不存在');
     }
     return this.configRepository.save(config);
   }

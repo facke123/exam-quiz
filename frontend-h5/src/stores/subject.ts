@@ -10,6 +10,7 @@ export interface Subject {
   category?: string
   description?: string
   examDate?: string
+  examTitle?: string
   icon: string
   questionCount?: number
   sort?: number
@@ -57,6 +58,8 @@ export const useSubjectStore = defineStore('subject', () => {
             level: s.name.includes('高级') || s.name.includes('师') ? '高级' : '中级',
             category: s.category || '软考',
             description: s.description || '',
+            examDate: s.examDate || '',
+            examTitle: s.examTitle || '',
             icon: matchedMeta.icon,
             bg: matchedMeta.bg,
             questionCount: s.questionCount || 0,

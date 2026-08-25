@@ -217,6 +217,13 @@ export class AdminController {
 
   // ==================== 系统配置 ====================
 
+  @Public()
+  @Get(['public-config', 'system/public-config', 'configs/public'])
+  @ApiOperation({ summary: '获取公开系统配置（免登录）' })
+  async getPublicConfig() {
+    return this.adminService.getPublicConfigs();
+  }
+
   @Get(['configs', 'system/configs'])
   @ApiOperation({ summary: '系统配置列表' })
   async getConfigs() {
@@ -232,17 +239,24 @@ export class AdminController {
 
   @Post(['configs', 'system/configs'])
   @ApiOperation({ summary: '更新系统配置' })
-  async updateConfig(@Body() dto: SystemConfigDto) {
+  async updateConfig(@Body() dto: SystemConfigDto | any) {
     return this.adminService.updateConfig(dto);
   }
 
-  @Put(['configs/:key', 'system/configs/:key'])
+  @Put(['configs/:keyOrId', 'system/configs/:keyOrId'])
   @ApiOperation({ summary: '更新指定系统配置' })
-  async updateConfigByKey(
-    @Param('key') key: string,
-    @Body() body: { value: string; description?: string },
+  async updateConfigByKeyOrId(
+    @Param('keyOrId') keyOrId: string,
+    @Body() body: any,
   ) {
-    return this.adminService.updateConfig({ key, value: body.value, description: body.description });
+    const isNum = !isNaN(Number(keyOrId));
+    return this.adminService.updateConfig({
+      id: isNum ? Number(keyOrId) : body?.id,
+      key: !isNum ? keyOrId : body?.key,
+      value: body?.value !== undefined ? body.value : body,
+      description: body?.description,
+      type: body?.type,
+    });
   }
 
   // ==================== 操作日志 ====================

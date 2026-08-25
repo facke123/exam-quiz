@@ -48,3 +48,14 @@ export function getAnnouncementDetail(id: number) {
     method: 'get',
   })
 }
+
+/**
+ * 获取全局公开配置（考试倒计时/站点信息等）
+ */
+export function getPublicConfig() {
+  return request<Record<string, string>>({
+    url: '/content/config',
+    method: 'get',
+  })
+}
+

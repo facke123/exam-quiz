@@ -9,6 +9,8 @@ export interface SubjectItem {
   questionCount?: number
   level?: string
   sort?: number
+  examDate?: string
+  examTitle?: string
   status?: string
 }
 

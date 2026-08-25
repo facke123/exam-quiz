@@ -45,7 +45,7 @@
             {{ examDays }}<span>天</span>
           </div>
           <div class="sub">
-            2026年软考统一认证
+            {{ examSubtitle }}
           </div>
         </div>
         <div
@@ -401,22 +401,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
 import { getOverview } from '@/api/stats'
-import { getBanners, getAnnouncements, type BannerItem, type AnnouncementItem } from '@/api/content'
+import { getBanners, getAnnouncements, getPublicConfig, type BannerItem, type AnnouncementItem } from '@/api/content'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
 
-// 倒计时计算（距离下次软考，假设为2026年11月统考）
-const targetExamDate = new Date('2026-11-08T09:00:00')
-const now = new Date()
-const diffDays = Math.max(1, Math.ceil((targetExamDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-const examDays = ref(diffDays)
+// 全局系统配置（考试倒计时等）
+const globalConfig = ref<Record<string, string>>({
+  exam_countdown_date: '2026-11-08 09:00:00',
+  exam_countdown_title: '2026年软考统一认证',
+})
+
+// 目标考试时间字符串（优先使用当前科目独立设置，回退到全局设置）
+const targetExamDateStr = computed(() => {
+  return (
+    subjectStore.currentSubject?.examDate ||
+    globalConfig.value?.exam_countdown_date ||
+    '2026-11-08 09:00:00'
+  )
+})
+
+// 考试倒计时副标题（优先使用当前科目独立副标题，回退到全局设置）
+const examSubtitle = computed(() => {
+  return (
+    subjectStore.currentSubject?.examTitle ||
+    globalConfig.value?.exam_countdown_title ||
+    '2026年软考统一认证'
+  )
+})
+
+// 倒计时天数计算（响应式随科目切换实时更新）
+const examDays = computed(() => {
+  try {
+    const rawStr = targetExamDateStr.value.trim()
+    const target = new Date(rawStr.replace(/-/g, '/'))
+    if (isNaN(target.getTime())) return 0
+    const now = new Date()
+    const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  } catch {
+    return 0
+  }
+})
+
 const reviewCount = ref(0)
 
 // 后台内容管理数据
@@ -443,9 +476,10 @@ function formatDate(d?: string) {
 
 async function fetchContentData() {
   try {
-    const [bRes, aRes] = await Promise.allSettled([
+    const [bRes, aRes, cRes] = await Promise.allSettled([
       getBanners(),
       getAnnouncements(),
+      getPublicConfig(),
     ])
     if (bRes.status === 'fulfilled' && bRes.value?.data) {
       banners.value = (bRes.value.data as any[]).filter(
@@ -454,6 +488,12 @@ async function fetchContentData() {
     }
     if (aRes.status === 'fulfilled' && aRes.value?.data) {
       announcements.value = aRes.value.data
+    }
+    if (cRes.status === 'fulfilled' && cRes.value?.data) {
+      globalConfig.value = {
+        ...globalConfig.value,
+        ...cRes.value.data,
+      }
     }
   } catch {
     // ignore
