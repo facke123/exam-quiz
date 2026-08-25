@@ -7,6 +7,7 @@ import { ErrorReport } from '@/database/entities/error-report.entity';
 import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { User } from '@/database/entities/user.entity';
+import { WrongQuestion } from '@/database/entities/wrong-question.entity';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
@@ -84,6 +85,8 @@ export class QuestionService implements OnModuleInit {
     private readonly chapterRepository: Repository<Chapter>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(WrongQuestion)
+    private readonly wrongQuestionRepository: Repository<WrongQuestion>,
   ) {}
 
   async onModuleInit() {
@@ -561,6 +564,29 @@ export class QuestionService implements OnModuleInit {
       question.correctCount = (question.correctCount || 0) + 1;
     } else {
       question.wrongCount = (question.wrongCount || 0) + 1;
+      try {
+        let wrongQ = await this.wrongQuestionRepository.findOne({
+          where: { userId: 1, questionId: Number(question.id) },
+        });
+        if (wrongQ) {
+          wrongQ.wrongCount = (wrongQ.wrongCount || 1) + 1;
+          wrongQ.lastWrongAt = new Date();
+          wrongQ.status = 'pending';
+        } else {
+          wrongQ = this.wrongQuestionRepository.create({
+            userId: 1,
+            questionId: Number(question.id),
+            subjectId: Number(question.subjectId) || 1,
+            chapterId: Number(question.chapterId) || 1,
+            wrongCount: 1,
+            lastWrongAt: new Date(),
+            status: 'pending',
+          });
+        }
+        await this.wrongQuestionRepository.save(wrongQ);
+      } catch {
+        // ignore
+      }
     }
     await this.questionRepository.save(question);
 

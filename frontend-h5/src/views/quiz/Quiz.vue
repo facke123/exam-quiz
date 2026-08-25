@@ -108,6 +108,7 @@ import { useQuizStore } from '@/stores/quiz'
 import { useSubjectStore } from '@/stores/subject'
 import { getQuestions, type Question } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
+import { recordWrong, getWrongList } from '@/api/wrong'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
@@ -123,7 +124,7 @@ const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
 const remainingSeconds = ref(9000)
 let timer: any = null
 
-const questions = ref<Question[]>([])
+const questions = ref<any[]>([])
 const currentIndex = ref(0)
 const answers = ref<Record<string, string | string[]>>({})
 const sheetVisible = ref(false)
@@ -192,12 +193,33 @@ function goTo(idx: number) {
   sheetVisible.value = false
 }
 
-function onSubmit() {
+async function onSubmit() {
   showDialog({
     title: '交卷确认',
     message: `您已答 ${Object.keys(answers.value).length} / ${total.value} 题，确定要交卷吗？`,
     showCancelButton: true,
-  }).then(() => {
+  }).then(async () => {
+    // 自动持久化保存错题到数据库
+    for (const q of questions.value) {
+      const userAns = answers.value[q.id]
+      const rightAns = String(q.answer || '').toUpperCase().trim()
+      const formattedUserAns = Array.isArray(userAns)
+        ? userAns.sort().join('').toUpperCase().trim()
+        : String(userAns || '').toUpperCase().trim()
+      if (formattedUserAns !== rightAns) {
+        try {
+          await recordWrong({
+            questionId: q.id,
+            subjectId: q.subjectId || subjectStore.currentSubjectId || 4,
+            chapterId: q.chapterId,
+            userAnswer: formattedUserAns || '未作答',
+          })
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     router.push({
       path: '/quiz/report/1',
       state: {
@@ -214,7 +236,27 @@ onMounted(async () => {
 
   loading.value = true
   try {
-    if (paperId) {
+    if (mode.value === 'wrong') {
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '4'
+      const wRes = await getWrongList({ subjectId: String(targetSubjectId) })
+      if (wRes?.data?.list && Array.isArray(wRes.data.list) && wRes.data.list.length > 0) {
+        questions.value = wRes.data.list.map((item: any) => ({
+          id: item.questionId || item.id,
+          subjectId: item.subjectId,
+          chapterId: item.chapterId,
+          type: item.type,
+          title: item.title || item.content,
+          content: item.content || item.title,
+          options: item.options || [],
+          answer: item.answer || item.correctAnswer,
+          analysis: item.analysis,
+          difficulty: item.difficulty || 3,
+          score: item.score || 1,
+        }))
+      } else {
+        questions.value = []
+      }
+    } else if (paperId) {
       const res = await getPaperDetail(String(paperId))
       if (res?.data?.questions && Array.isArray(res.data.questions) && res.data.questions.length > 0) {
         questions.value = res.data.questions

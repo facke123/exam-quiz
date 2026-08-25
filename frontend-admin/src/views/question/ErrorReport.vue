@@ -31,7 +31,7 @@
         </div>
 
         <div class="actions-bar">
-          <span class="fb-stat">共收到 <strong>{{ total }}</strong> 条纠错反馈 · 5 条待处理</span>
+          <span class="fb-stat">共收到 <strong>{{ total }}</strong> 条纠错反馈 · {{ pendingCount }} 条待处理</span>
         </div>
       </div>
 
@@ -39,11 +39,11 @@
       <el-table v-loading="loading" :data="list" class="custom-table">
         <el-table-column prop="id" label="ID" width="70" align="center" />
 
-        <el-table-column label="关联题目" min-width="220">
+        <el-table-column label="关联题目" min-width="240">
           <template #default="{ row }">
-            <div class="q-title-cell" :title="row.questionTitle">
+            <div class="q-title-cell clickable" :title="row.questionTitle" @click="openPreview(row)">
               <span class="q-id">[题#{{ row.questionId }}]</span>
-              {{ row.questionTitle }}
+              {{ row.questionTitle || ('试题 #' + row.questionId) }}
             </div>
           </template>
         </el-table-column>
@@ -73,11 +73,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
             <div class="table-ops">
-              <span class="op-link pass" @click="handleAccept(row)">采纳修正</span>
-              <span class="op-link del" @click="handleReject(row)">驳回</span>
+              <span class="op-link view" @click="openPreview(row)">🔍 详情</span>
+              <span v-if="row.status === 'pending'" class="op-link pass" @click="handleAccept(row)">采纳</span>
+              <span v-if="row.status === 'pending'" class="op-link del" @click="handleReject(row)">驳回</span>
+              <span class="op-link edit" @click="goToEditQuestion(row)">✏️ 去改题</span>
             </div>
           </template>
         </el-table-column>
@@ -94,17 +96,87 @@
         />
       </div>
     </div>
+
+    <!-- 纠错反馈与题目详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="📌 错题纠错反馈与试题核对"
+      size="560px"
+      direction="rtl"
+      destroy-on-close
+    >
+      <div v-if="currentRow" class="drawer-detail">
+        <div class="detail-section">
+          <h4 class="sec-title">📝 学员纠错诉求</h4>
+          <div class="info-row">
+            <span class="label">提交用户：</span>
+            <span class="val">{{ currentRow.username || '匿名学员' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">纠错类型：</span>
+            <span class="val danger-text">{{ currentRow.errorTypeText || currentRow.errorType || '答案/解析有误' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">反馈描述：</span>
+            <span class="val desc-box">{{ currentRow.content || currentRow.description }}</span>
+          </div>
+        </div>
+
+        <el-divider />
+
+        <div class="detail-section">
+          <div class="sec-head">
+            <h4 class="sec-title">📖 原试题内容核对</h4>
+            <el-button type="primary" size="small" @click="goToEditQuestion(currentRow)">
+              ✏️ 立即去编辑此题
+            </el-button>
+          </div>
+
+          <div class="question-box">
+            <div class="q-stem" v-html="renderRichContent(currentQuestionData?.content || currentRow.questionTitle || '题目加载中...')" />
+
+            <div v-if="currentQuestionData?.options && currentQuestionData.options.length > 0" class="q-options">
+              <div
+                v-for="opt in currentQuestionData.options"
+                :key="opt.key || opt.label"
+                class="q-opt-item"
+                :class="{ 'is-correct': isOptCorrect(opt.key || opt.label) }"
+              >
+                <span class="opt-tag">{{ opt.key || opt.label }}.</span>
+                <span class="opt-content" v-html="renderRichContent(opt.content || opt.value || opt.label || '')" />
+              </div>
+            </div>
+
+            <div class="q-ans-box">
+              <strong>正确答案：</strong>
+              <span class="ans-letter">{{ currentQuestionData?.answer || 'A' }}</span>
+            </div>
+
+            <div class="q-analysis-box">
+              <strong>官方解析：</strong>
+              <div class="analysis-content" v-html="renderRichContent(currentQuestionData?.analysis || '暂无解析')" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getErrorReportList, handleErrorReport } from '@/api/question'
+import { getErrorReportList, handleErrorReport, getQuestionDetail } from '@/api/question'
+import { renderRichContent } from '@/utils/richText'
 
+const router = useRouter()
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
+const drawerVisible = ref(false)
+const currentRow = ref<any>(null)
+const currentQuestionData = ref<any>(null)
 
 const query = reactive({
   page: 1,
@@ -118,6 +190,10 @@ const statusMap: Record<string, string> = {
   accepted: '已采纳',
   rejected: '已驳回',
 }
+
+const pendingCount = computed(() => {
+  return list.value.filter((i) => i.status === 'pending').length
+})
 
 async function fetchList() {
   loading.value = true
@@ -138,6 +214,36 @@ function resetQuery() {
   query.status = ''
   query.keyword = ''
   fetchList()
+}
+
+async function openPreview(row: any) {
+  currentRow.value = row
+  currentQuestionData.value = null
+  drawerVisible.value = true
+  if (row.questionId) {
+    try {
+      const res = await getQuestionDetail(Number(row.questionId))
+      if (res?.data) {
+        currentQuestionData.value = res.data
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function isOptCorrect(key: string) {
+  const ans = String(currentQuestionData.value?.answer || '').toUpperCase()
+  return ans.includes(String(key).toUpperCase())
+}
+
+function goToEditQuestion(row: any) {
+  if (row?.questionId) {
+    router.push({
+      path: '/question/list',
+      query: { keyword: row.questionTitle || String(row.questionId) },
+    })
+  }
 }
 
 function handleAccept(row: any) {
@@ -223,6 +329,14 @@ onMounted(fetchList)
   color: var(--gray-8);
   font-weight: 500;
 
+  &.clickable {
+    cursor: pointer;
+    &:hover {
+      color: var(--primary);
+      text-decoration: underline;
+    }
+  }
+
   .q-id {
     color: var(--primary);
     font-weight: 700;
@@ -278,23 +392,152 @@ onMounted(fetchList)
 
 .table-ops {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
+  flex-wrap: wrap;
 
   .op-link {
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
 
+    &.view {
+      color: var(--primary);
+      font-weight: 600;
+    }
     &.pass {
       color: var(--success);
       font-weight: 600;
     }
     &.del {
-      color: var(--gray-6);
+      color: #ef4444;
+    }
+    &.edit {
+      color: #8b5cf6;
+      font-weight: 600;
     }
 
     &:hover {
       text-decoration: underline;
+    }
+  }
+}
+
+.drawer-detail {
+  padding: 0 8px;
+
+  .detail-section {
+    margin-bottom: 18px;
+
+    .sec-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .sec-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-8);
+      margin: 0 0 10px;
+    }
+
+    .info-row {
+      display: flex;
+      font-size: 13px;
+      margin-bottom: 8px;
+      line-height: 1.6;
+
+      .label {
+        color: var(--gray-5);
+        width: 80px;
+        flex-shrink: 0;
+      }
+
+      .val {
+        color: var(--gray-8);
+        flex: 1;
+
+        &.danger-text {
+          color: #ef4444;
+          font-weight: 700;
+        }
+
+        &.desc-box {
+          background: #fef2f2;
+          padding: 8px 12px;
+          border-radius: 6px;
+          border: 1px solid #fee2e2;
+          color: #991b1b;
+        }
+      }
+    }
+  }
+
+  .question-box {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--gray-2);
+
+    .q-stem {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-8);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .q-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+
+      .q-opt-item {
+        font-size: 13px;
+        color: var(--gray-7);
+        display: flex;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 4px;
+        background: #fff;
+        border: 1px solid var(--gray-2);
+
+        &.is-correct {
+          background: #f0fdf4;
+          border-color: #bbf7d0;
+          color: #15803d;
+          font-weight: 600;
+        }
+      }
+    }
+
+    .q-ans-box {
+      font-size: 13px;
+      color: var(--gray-7);
+      margin-bottom: 10px;
+
+      .ans-letter {
+        color: #15803d;
+        font-weight: 800;
+        font-size: 15px;
+      }
+    }
+
+    .q-analysis-box {
+      font-size: 13px;
+      color: var(--gray-7);
+      background: #fff;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--gray-2);
+      line-height: 1.6;
+
+      .analysis-content {
+        margin-top: 4px;
+        color: var(--gray-8);
+      }
     }
   }
 }
@@ -306,3 +549,4 @@ onMounted(fetchList)
   border-top: 1px solid var(--gray-2);
 }
 </style>
+

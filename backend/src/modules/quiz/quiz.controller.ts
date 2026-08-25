@@ -83,6 +83,15 @@ export class QuizController {
 
   // ==================== 错题本 ====================
 
+  @Post(['wrong/record', 'quiz/wrong/record'])
+  @ApiOperation({ summary: '记录单题错题' })
+  async recordWrong(
+    @CurrentUser() user: UserPayload,
+    @Body() body: { questionId: number | string; subjectId?: number | string; chapterId?: number | string; userAnswer?: string },
+  ) {
+    return this.quizService.recordWrongQuestion(user ? user.id : 1, body);
+  }
+
   @Get(['wrong/list', 'quiz/wrong-questions'])
   @ApiOperation({ summary: '错题本列表' })
   async getWrongQuestions(

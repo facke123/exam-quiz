@@ -40,3 +40,17 @@ export function redoWrong(questionIds: string[]) {
     data: { questionIds }
   })
 }
+
+export function recordWrong(data: {
+  questionId: string | number
+  subjectId?: string | number
+  chapterId?: string | number
+  userAnswer?: string
+}) {
+  return request({
+    url: '/wrong/record',
+    method: 'post',
+    data
+  })
+}
+

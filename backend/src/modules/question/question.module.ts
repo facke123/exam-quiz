@@ -8,6 +8,7 @@ import { ErrorReport } from '@/database/entities/error-report.entity';
 import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { User } from '@/database/entities/user.entity';
+import { WrongQuestion } from '@/database/entities/wrong-question.entity';
 
 /**
  * 题库模块
@@ -21,6 +22,7 @@ import { User } from '@/database/entities/user.entity';
       Subject,
       Chapter,
       User,
+      WrongQuestion,
     ]),
   ],
   controllers: [QuestionController],

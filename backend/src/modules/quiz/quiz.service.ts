@@ -19,6 +19,27 @@ import {
   NoteDto,
 } from './dto/quiz.dto';
 
+const fromDbType = (t?: string) => {
+  if (!t) return 'single';
+  if (t === 'single_choice') return 'single';
+  if (t === 'multiple_choice') return 'multiple';
+  if (t === 'true_false') return 'judge';
+  if (t === 'case_analysis') return 'case';
+  if (t === 'subjective') return 'essay';
+  return t;
+};
+
+const toDbType = (t?: string) => {
+  if (!t) return 'single_choice';
+  const str = String(t).toLowerCase();
+  if (str === 'single' || str === 'single_choice' || str === '单选' || str === '单选题') return 'single_choice';
+  if (str === 'multiple' || str === 'multiple_choice' || str === '多选' || str === '多选题') return 'multiple_choice';
+  if (str === 'judge' || str === 'true_false' || str === '判断' || str === '判断题') return 'true_false';
+  if (str === 'case' || str === 'case_analysis' || str === '案例' || str === '案例分析' || str === '案例题') return 'case_analysis';
+  if (str === 'essay' || str === 'subjective' || str === '问答' || str === '问答题' || str === '简答' || str === '论述') return 'subjective';
+  return 'single_choice';
+};
+
 /**
  * 做题服务
  */
@@ -399,19 +420,62 @@ export class QuizService {
   }
 
   /**
+   * 记录单题错题
+   */
+  async recordWrongQuestion(
+    userId: number,
+    dto: { questionId: number | string; subjectId?: number | string; chapterId?: number | string; userAnswer?: string },
+  ): Promise<WrongQuestion> {
+    const qId = Number(dto.questionId);
+    if (!qId) throw new BadRequestException('题目ID不能为空');
+
+    const question = await this.questionRepository.findOne({ where: { id: qId } });
+    const subId = Number(dto.subjectId) || (question ? Number(question.subjectId) : 1);
+    const chapId = Number(dto.chapterId) || (question ? Number(question.chapterId) : 1);
+
+    let wrongQ = await this.wrongQuestionRepository.findOne({
+      where: { userId, questionId: qId },
+    });
+
+    if (wrongQ) {
+      wrongQ.wrongCount = (wrongQ.wrongCount || 1) + 1;
+      wrongQ.lastWrongAt = new Date();
+      wrongQ.status = 'pending';
+      if (subId) wrongQ.subjectId = subId;
+      if (chapId) wrongQ.chapterId = chapId;
+    } else {
+      wrongQ = this.wrongQuestionRepository.create({
+        userId,
+        questionId: qId,
+        subjectId: subId,
+        chapterId: chapId,
+        wrongCount: 1,
+        lastWrongAt: new Date(),
+        status: 'pending',
+      });
+    }
+
+    return this.wrongQuestionRepository.save(wrongQ);
+  }
+
+  /**
    * 获取错题本
    */
   async getWrongQuestions(
     userId: number,
     query: any,
   ): Promise<{ list: any[]; total: number }> {
-    const { page = 1, pageSize = 20, subjectId, chapterId, type } = query;
+    const { page = 1, pageSize = 50, subjectId, chapterId, type } = query;
     const qb = this.wrongQuestionRepository
       .createQueryBuilder('wq')
       .where('wq.userId = :userId', { userId });
 
-    if (subjectId) qb.andWhere('wq.subjectId = :subjectId', { subjectId });
-    if (chapterId) qb.andWhere('wq.chapterId = :chapterId', { chapterId });
+    if (subjectId) {
+      qb.andWhere('(wq.subjectId = :subjectId OR wq.subjectId IS NULL OR wq.subjectId = 0)', { subjectId: Number(subjectId) });
+    }
+    if (chapterId) {
+      qb.andWhere('wq.chapterId = :chapterId', { chapterId: Number(chapterId) });
+    }
 
     qb.skip((page - 1) * pageSize)
       .take(pageSize)
@@ -423,17 +487,44 @@ export class QuizService {
     const qMap = new Map(questions.map((q) => [Number(q.id), q]));
     const chapters = await this.chapterRepository.find();
     const cMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+    const subjects = await this.subjectRepository.find();
+    const sMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+
+    const typeTextMap: Record<string, string> = {
+      single: '单选题',
+      multiple: '多选题',
+      judge: '判断题',
+      case: '案例分析',
+      subjective: '主观题',
+    };
 
     const formatted = list.map((item) => {
       const q = qMap.get(Number(item.questionId));
+      const qType = q ? fromDbType(q.type) : 'single';
+      let options = q ? q.options : [];
+      if (typeof options === 'string') {
+        try {
+          options = JSON.parse(options);
+        } catch {
+          options = [];
+        }
+      }
       return {
         id: String(item.id),
         questionId: String(item.questionId),
-        type: q ? q.type : 'single',
+        type: qType,
+        typeText: typeTextMap[qType] || '单选题',
         title: q ? q.content : '题目详情',
-        chapterName: cMap.get(Number(item.chapterId)) || '软件工程基础',
+        content: q ? q.content : '',
+        options: Array.isArray(options) ? options : [],
+        answer: q ? q.answer : 'A',
+        correctAnswer: q ? q.answer : 'A',
+        analysis: q ? (q.analysis || '详见官方解析与考点分析。') : '详见官方解析',
+        subjectName: sMap.get(Number(item.subjectId || (q ? q.subjectId : 1))) || '系统集成项目管理工程师',
+        chapterName: cMap.get(Number(item.chapterId || (q ? q.chapterId : 1))) || '核心考点章节',
         wrongCount: item.wrongCount || 1,
         lastWrongAt: item.lastWrongAt,
+        status: item.status || 'pending',
       };
     });
 
@@ -444,13 +535,13 @@ export class QuizService {
    * 移除错题
    */
   async removeWrongQuestions(userId: number, questionIds: any[]): Promise<void> {
-    const numIds = questionIds.map((id) => Number(id));
+    const numIds = (Array.isArray(questionIds) ? questionIds : [questionIds]).map((id) => Number(id)).filter(Boolean);
     if (numIds.length > 0) {
       await this.wrongQuestionRepository
         .createQueryBuilder()
         .delete()
         .where('userId = :userId', { userId })
-        .andWhere('questionId IN (:...ids)', { ids: numIds })
+        .andWhere('(questionId IN (:...ids) OR id IN (:...ids))', { ids: numIds })
         .execute();
     }
   }
@@ -459,7 +550,7 @@ export class QuizService {
    * 错题重做
    */
   async redoWrongQuestions(userId: number, questionIds: any[]): Promise<{ recordId: string }> {
-    const numIds = questionIds.map((id) => Number(id));
+    const numIds = (Array.isArray(questionIds) ? questionIds : [questionIds]).map((id) => Number(id)).filter(Boolean);
     const result = await this.createPractice(userId, {
       mode: 'wrong',
       questionIds: numIds,
