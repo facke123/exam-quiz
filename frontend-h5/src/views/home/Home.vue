@@ -129,9 +129,10 @@
         >
           <div class="banner-card">
             <img
-              :src="b.imageUrl"
+              :src="b.imageUrl || defaultBannerImg"
               :alt="b.title"
               class="banner-image"
+              @error="handleBannerImgError($event)"
             >
             <div class="banner-gradient-mask">
               <span class="banner-card-title">{{ b.title }}</span>
@@ -489,6 +490,15 @@ async function fetchContentData() {
     }
   } catch {
     // ignore
+  }
+}
+
+const defaultBannerImg = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&auto=format&fit=crop&q=80'
+
+function handleBannerImgError(e: Event) {
+  const target = e.target as HTMLImageElement
+  if (target && target.src !== defaultBannerImg) {
+    target.src = defaultBannerImg
   }
 }
 
