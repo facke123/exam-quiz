@@ -30,15 +30,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="考试时间" min-width="125">
-            <template #default="{ row }">
-              <span class="exam-date-badge" :title="row.examTitle || '软考统一认证'">
-                📅 {{ row.examDate ? row.examDate.split(' ')[0] : '2026-11-08' }}
-              </span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="题目数" width="75" align="center">
+          <el-table-column label="题目数" width="80" align="center">
             <template #default="{ row }">
               <strong>{{ row.questionCount || 0 }}</strong>
             </template>
@@ -162,21 +154,6 @@
         </el-form-item>
         <el-form-item label="科目描述">
           <el-input v-model="subjectForm.description" type="textarea" placeholder="科目简介" />
-        </el-form-item>
-        <el-form-item label="考试时间">
-          <el-date-picker
-            v-model="subjectForm.examDate"
-            type="datetime"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            placeholder="如 2026-11-08 09:00:00"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="倒计时副标题">
-          <el-input
-            v-model="subjectForm.examTitle"
-            placeholder="如 2026年下半年软考统一认证"
-          />
         </el-form-item>
         <el-form-item label="启用状态">
           <el-switch
@@ -524,11 +501,7 @@ async function loadChapters(subjectId: number) {
 }
 
 function handleAddSubject() {
-  subjectForm.value = {
-    status: 'enabled',
-    examDate: '2026-11-08 09:00:00',
-    examTitle: '2026年下半年软考统一认证',
-  }
+  subjectForm.value = { status: 'enabled' }
   subjectDialogVisible.value = true
 }
 

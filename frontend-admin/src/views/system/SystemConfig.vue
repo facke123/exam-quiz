@@ -146,8 +146,8 @@ onMounted(fetchList)
         <div class="ch-left">
           <span class="ch-icon">⏳</span>
           <div class="ch-text">
-            <h3 class="ch-title">首页考试倒计时设置</h3>
-            <p class="ch-desc">设置前台 H5 首页展示的全局统考日期及倒计时副标题。若单个科目设置了专属考试时间，则优先展示该科目的独立时间。</p>
+            <h3 class="ch-title">首页考试倒计时全局设置</h3>
+            <p class="ch-desc">设置前台 H5 首页展示的全局统一考试日期及倒计时副标题，全站生效并实时自动计算距离考试剩余天数。</p>
           </div>
         </div>
         <div class="preview-box">

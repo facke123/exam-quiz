@@ -412,31 +412,23 @@ const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
 
-// 全局系统配置（考试倒计时等）
+// 全局系统配置（全局统一考试倒计时）
 const globalConfig = ref<Record<string, string>>({
   exam_countdown_date: '2026-11-08 09:00:00',
   exam_countdown_title: '2026年软考统一认证',
 })
 
-// 目标考试时间字符串（优先使用当前科目独立设置，回退到全局设置）
+// 全局统一考试时间字符串
 const targetExamDateStr = computed(() => {
-  return (
-    subjectStore.currentSubject?.examDate ||
-    globalConfig.value?.exam_countdown_date ||
-    '2026-11-08 09:00:00'
-  )
+  return globalConfig.value?.exam_countdown_date || '2026-11-08 09:00:00'
 })
 
-// 考试倒计时副标题（优先使用当前科目独立副标题，回退到全局设置）
+// 全局统一考试倒计时副标题
 const examSubtitle = computed(() => {
-  return (
-    subjectStore.currentSubject?.examTitle ||
-    globalConfig.value?.exam_countdown_title ||
-    '2026年软考统一认证'
-  )
+  return globalConfig.value?.exam_countdown_title || '2026年软考统一认证'
 })
 
-// 倒计时天数计算（响应式随科目切换实时更新）
+// 倒计时天数计算（根据全局统一考试时间）
 const examDays = computed(() => {
   try {
     const rawStr = targetExamDateStr.value.trim()
