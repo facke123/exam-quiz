@@ -10,7 +10,10 @@
       <div class="title">
         全真模拟考试
       </div>
-      <div class="right" />
+      <div class="right-subj" @click="$router.push('/subject/picker')">
+        <span>{{ currentSubjectName }}</span>
+        <span class="change-icon">⇄</span>
+      </div>
     </div>
 
     <!-- 顶部横幅 -->
@@ -28,8 +31,29 @@
       </div>
     </div>
 
+    <!-- 加载中 -->
+    <div v-if="loading" class="state-container">
+      <van-loading type="spinner" color="var(--primary)" vertical>
+        正在加载模拟试卷...
+      </van-loading>
+    </div>
+
+    <!-- 空数据 -->
+    <div v-else-if="mocks.length === 0" class="state-container">
+      <van-empty description="当前科目暂无模拟试卷">
+        <van-button
+          type="primary"
+          size="small"
+          round
+          @click="$router.push('/subject/picker')"
+        >
+          切换其他科目
+        </van-button>
+      </van-empty>
+    </div>
+
     <!-- 模拟卷列表 -->
-    <div class="mock-list">
+    <div v-else class="mock-list">
       <div
         v-for="mock in mocks"
         :key="mock.id"
@@ -40,19 +64,16 @@
           <div class="mc-title">
             {{ mock.name }}
           </div>
-          <span
-            v-if="mock.isNew"
-            class="mc-tag new"
-          >NEW</span>
+          <span class="mc-tag new">全真模拟</span>
         </div>
         <div class="mc-desc">
-          {{ mock.desc }}
+          {{ mock.description || `考试时长 ${mock.duration || 150} 分钟，满分 ${mock.totalScore || 75} 分，及格线 ${mock.passScore || 45} 分` }}
         </div>
         <div class="mc-footer">
           <div class="mc-meta">
-            <span>⏱️ {{ mock.duration }}分钟</span>
-            <span>📝 {{ mock.questionCount }}题</span>
-            <span>👥 {{ mock.attendCount }}人参加</span>
+            <span>⏱️ {{ mock.duration || mock.totalTime || 150 }}分钟</span>
+            <span>📝 {{ mock.questionCount || 0 }}题</span>
+            <span>🎯 满分{{ mock.totalScore || 75 }}分</span>
           </div>
           <button class="mc-btn">
             开始模考
@@ -64,9 +85,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
+import { getPaperList, type PaperItem } from '@/api/exam'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
@@ -79,39 +101,51 @@ function onBack() {
   }
 }
 
-const mocks = ref([
-  {
-    id: '1',
-    name: '2026全真模拟卷一 · 基础强化',
-    desc: '覆盖信息化、项目管理基础与生命周期等高频核心考点',
-    duration: 120,
-    questionCount: 75,
-    attendCount: 1280,
-    isNew: true,
-  },
-  {
-    id: '2',
-    name: '2026全真模拟卷二 · 进阶实战',
-    desc: '聚焦范围管理、进度管理、成本管理深度综合题型',
-    duration: 150,
-    questionCount: 75,
-    attendCount: 980,
-    isNew: false,
-  },
-  {
-    id: '3',
-    name: '2026全真模拟卷三 · 冲刺押题',
-    desc: '全科考点拉通，历年出题专家命题趋势仿真模拟',
-    duration: 150,
-    questionCount: 75,
-    attendCount: 654,
-    isNew: true,
-  },
-])
+const currentSubjectName = computed(() => {
+  return subjectStore.currentSubject?.name || '系统集成管理工程师'
+})
 
-function enterMock(mock: any) {
-  router.push(`/quiz/mock?examId=${mock.id}&subjectId=${subjectStore.currentSubjectId}`)
+const loading = ref(false)
+const mocks = ref<PaperItem[]>([])
+
+async function fetchMockPapers() {
+  loading.value = true
+  try {
+    const res = await getPaperList({
+      subjectId: subjectStore.currentSubjectId,
+      type: 'mock',
+      pageSize: 50,
+    })
+    if (res?.data?.list) {
+      mocks.value = res.data.list
+    } else if (Array.isArray(res?.data)) {
+      mocks.value = res.data
+    } else {
+      mocks.value = []
+    }
+  } catch {
+    mocks.value = []
+  } finally {
+    loading.value = false
+  }
 }
+
+function enterMock(mock: PaperItem) {
+  router.push(
+    `/quiz/mock?examId=${mock.id}&paperId=${mock.id}&subjectId=${mock.subjectId || subjectStore.currentSubjectId}&duration=${mock.duration || 150}&title=${encodeURIComponent(mock.name)}`
+  )
+}
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    fetchMockPapers()
+  }
+)
+
+onMounted(() => {
+  fetchMockPapers()
+})
 </script>
 
 <style scoped lang="scss">
@@ -137,6 +171,8 @@ function enterMock(mock: any) {
     font-size: 24px;
     color: var(--gray-7);
     cursor: pointer;
+    line-height: 1;
+    width: 24px;
   }
 
   .title {
@@ -145,8 +181,24 @@ function enterMock(mock: any) {
     color: var(--gray-8);
   }
 
-  .right {
-    width: 24px;
+  .right-subj {
+    font-size: 12px;
+    color: var(--primary);
+    background: var(--primary-bg);
+    padding: 3px 8px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    .change-icon {
+      font-size: 13px;
+    }
   }
 }
 
@@ -177,6 +229,11 @@ function enterMock(mock: any) {
   }
 }
 
+.state-container {
+  padding: 60px 16px;
+  text-align: center;
+}
+
 .mock-list {
   padding: 0 14px;
   display: flex;
@@ -190,6 +247,11 @@ function enterMock(mock: any) {
   padding: 16px 18px;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.99);
+  }
 
   .mc-head {
     display: flex;
@@ -205,9 +267,10 @@ function enterMock(mock: any) {
 
     .mc-tag.new {
       font-size: 10px;
-      font-weight: 800;
-      background: var(--danger);
-      color: #fff;
+      font-weight: 700;
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
       padding: 1px 6px;
       border-radius: 4px;
     }
@@ -243,6 +306,7 @@ function enterMock(mock: any) {
       padding: 6px 14px;
       border-radius: 14px;
       cursor: pointer;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
     }
   }
 }

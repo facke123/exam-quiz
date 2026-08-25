@@ -458,21 +458,41 @@ export class ExamService implements OnModuleInit {
     const subjects = await this.subjectRepository.find();
     const subjectMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
 
-    const formattedList = list.map((p) => ({
-      id: Number(p.id),
-      subjectId: Number(p.subjectId),
-      subjectName: subjectMap.get(Number(p.subjectId)) || '系统集成项目管理工程师',
-      name: p.name,
-      type: p.type,
-      description: `考试时长 ${p.duration} 分钟，总分 ${p.totalScore} 分`,
-      totalTime: p.duration,
-      duration: p.duration,
-      totalScore: p.totalScore,
-      questionCount: (p.questionIds && p.questionIds.length) || 0,
-      passScore: Math.round(p.totalScore * 0.6),
-      status: p.status === 1 ? 1 : 0,
-      createdAt: p.createdAt,
-    }));
+    const parseSeason = (name: string): string => {
+      if (name.includes('下半年') || name.includes('11月')) return '下半年';
+      if (name.includes('上半年') || name.includes('5月')) return '上半年';
+      if (name.includes('模拟') || name.includes('押题')) return '模考';
+      return '真题';
+    };
+
+    const parseYear = (p: Paper): number => {
+      if (p.year) return Number(p.year);
+      const m = p.name.match(/(20\d{2})/);
+      if (m) return Number(m[1]);
+      return new Date(p.createdAt).getFullYear();
+    };
+
+    const formattedList = list.map((p) => {
+      const year = parseYear(p);
+      const season = parseSeason(p.name);
+      return {
+        id: Number(p.id),
+        subjectId: Number(p.subjectId),
+        subjectName: subjectMap.get(Number(p.subjectId)) || '系统集成项目管理工程师',
+        name: p.name,
+        year,
+        season,
+        type: p.type,
+        description: `考试时长 ${p.duration} 分钟，总分 ${p.totalScore} 分`,
+        totalTime: p.duration,
+        duration: p.duration,
+        totalScore: p.totalScore,
+        questionCount: (p.questionIds && p.questionIds.length) || 0,
+        passScore: Math.round(p.totalScore * 0.6),
+        status: p.status === 1 ? 1 : 0,
+        createdAt: p.createdAt,
+      };
+    });
 
     return { list: formattedList, total };
   }
@@ -517,11 +537,30 @@ export class ExamService implements OnModuleInit {
         .filter(Boolean);
     }
 
+    const parseSeason = (name: string): string => {
+      if (name.includes('下半年') || name.includes('11月')) return '下半年';
+      if (name.includes('上半年') || name.includes('5月')) return '上半年';
+      if (name.includes('模拟') || name.includes('押题')) return '模考';
+      return '真题';
+    };
+
+    const parseYear = (p: Paper): number => {
+      if (p.year) return Number(p.year);
+      const m = p.name.match(/(20\d{2})/);
+      if (m) return Number(m[1]);
+      return new Date(p.createdAt).getFullYear();
+    };
+
+    const year = parseYear(paper);
+    const season = parseSeason(paper.name);
+
     return {
       ...paper,
       id: Number(paper.id),
       subjectId: Number(paper.subjectId),
       subjectName: subject ? subject.name : '软考科目',
+      year,
+      season,
       questionCount: (paper.questionIds && paper.questionIds.length) || questions.length,
       totalTime: paper.duration,
       duration: paper.duration,
@@ -538,6 +577,7 @@ export class ExamService implements OnModuleInit {
     const paper = this.paperRepository.create({
       subjectId: dto.subjectId || 1,
       name: dto.name,
+      year: dto.year || (dto.name ? Number((dto.name.match(/(20\d{2})/) || [])[1]) || undefined : undefined),
       type: dto.type || 'real',
       duration: dto.totalTime || dto.duration || 150,
       totalScore: dto.totalScore || (questionIds.length > 0 ? questionIds.length : 75),
@@ -557,6 +597,7 @@ export class ExamService implements OnModuleInit {
     }
     if (dto.name !== undefined) paper.name = dto.name;
     if (dto.subjectId !== undefined) paper.subjectId = dto.subjectId;
+    if (dto.year !== undefined) paper.year = dto.year;
     if (dto.type !== undefined) paper.type = dto.type;
     if (dto.totalTime !== undefined) paper.duration = dto.totalTime;
     if (dto.duration !== undefined) paper.duration = dto.duration;

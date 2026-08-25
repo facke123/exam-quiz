@@ -107,6 +107,7 @@ import { showDialog, showToast } from 'vant'
 import { useQuizStore } from '@/stores/quiz'
 import { useSubjectStore } from '@/stores/subject'
 import { getQuestions, type Question } from '@/api/question'
+import { getPaperDetail } from '@/api/exam'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
@@ -119,7 +120,7 @@ const subjectStore = useSubjectStore()
 const loading = ref(false)
 const mode = computed(() => (route.params.mode as string) || (route.query.mode as string) || 'practice')
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
-const remainingSeconds = ref(7200)
+const remainingSeconds = ref(9000)
 let timer: any = null
 
 const questions = ref<Question[]>([])
@@ -208,32 +209,56 @@ function onSubmit() {
 }
 
 onMounted(async () => {
-  if (needCountdown.value) {
-    timer = setInterval(() => {
-      if (remainingSeconds.value > 0) remainingSeconds.value--
-      else onSubmit()
-    }, 1000)
-  }
+  const paperId = route.query.paperId || (['real', 'mock'].includes(mode.value) ? route.query.examId : undefined)
+  const durationParam = route.query.duration ? Number(route.query.duration) : undefined
 
   loading.value = true
   try {
-    const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
-    const targetChapterId = route.query.chapterId ? String(route.query.chapterId) : undefined
-    const res = await getQuestions({
-      subjectId: String(targetSubjectId),
-      chapterId: targetChapterId,
-      mode: mode.value,
-      count: 20,
-    })
-    if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-      questions.value = res.data
+    if (paperId) {
+      const res = await getPaperDetail(String(paperId))
+      if (res?.data?.questions && Array.isArray(res.data.questions) && res.data.questions.length > 0) {
+        questions.value = res.data.questions
+        const duration = res.data.duration || durationParam || 150
+        remainingSeconds.value = duration * 60
+      } else {
+        // Fallback 按科目抽题
+        const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+        const qRes = await getQuestions({
+          subjectId: String(targetSubjectId),
+          mode: mode.value,
+          count: 75,
+        })
+        if (qRes?.data && Array.isArray(qRes.data)) {
+          questions.value = qRes.data
+        }
+      }
     } else {
-      questions.value = []
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+      const targetChapterId = route.query.chapterId ? String(route.query.chapterId) : undefined
+      const count = route.query.count ? Number(route.query.count) : (['real', 'mock'].includes(mode.value) ? 75 : 20)
+      const res = await getQuestions({
+        subjectId: String(targetSubjectId),
+        chapterId: targetChapterId,
+        mode: mode.value,
+        count,
+      })
+      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+        questions.value = res.data
+      } else {
+        questions.value = []
+      }
     }
   } catch {
     questions.value = []
   } finally {
     loading.value = false
+  }
+
+  if (needCountdown.value) {
+    timer = setInterval(() => {
+      if (remainingSeconds.value > 0) remainingSeconds.value--
+      else onSubmit()
+    }, 1000)
   }
 })
 
