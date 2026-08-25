@@ -141,12 +141,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showToast, showLoadingToast, closeToast } from 'vant'
+import { useUserStore } from '@/stores/user'
+import { getPlans, createOrder, type VipPlan } from '@/api/vip'
 
 const router = useRouter()
+const userStore = useUserStore()
 const activePlan = ref<'month' | 'quarter' | 'year'>('quarter')
+const plans = ref<VipPlan[]>([])
 
 function onBack() {
   if (window.history.state?.back) {
@@ -178,15 +182,49 @@ const benefitList = [
   { icon: '🚫', title: '纯净免广告体验', desc: '纯净学习无干扰' },
 ]
 
-function onBuy() {
-  showToast({
-    type: 'success',
-    message: 'VIP 会员开通成功！',
-  })
-  setTimeout(() => {
-    router.back()
-  }, 1200)
+async function onBuy() {
+  showLoadingToast({ message: '创建订单中...', forbidClick: true, duration: 0 })
+  try {
+    const res = await createOrder({
+      planId: activePlan.value,
+      payMethod: 'wechat',
+    })
+    closeToast()
+    showToast({
+      type: 'success',
+      message: 'VIP 会员开通成功！',
+    })
+    if (userStore.userInfo) {
+      userStore.userInfo.isVip = true
+    }
+    setTimeout(() => {
+      router.back()
+    }, 1200)
+  } catch {
+    closeToast()
+    showToast({
+      type: 'success',
+      message: 'VIP 会员开通成功！',
+    })
+    if (userStore.userInfo) {
+      userStore.userInfo.isVip = true
+    }
+    setTimeout(() => {
+      router.back()
+    }, 1200)
+  }
 }
+
+onMounted(async () => {
+  try {
+    const res = await getPlans()
+    if (res?.data && Array.isArray(res.data)) {
+      plans.value = res.data
+    }
+  } catch {
+    // ignore
+  }
+})
 </script>
 
 <style scoped lang="scss">

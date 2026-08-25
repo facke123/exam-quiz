@@ -112,8 +112,8 @@
       </div>
       <div class="radar-svg-wrap">
         <svg
-          width="200"
-          height="200"
+          width="220"
+          height="220"
           viewBox="0 0 200 200"
         >
           <polygon
@@ -135,53 +135,20 @@
             stroke-width="1.5"
           />
           <polygon
-            points="100,35 155,72 148,130 100,165 45,135 38,68"
+            :points="radarPolygonPoints"
             fill="rgba(99,102,241,0.2)"
             stroke="#6366F1"
             stroke-width="2"
           />
           <text
-            x="100"
-            y="12"
+            v-for="(lb, idx) in radarLabels"
+            :key="idx"
+            :x="lb.x"
+            :y="lb.y"
             text-anchor="middle"
-            font-size="10"
+            font-size="9"
             fill="#6B7280"
-          >基础知识</text>
-          <text
-            x="178"
-            y="58"
-            text-anchor="middle"
-            font-size="10"
-            fill="#6B7280"
-          >范围</text>
-          <text
-            x="178"
-            y="148"
-            text-anchor="middle"
-            font-size="10"
-            fill="#6B7280"
-          >进度</text>
-          <text
-            x="100"
-            y="195"
-            text-anchor="middle"
-            font-size="10"
-            fill="#6B7280"
-          >成本</text>
-          <text
-            x="22"
-            y="148"
-            text-anchor="middle"
-            font-size="10"
-            fill="#6B7280"
-          >质量</text>
-          <text
-            x="22"
-            y="58"
-            text-anchor="middle"
-            font-size="10"
-            fill="#6B7280"
-          >安全</text>
+          >{{ lb.text }}</text>
         </svg>
       </div>
 
@@ -195,7 +162,7 @@
             class="dot"
             :style="{ background: legendColors[idx % legendColors.length] }"
           />
-          {{ r.dimension }} {{ r.value }}%
+          {{ r.dimension }} {{ r.value || r.score || 70 }}%
         </div>
       </div>
     </div>
@@ -261,10 +228,39 @@ const overview = reactive({
 })
 
 const trendList = ref<Array<{ date: string; count: number; correctRate?: number }>>([])
-const radarList = ref<Array<{ dimension: string; value: number }>>([])
+const radarList = ref<Array<{ dimension: string; value?: number; score?: number }>>([])
 const wrongDistList = ref<Array<{ chapter: string; count: number }>>([])
 
 const legendColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
+
+const radarPolygonPoints = computed(() => {
+  if (radarList.value.length === 0) return '100,35 155,72 148,130 100,165 45,135 38,68'
+  const count = radarList.value.length
+  return radarList.value.map((item, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / count
+    const val = item.value !== undefined ? item.value : (item.score || 70)
+    const ratio = Math.max(0.2, Math.min(1, val / 100))
+    const r = 68 * ratio
+    const x = Math.round(100 + r * Math.cos(angle))
+    const y = Math.round(100 + r * Math.sin(angle))
+    return `${x},${y}`
+  }).join(' ')
+})
+
+const radarLabels = computed(() => {
+  const count = radarList.value.length || 6
+  return radarList.value.map((item, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / count
+    const r = 86
+    const x = Math.round(100 + r * Math.cos(angle))
+    const y = Math.round(100 + r * Math.sin(angle))
+    return {
+      text: item.dimension.length > 5 ? item.dimension.slice(0, 4) + '..' : item.dimension,
+      x,
+      y: y + 4,
+    }
+  })
+})
 
 const maxTrendCount = computed(() => {
   const max = Math.max(...trendList.value.map((t) => t.count), 10)

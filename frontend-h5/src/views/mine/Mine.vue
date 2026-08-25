@@ -101,7 +101,7 @@
             我的笔记
           </div>
           <div class="uci-value">
-            0条
+            {{ notesCount }}条
           </div>
           <div class="uci-arrow">
             ›
@@ -293,6 +293,7 @@ import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
 import { getOverview } from '@/api/stats'
 import { getAnnouncements, type AnnouncementItem } from '@/api/content'
+import { getNotes } from '@/api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -300,6 +301,7 @@ const subjectStore = useSubjectStore()
 
 const noticePopupVisible = ref(false)
 const announcementList = ref<AnnouncementItem[]>([])
+const notesCount = ref(0)
 
 const overview = reactive({
   totalAnswered: 0,
@@ -324,11 +326,17 @@ function handleOpenAnnouncements() {
 
 async function fetchStats() {
   try {
-    const res = await getOverview(subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined)
-    if (res?.data) {
-      overview.totalAnswered = res.data.totalAnswered || 0
-      overview.wrongCount = res.data.wrongCount || 0
-      overview.favoriteCount = res.data.favoriteCount || 0
+    const [oRes, nRes] = await Promise.allSettled([
+      getOverview(subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined),
+      getNotes({ page: 1, pageSize: 1 }),
+    ])
+    if (oRes.status === 'fulfilled' && oRes.value?.data) {
+      overview.totalAnswered = oRes.value.data.totalAnswered || 0
+      overview.wrongCount = oRes.value.data.wrongCount || 0
+      overview.favoriteCount = oRes.value.data.favoriteCount || 0
+    }
+    if (nRes.status === 'fulfilled' && nRes.value?.data) {
+      notesCount.value = nRes.value.data.total || 0
     }
   } catch {
     // ignore

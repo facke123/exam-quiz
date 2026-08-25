@@ -13,7 +13,20 @@
       <div class="right" />
     </div>
 
-    <div class="records-list">
+    <!-- 答卷列表 -->
+    <div
+      v-if="loading"
+      class="loading-box"
+      style="padding: 40px; text-align: center;"
+    >
+      <van-loading type="spinner" color="var(--primary)">
+        加载做题记录中...
+      </van-loading>
+    </div>
+    <div
+      v-else-if="list.length"
+      class="records-list"
+    >
       <div
         v-for="r in list"
         :key="r.id"
@@ -21,24 +34,45 @@
         @click="$router.push(`/quiz/report/${r.id}`)"
       >
         <div class="rc-header">
-          <span class="rc-title">{{ r.title }}</span>
-          <span class="rc-time">{{ r.time }}</span>
+          <span class="rc-title">{{ getModeTitle(r) }}</span>
+          <span class="rc-time">{{ formatTime(r.createdAt) }}</span>
         </div>
         <div class="rc-meta">
-          <span>{{ r.questionCount }}题</span>
-          <span class="rc-rate">正确率 {{ r.correctRate }}%</span>
-          <span>用时 {{ r.duration }}</span>
+          <span>{{ r.total || 0 }}题</span>
+          <span class="rc-rate">正确率 {{ r.correctRate || 0 }}%</span>
+          <span>用时 {{ formatDuration(r.duration) }}</span>
         </div>
       </div>
+    </div>
+    <div
+      v-else
+      class="empty-state"
+      style="padding: 60px 20px; text-align: center;"
+    >
+      <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+      <div style="font-size: 15px; font-weight: 600; color: var(--gray-7);">暂无做题记录</div>
+      <div style="font-size: 13px; color: var(--gray-5); margin-top: 6px;">快去刷套真题检验下实力吧～</div>
+      <van-button
+        type="primary"
+        round
+        size="small"
+        style="margin-top: 20px; padding: 0 24px;"
+        @click="$router.push('/chapter')"
+      >
+        去刷题
+      </van-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getRecords, type RecordItem } from '@/api/user'
 
 const router = useRouter()
+const list = ref<RecordItem[]>([])
+const loading = ref(false)
 
 function onBack() {
   if (window.history.state?.back) {
@@ -48,32 +82,58 @@ function onBack() {
   }
 }
 
-const list = ref([
-  {
-    id: '1',
-    title: '章节练习 · 信息化与发展',
-    time: '今天 10:32',
-    questionCount: 10,
-    correctRate: 80,
-    duration: '8分钟',
-  },
-  {
-    id: '2',
-    title: '全真模拟考试 · 2026综合模拟卷一',
-    time: '昨天 14:15',
-    questionCount: 75,
-    correctRate: 72,
-    duration: '65分钟',
-  },
-  {
-    id: '3',
-    title: '每日一练 · 核心精选题',
-    time: '3天前',
-    questionCount: 5,
-    correctRate: 100,
-    duration: '3分钟',
-  },
-])
+function getModeTitle(r: RecordItem) {
+  const modeMap: Record<string, string> = {
+    daily: '每日一练',
+    chapter: '章节练习',
+    mock: '全真模考',
+    real: '历年真题',
+    review: '艾宾浩斯复习',
+    wrong: '错题重练',
+  }
+  const modeName = modeMap[r.mode] || '专项训练'
+  return `${modeName} · ${r.subjectName || '软考通关'}`
+}
+
+function formatDuration(sec?: number) {
+  if (!sec || sec <= 0) return '< 1分钟'
+  if (sec < 60) return `${sec}秒`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return s > 0 ? `${m}分${s}秒` : `${m}分钟`
+}
+
+function formatTime(t?: string) {
+  if (!t) return '刚刚'
+  try {
+    const d = new Date(t)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return t
+  }
+}
+
+async function fetchRecordsList() {
+  loading.value = true
+  try {
+    const res = await getRecords({ page: 1, pageSize: 50 })
+    if (res?.data?.list) {
+      list.value = res.data.list
+    } else if (Array.isArray(res?.data)) {
+      list.value = res.data
+    } else {
+      list.value = []
+    }
+  } catch {
+    list.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchRecordsList()
+})
 </script>
 
 <style scoped lang="scss">

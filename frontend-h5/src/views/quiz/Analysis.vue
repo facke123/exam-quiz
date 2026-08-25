@@ -153,7 +153,15 @@
             <div class="ai-section-label">
               🧠 AI 解题思路与技巧
             </div>
-            <div class="ai-section-text">
+            <div
+              v-if="analysis.aiAnalysis"
+              class="ai-section-text"
+              v-html="renderWithFormula(analysis.aiAnalysis)"
+            />
+            <div
+              v-else
+              class="ai-section-text"
+            >
               本题考查核心知识点的掌握。解题关键在于准确把握概念本质与典型特征。<br><br>
               💡 <strong>解题技巧</strong>：排除法与概念特征对比是提高答题速度和准确率的有效方法。
             </div>

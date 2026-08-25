@@ -91,14 +91,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
+import { useSubjectStore } from '@/stores/subject'
+import { getQuestions, type Question } from '@/api/question'
 
 const router = useRouter()
+const subjectStore = useSubjectStore()
 const currentCaseIdx = ref(0)
 const favorited = ref(false)
 const answers = ref<Record<number, string>>({})
+const loading = ref(false)
 
 function onBack() {
   if (window.history.state?.back) {
@@ -108,31 +112,93 @@ function onBack() {
   }
 }
 
-const caseList = ref([
+interface CaseModel {
+  id: string
+  background: string
+  points: string[]
+  summary: string
+  questions: Array<{ title: string; score: number }>
+  analysis?: string
+}
+
+const defaultCases: CaseModel[] = [
   {
     id: '1',
-    background: '某公司承接了一个信息化集成项目，项目预算500万元，工期6个月。项目经理小李在项目启动后，制定了详细的项目计划，但在执行过程中发现：',
+    background: '某公司承接了一个信息化集成项目，项目预算500万元，工期6个月。项目经理在项目启动后，制定了详细的项目计划，但在执行过程中发现：',
     points: [
       '客户频繁变更需求，导致项目范围不断扩大；',
       '团队成员对需求理解不一致，产生严重返工；',
       '进度已经延误2周，成本超支10%。',
     ],
-    summary: '小李认为主要原因是需求管理不当，需要重新梳理项目范围管理流程。',
+    summary: '项目经理认为主要原因是需求管理不当，需要重新梳理项目范围与变更管理流程。',
     questions: [
       { title: '请指出该项目在项目范围管理方面存在哪些问题？', score: 10 },
-      { title: '针对上述问题，请给出具体的改进建议。', score: 10 },
+      { title: '针对上述问题，请给出具体的改进建议与应对措施。', score: 10 },
     ],
+    analysis: '【参考要点】1. 缺少规范的变更控制流程（CCB审批机制缺失）；2. 范围说明书定义不清晰；3. 需求跟踪矩阵缺失；4. 应对客户做好需求基线控制。',
   },
-])
+]
 
-const currentCase = computed(() => caseList.value[currentCaseIdx.value])
+const caseList = ref<CaseModel[]>(defaultCases)
+
+const currentCase = computed<CaseModel>(() => {
+  return caseList.value[currentCaseIdx.value] || defaultCases[0]
+})
+
+async function fetchCaseQuestions() {
+  loading.value = true
+  try {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+    const res = await getQuestions({
+      subjectId: subId,
+      type: 'case',
+      count: 10,
+    })
+    if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+      const parsedCases: CaseModel[] = res.data.map((q: Question, idx: number) => {
+        const text = q.title || ''
+        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+        const bg = lines.length > 0 ? lines[0] : text
+        const pts = lines.length > 1 ? lines.slice(1) : ['请结合项目管理知识，分析材料并给出解决方案。']
+        return {
+          id: String(q.id || idx + 1),
+          background: bg,
+          points: pts,
+          summary: '请根据上述实际背景，进行专业分析作答。',
+          questions: [
+            { title: '请指出背景材料中存在的关键问题并说明原因', score: 10 },
+            { title: '针对上述问题，请列出具体的改进措施与解决方案', score: 10 },
+          ],
+          analysis: q.analysis || '【参考解析】详见官方大纲及教材标准考点。',
+        }
+      })
+      caseList.value = parsedCases
+    }
+  } catch {
+    // fallback to default
+  } finally {
+    loading.value = false
+  }
+}
 
 function onSubmit() {
+  const current = currentCase.value
   showDialog({
-    title: '提交成功',
-    message: '【参考要点】1. 缺少规范的变更控制流程；2. 范围说明书定义不清晰；3. 需求跟踪矩阵缺失。已为您记录本次答卷！',
+    title: '作答已提交',
+    message: current.analysis || '【参考要点】1. 缺少规范的变更控制流程；2. 范围说明书定义不清晰；3. 需求跟踪矩阵缺失。已为您记录本次答卷！',
   })
 }
+
+watch(
+  () => subjectStore.currentSubjectId,
+  () => {
+    fetchCaseQuestions()
+  }
+)
+
+onMounted(() => {
+  fetchCaseQuestions()
+})
 </script>
 
 <style scoped lang="scss">

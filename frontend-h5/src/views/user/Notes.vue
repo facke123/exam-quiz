@@ -24,7 +24,7 @@
       >
         <div class="nc-head">
           <span class="nc-tag">考点笔记</span>
-          <span class="nc-time">{{ note.updatedAt }}</span>
+          <span class="nc-time">{{ formatTime(note.updatedAt || note.createdAt) }}</span>
           <span
             class="nc-del"
             @click="onDelete(note.id)"
@@ -63,11 +63,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showConfirmDialog, showToast } from 'vant'
+import { getNotes, deleteNote, type Note } from '@/api/user'
 
 const router = useRouter()
+const list = ref<Note[]>([])
+const loading = ref(false)
 
 function onBack() {
   if (window.history.state?.back) {
@@ -77,30 +80,48 @@ function onBack() {
   }
 }
 
-const list = ref([
-  {
-    id: '1',
-    title: '项目生命周期各阶段资源投入规律',
-    content: '启动阶段资源投入最低，规划阶段逐渐增加，执行阶段达到最高峰（成本与人力最集中），收尾阶段再次下降。谨防混淆重要性与资源投入量！',
-    updatedAt: '今天 10:20',
-  },
-  {
-    id: '2',
-    title: '关键路径法（CPM）总时差计算要点',
-    content: '总时差 = 最迟开始时间 (LS) - 最早开始时间 (ES) = 最迟完成时间 (LF) - 最早完成时间 (EF)。总时差为零的活动构成了关键路径。',
-    updatedAt: '昨天 16:45',
-  },
-])
+function formatTime(t?: string) {
+  if (!t) return '刚刚'
+  try {
+    const d = new Date(t)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return t
+  }
+}
+
+async function fetchNotesList() {
+  loading.value = true
+  try {
+    const res = await getNotes({ page: 1, pageSize: 50 })
+    if (res?.data?.list) {
+      list.value = res.data.list
+    } else if (Array.isArray(res?.data)) {
+      list.value = res.data
+    } else {
+      list.value = []
+    }
+  } catch {
+    list.value = []
+  } finally {
+    loading.value = false
+  }
+}
 
 async function onDelete(id: string) {
   try {
     await showConfirmDialog({ title: '删除笔记', message: '确定要删除这条笔记吗？' })
+    await deleteNote(id)
     list.value = list.value.filter((n) => n.id !== id)
     showToast('已删除')
   } catch {
     // cancel
   }
 }
+
+onMounted(() => {
+  fetchNotesList()
+})
 </script>
 
 <style scoped lang="scss">

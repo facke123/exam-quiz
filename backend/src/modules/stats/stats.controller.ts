@@ -44,6 +44,18 @@ export class StatsController {
     );
   }
 
+  @Get('stats/wrong-distribution')
+  @ApiOperation({ summary: '前台统计 - 章节错题分布' })
+  async getWrongDistribution(
+    @CurrentUser() user: UserPayload,
+    @Query('subjectId') subjectId?: number,
+  ) {
+    return this.statsService.getWrongDistribution(
+      user ? user.id : 1,
+      subjectId ? Number(subjectId) : undefined,
+    );
+  }
+
   // ==================== 后台统计 ====================
 
   @Get(['admin/stats/dashboard', 'stats/admin/dashboard'])

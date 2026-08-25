@@ -150,28 +150,84 @@ export class StatsService {
     subjectId?: number,
   ): Promise<{
     dimension: string;
-    score: number;
+    value: number;
+    score?: number;
+    full: number;
   }[]> {
     const chapters = await this.chapterRepository.find({
-      where: subjectId ? { subjectId } : undefined,
+      where: subjectId ? { subjectId: Number(subjectId) } : undefined,
       take: 6,
+      order: { sort: 'ASC' },
     });
 
-    if (chapters.length > 0) {
-      return chapters.map((c, idx) => ({
-        dimension: c.name,
-        score: [85, 78, 92, 70, 88, 65][idx % 6],
-      }));
+    if (chapters.length === 0) {
+      return [
+        { dimension: '项目管理基础', value: 78, score: 78, full: 100 },
+        { dimension: '项目范围管理', value: 85, score: 85, full: 100 },
+        { dimension: '项目进度管理', value: 52, score: 52, full: 100 },
+        { dimension: '项目成本管理', value: 65, score: 65, full: 100 },
+        { dimension: '项目质量管理', value: 80, score: 80, full: 100 },
+        { dimension: '信息系统安全', value: 70, score: 70, full: 100 },
+      ];
     }
 
-    return [
-      { dimension: '计算机系统基础', score: 85 },
-      { dimension: '软件工程与架构', score: 78 },
-      { dimension: '数据库与SQL', score: 92 },
-      { dimension: '网络与信息安全', score: 70 },
-      { dimension: '数据结构与算法', score: 88 },
-      { dimension: '项目管理与规范', score: 65 },
-    ];
+    // 统计该用户在各章节的做题情况
+    const result: Array<{ dimension: string; value: number; score: number; full: number }> = [];
+    for (const c of chapters) {
+      const qCount = await this.questionRepository.count({
+        where: { chapterId: c.id, status: 'published' },
+      });
+      const wrongCount = await this.wrongQuestionRepository.count({
+        where: { userId, chapterId: c.id },
+      });
+
+      let mastery = 70;
+      if (qCount > 0) {
+        mastery = Math.max(30, Math.min(100, Math.round(((qCount - wrongCount) / qCount) * 100)));
+      }
+      result.push({
+        dimension: c.name.length > 8 ? c.name.slice(0, 7) + '...' : c.name,
+        value: mastery,
+        score: mastery,
+        full: 100,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * 前台统计 - 章节错题分布
+   */
+  async getWrongDistribution(
+    userId: number,
+    subjectId?: number,
+  ): Promise<{ chapter: string; count: number }[]> {
+    const wrongList = await this.wrongQuestionRepository.find({
+      where: {
+        userId,
+        ...(subjectId ? { subjectId: Number(subjectId) } : {}),
+      },
+    });
+
+    if (wrongList.length === 0) {
+      return [];
+    }
+
+    const chapterIds = Array.from(new Set(wrongList.map((w) => w.chapterId).filter(Boolean)));
+    const chapters = chapterIds.length > 0 ? await this.chapterRepository.find({ where: { id: In(chapterIds) } }) : [];
+    const chMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+
+    const countMap: Record<string, number> = {};
+    for (const w of wrongList) {
+      const name = (w.chapterId && chMap.get(Number(w.chapterId))) || '综合考点与历年真题';
+      countMap[name] = (countMap[name] || 0) + (w.wrongCount || 1);
+    }
+
+    return Object.entries(countMap)
+      .map(([chapter, count]) => ({ chapter, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
   }
 
   // ==================== 后台统计 ====================

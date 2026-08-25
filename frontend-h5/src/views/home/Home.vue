@@ -296,29 +296,16 @@
           />
         </svg>
         <div class="radar-info">
-          <div class="item">
+          <div
+            v-for="(r, idx) in radarList.slice(0, 4)"
+            :key="r.dimension || idx"
+            class="item"
+          >
             <div
               class="dot"
-              style="background: #6366f1"
-            />项目管理基础 78%
-          </div>
-          <div class="item">
-            <div
-              class="dot"
-              style="background: #10b981"
-            />项目范围管理 85%
-          </div>
-          <div class="item">
-            <div
-              class="dot"
-              style="background: #f59e0b"
-            />项目进度管理 52%
-          </div>
-          <div class="item">
-            <div
-              class="dot"
-              style="background: #ef4444"
-            />项目成本管理 38%
+              :style="{ background: radarColors[idx % radarColors.length] }"
+            />
+            {{ r.dimension }} {{ r.value || r.score || 70 }}%
           </div>
         </div>
       </div>
@@ -406,12 +393,15 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
-import { getOverview } from '@/api/stats'
+import { getOverview, getRadar } from '@/api/stats'
 import { getBanners, getAnnouncements, getPublicConfig, type BannerItem, type AnnouncementItem } from '@/api/content'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
+
+const radarList = ref<any[]>([])
+const radarColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
 // 全局系统配置（全局统一考试倒计时）
 const globalConfig = ref<Record<string, string>>({
@@ -526,15 +516,22 @@ function handleAnnouncementClick(item?: AnnouncementItem) {
 async function fetchHomeStats() {
   try {
     const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
-    const res = await getOverview(subId)
-    if (res?.data) {
-      stats.todayDone = res.data.todayCount ?? res.data.totalAnswered ?? 0
-      stats.correctRate = res.data.correctRate ?? 0
-      stats.totalQuestions = res.data.totalQuestions || subjectStore.currentSubject?.questionCount || 0
-      reviewCount.value = res.data.totalQuestions || 0
+    const [res, rRes] = await Promise.allSettled([
+      getOverview(subId),
+      getRadar(subId),
+    ])
+    if (res.status === 'fulfilled' && res.value?.data) {
+      const data = res.value.data
+      stats.todayDone = data.todayCount ?? data.totalAnswered ?? 0
+      stats.correctRate = data.correctRate ?? 0
+      stats.totalQuestions = data.totalQuestions || subjectStore.currentSubject?.questionCount || 0
+      reviewCount.value = data.wrongCount || data.totalQuestions || 0
     } else {
       stats.totalQuestions = subjectStore.currentSubject?.questionCount || 0
       reviewCount.value = stats.totalQuestions
+    }
+    if (rRes.status === 'fulfilled' && rRes.value?.data && Array.isArray(rRes.value.data)) {
+      radarList.value = rRes.value.data
     }
   } catch {
     stats.totalQuestions = subjectStore.currentSubject?.questionCount || 0
