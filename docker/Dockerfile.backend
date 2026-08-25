@@ -33,13 +33,15 @@ RUN apk add --no-cache tini curl wget
 
 WORKDIR /app
 
-# 创建非 root 用户
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# 创建非 root 用户并创建持久化上传目录
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+  && mkdir -p /app/uploads \
+  && chown -R appuser:appgroup /app
 
 # 复制编译产物与生产依赖
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
+COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appgroup /app/package.json ./package.json
 
 # 可选: 复制启动脚本
 # COPY docker/start-backend.sh /start.sh

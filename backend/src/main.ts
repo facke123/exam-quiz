@@ -14,11 +14,16 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // 静态资源服务（题目配图、上传文件）
-  const uploadDir = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+  try {
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    app.useStaticAssets(uploadDir, { prefix: '/api/uploads/' });
+    logger.log(`静态上传资源挂载成功: ${uploadDir} -> /api/uploads/`);
+  } catch (err: any) {
+    logger.warn(`静态上传资源目录初始化提示: ${err.message}`);
   }
-  app.useStaticAssets(uploadDir, { prefix: '/api/uploads/' });
 
   // 全局前缀
   app.setGlobalPrefix('api');
