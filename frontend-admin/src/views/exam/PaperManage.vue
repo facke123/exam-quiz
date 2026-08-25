@@ -1274,49 +1274,112 @@ function parseExcelToQuestions(rows: any[]) {
 
 function parseTextToQuestions(rawText: string): number {
   const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const questions: any[] = []
+  const questionsMap = new Map<number, any>()
   let currentQ: any = null
+  let lastSavedNum = 0
+
+  function isAdOrHeader(line: string): boolean {
+    if (/^(?:一、|二、|三、|四、|五、|part\s*\d|section\s*\d)/i.test(line)) return true
+    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
+    if (/^\d{4}\s*年?(?:上|下)半年.*(?:系统集成|信息系统|项目管理|真题|基础知识|综合知识)/i.test(line)) return true
+    if (/^-\(全国卷\)/.test(line)) return true
+    return false
+  }
+
+  function extractQuestionStart(line: string, activeNum: number) {
+    if (isAdOrHeader(line)) return null
+
+    // Pattern 1: (1) ... / （1） ... / [1] ... / 1. ... / 1、 ... / 1． ... / 1 ...
+    const regex1 = /^(?:试题\s*|第\s*)?(?:[\(（\[【]\s*(\d{1,3})\s*[\)）\]】][\s、.．:：\-\—_]?|(\d{1,3})[\s、.．:：\-\—_])\s*(?:【[^】]*】)?\s*(.*)/
+    const m = line.match(regex1)
+    let num: number | null = null
+    let content = ''
+
+    if (m) {
+      num = parseInt(m[1] || m[2], 10)
+      content = (m[3] || '').trim()
+    } else {
+      // Pattern 2: 题干末尾包含 (55) 或开头带空括号 ( )关于... (25)。
+      const m2 = line.match(/^(?:[\(（]\s*[\)）])?\s*(.*[\(（](\d{1,3})[\)）].*)/)
+      if (m2) {
+        const candidateNum = parseInt(m2[2], 10)
+        if (activeNum > 0 && (candidateNum === activeNum + 1 || candidateNum === activeNum + 2)) {
+          num = candidateNum
+          content = m2[1].trim()
+        }
+      }
+    }
+
+    if (num === null) return null
+
+    // 题号序列判断
+    if (activeNum > 0) {
+      if (num > activeNum && num <= activeNum + 3) {
+        return { num, content }
+      }
+      // 允许71-75的双语重现（中文翻译补充）
+      if (num >= 71 && num <= 75 && activeNum >= 71) {
+        return { num, content, isRepeat: true }
+      }
+      return null
+    } else {
+      if (num === 1) return { num, content }
+      return null
+    }
+  }
 
   function saveCurrentQ() {
     if (!currentQ || !currentQ.content) return
     if (!currentQ.answer && currentQ.options.length > 0) {
       currentQ.answer = 'A'
     }
-    questions.push({
-      type: currentQ.type || 'single',
-      content: currentQ.content.trim(),
-      options: currentQ.options,
-      answer: currentQ.answer.trim().toUpperCase(),
-      analysis: currentQ.analysis.trim(),
-      score: 1,
-    })
+    const qNum = currentQ.num || (questionsMap.size + 1)
+    if (questionsMap.has(qNum)) {
+      const existing = questionsMap.get(qNum)
+      if (currentQ.answer) existing.answer = currentQ.answer
+      if (currentQ.analysis) existing.analysis = currentQ.analysis
+      if (currentQ.options && currentQ.options.length >= 2) {
+        if (!existing.options || existing.options.length < 2) {
+          existing.options = currentQ.options
+        }
+      }
+      if (currentQ.content && currentQ.content.length > 5) {
+        if (!existing.content.includes(currentQ.content)) {
+          existing.content += '\n【中文译文】' + currentQ.content
+        }
+      }
+    } else {
+      questionsMap.set(qNum, {
+        num: qNum,
+        type: currentQ.type || 'single',
+        content: currentQ.content.trim(),
+        options: currentQ.options,
+        answer: currentQ.answer.trim().toUpperCase(),
+        analysis: currentQ.analysis.trim(),
+        score: 1,
+      })
+      lastSavedNum = qNum
+    }
     currentQ = null
   }
 
-  function isQuestionStart(line: string): 'start' | 'stop' | 'none' {
-    if (/^(?:一、|二、|三、|四、|五、|part\s*\d|section\s*\d)/i.test(line)) {
-      return 'none'
-    }
-    if (/^(?:试题\s*|第\s*)?(\d+)[\s、.．:：\-\—_]/.test(line)) {
-      return 'start'
-    }
-    return 'none'
-  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (isAdOrHeader(line)) continue
 
-  for (const line of lines) {
-    const qStatus = isQuestionStart(line)
-    if (qStatus === 'start') {
+    const activeNum = currentQ ? currentQ.num : lastSavedNum
+    const qStart = extractQuestionStart(line, activeNum)
+    if (qStart) {
       saveCurrentQ()
-      const m = line.match(/^(?:试题\s*|第\s*)?(\d+)(?:\s*题)?[\s、.．:：\-\—_]*(?:【[^】]*】)?\s*(.*)/)
-      const titleContent = m ? m[2] : line
       let type = 'single'
-      if (titleContent.includes('多选')) type = 'multiple'
-      else if (titleContent.includes('判断')) type = 'judge'
-      else if (titleContent.includes('问答') || titleContent.includes('案例')) type = 'essay'
+      if (qStart.content.includes('多选')) type = 'multiple'
+      else if (qStart.content.includes('判断')) type = 'judge'
+      else if (qStart.content.includes('问答') || qStart.content.includes('案例')) type = 'essay'
 
       currentQ = {
+        num: qStart.num,
         type,
-        content: titleContent.replace(/【(?:单选|多选|判断|问答)题?】/g, '').trim(),
+        content: qStart.content.replace(/【(?:单选|多选|判断|问答)题?】/g, '').trim(),
         options: [],
         answer: '',
         analysis: '',
@@ -1327,26 +1390,46 @@ function parseTextToQuestions(rawText: string): number {
 
     if (!currentQ) continue
 
-    const ansMatch = line.match(/^【?(?:参考)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
+    // 答案识别
+    const ansMatch = line.match(/^【?(?:参考|正确)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
     if (ansMatch) {
       currentQ.state = 'answer'
       currentQ.answer = ansMatch[1].trim().toUpperCase()
       continue
     }
 
-    const anaMatch = line.match(/^【?(?:试题)?解析】?[:：\s]*(.*)/i)
+    // 解析识别
+    const anaMatch = line.match(/^【?(?:答案|试题)?解析】?[:：\s]*(.*)/i)
     if (anaMatch) {
       currentQ.state = 'analysis'
       currentQ.analysis = anaMatch[1].trim()
       continue
     }
 
-    if (currentQ.state === 'analysis' || (currentQ.answer && currentQ.options.length > 0)) {
+    // 如果处于解析阶段
+    if (currentQ.state === 'analysis') {
       currentQ.analysis += (currentQ.analysis ? '\n' : '') + line
       continue
     }
 
-    const optMatch = line.match(/^([A-Ea-e])[.、．\s]\s*(.+)/)
+    // 单行多个选项: A. xxx B. yyy C. zzz D. kkk
+    if (/[A-Da-d][.、．:：\s].+[B-Eb-e][.、．:：\s]/.test(line)) {
+      const inlineRegex = /([A-Ga-g])[.、．:：\s]\s*([^A-Ga-g]+)/g
+      let m: RegExpExecArray | null
+      let count = 0
+      while ((m = inlineRegex.exec(line)) !== null) {
+        count++
+        const key = m[1].toUpperCase()
+        currentQ.options.push({ key, label: key, content: m[2].trim() })
+      }
+      if (count > 0) {
+        currentQ.state = 'option'
+        continue
+      }
+    }
+
+    // 独立选项: A. / A、 / A． / (A) / （A） / A: / A
+    const optMatch = line.match(/^[\(（]?([A-Ga-g])[\)）]?\s*[.、．:：\s]\s*(.*)/)
     if (optMatch) {
       currentQ.state = 'option'
       const key = optMatch[1].toUpperCase()
@@ -1354,12 +1437,21 @@ function parseTextToQuestions(rawText: string): number {
       continue
     }
 
+    // 选项换行追加
+    if (currentQ.state === 'option' && currentQ.options.length > 0) {
+      const lastOpt = currentQ.options[currentQ.options.length - 1]
+      lastOpt.content += (lastOpt.content ? '\n' : '') + line
+      continue
+    }
+
+    // 题干多行追加
     if (currentQ.state === 'stem') {
       currentQ.content += (currentQ.content ? '\n' : '') + line
     }
   }
 
   saveCurrentQ()
+  const questions = Array.from(questionsMap.values())
   parsedQuestions.value = questions
   if (questions.length > 0) {
     ElMessage.success(`试卷解析完毕，共提取出 ${questions.length} 道试题！`)

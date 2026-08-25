@@ -623,145 +623,159 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
   const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
   const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
 
-  let explicitPrefixCount = 0
-  for (const line of lines) {
-    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(line)) {
-      explicitPrefixCount++
-    }
-  }
-  const useExplicitOnly = explicitPrefixCount >= 10
-
-  const parsedQuestions: any[] = []
-  let currentChapter = defaultChapter
-  let currentTypeHint = 'single'
+  const questionsMap = new Map<number, any>()
   let currentQ: any = null
+  let lastSavedNum = 0
+  let currentChapter = defaultChapter
 
-  const extractOptionsFromLine = (line: string) => {
-    const optRegex = /(?:^|\s+|[\t\u3000]+)(?:([A-Ea-e])[.、．\s]|[（(]([A-Ea-e])[）)])\s*/g
-    const matches: Array<{ key: string; startIndex: number; contentStart: number }> = []
-    let m: RegExpExecArray | null
-    while ((m = optRegex.exec(line)) !== null) {
-      matches.push({
-        key: (m[1] || m[2]).toUpperCase(),
-        startIndex: m.index,
-        contentStart: optRegex.lastIndex,
-      })
-    }
-    if (matches.length === 0) return null
-
-    const opts: Array<{ key: string; label: string; content: string }> = []
-    for (let i = 0; i < matches.length; i++) {
-      const curr = matches[i]
-      const nextStart = i + 1 < matches.length ? matches[i + 1].startIndex : line.length
-      const content = line.substring(curr.contentStart, nextStart).trim()
-      opts.push({
-        key: curr.key,
-        label: curr.key,
-        content,
-      })
-    }
-    return opts
+  function isAdOrHeader(line: string): boolean {
+    if (/^(?:一、|二、|三、|四、|五、|part\s*\d|section\s*\d)/i.test(line)) return true
+    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
+    if (/^\d{4}\s*年?(?:上|下)半年.*(?:系统集成|信息系统|项目管理|真题|基础知识|综合知识)/i.test(line)) return true
+    if (/^-\(全国卷\)/.test(line)) return true
+    return false
   }
 
-  const finalizeQuestion = (q: any) => {
-    if (!q) return
-    let content = q.stemLines.join('\n').trim()
-    content = content.replace(/^(?:【?(?:单选|多选|判断|问答|案例)题?】?\s*)+/i, '')
-    content = content.replace(/^(?:试题\s*|第\s*)?\d+(?:\s*题)?[\s、.．:：\-\—_]*(?:【[^】]*】)?\s*/i, '')
-    content = content.replace(/^[（(]\d+[）)][.、\s]?\s*/, '')
+  function extractQuestionStart(line: string, activeNum: number) {
+    if (isAdOrHeader(line)) return null
 
-    if (!content) return
+    // Pattern 1: (1) ... / （1） ... / [1] ... / 1. ... / 1、 ... / 1． ... / 1 ...
+    const regex1 = /^(?:试题\s*|第\s*)?(?:[\(（\[【]\s*(\d{1,3})\s*[\)）\]】][\s、.．:：\-\—_]?|(\d{1,3})[\s、.．:：\-\—_])\s*(?:【[^】]*】)?\s*(.*)/
+    const m = line.match(regex1)
+    let num: number | null = null
+    let content = ''
 
-    let type = q.type || currentTypeHint
-    const optCount = q.options.length
-    if (optCount >= 2) {
-      if (q.answer && q.answer.length > 1 && /^[A-E]+$/.test(q.answer)) {
-        type = 'multiple'
-      } else {
-        type = 'single'
+    if (m) {
+      num = parseInt(m[1] || m[2], 10)
+      content = (m[3] || '').trim()
+    } else {
+      // Pattern 2: 题干末尾包含 (55) 或开头带空括号 ( )关于... (25)。
+      const m2 = line.match(/^(?:[\(（]\s*[\)）])?\s*(.*[\(（](\d{1,3})[\)）].*)/)
+      if (m2) {
+        const candidateNum = parseInt(m2[2], 10)
+        if (activeNum > 0 && (candidateNum === activeNum + 1 || candidateNum === activeNum + 2)) {
+          num = candidateNum
+          content = m2[1].trim()
+        }
       }
-    } else if (/正确|错误|对|错|√|×/i.test(q.answer) || /判断/i.test(content) || /判断/i.test(q.rawType)) {
-      type = 'judge'
-    } else if (optCount === 0 && (q.rawType === 'essay' || (q.answer && q.answer.length > 8) || /简述|论述|简答|案例|分析/i.test(content))) {
-      type = 'essay'
     }
 
-    const typeTextMap: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', essay: '问答' }
+    if (num === null) return null
 
-    let valid = true
-    let errorMsg = ''
-    if (!content || content.length < 2) {
-      valid = false
-      errorMsg = '题干不能为空'
-    } else if (type === 'single' && q.options.length < 2) {
-      valid = false
-      errorMsg = '单选缺少选项'
-    } else if (!q.answer) {
-      valid = false
-      errorMsg = '缺少正确答案'
+    // 题号序列判断
+    if (activeNum > 0) {
+      if (num > activeNum && num <= activeNum + 3) {
+        return { num, content }
+      }
+      if (num >= 71 && num <= 75 && activeNum >= 71) {
+        return { num, content, isRepeat: true }
+      }
+      return null
+    } else {
+      if (num === 1) return { num, content }
+      return null
     }
+  }
 
-    parsedQuestions.push({
-      rowNo: parsedQuestions.length + 1,
-      type,
-      typeText: typeTextMap[type] || '单选',
-      content,
-      title: content,
-      options: q.options,
-      answer: q.answer || (type === 'essay' ? '详见解析' : 'A'),
-      analysis: q.analysisLines.join('\n').trim() || '详见教材对应核心考点解析。',
-      chapter: q.chapter || currentChapter,
-      chapterName: q.chapter || currentChapter,
-      difficulty: 3,
-      valid,
-      errorMsg,
-      isDuplicate: false,
-    })
+  function saveCurrentQ() {
+    if (!currentQ || !currentQ.content) return
+    if (!currentQ.answer && currentQ.options.length > 0) {
+      currentQ.answer = 'A'
+    }
+    const qNum = currentQ.num || (questionsMap.size + 1)
+    if (questionsMap.has(qNum)) {
+      const existing = questionsMap.get(qNum)
+      if (currentQ.answer) existing.answer = currentQ.answer
+      if (currentQ.analysis) existing.analysis = currentQ.analysis
+      if (currentQ.options && currentQ.options.length >= 2) {
+        if (!existing.options || existing.options.length < 2) {
+          existing.options = currentQ.options
+        }
+      }
+      if (currentQ.content && currentQ.content.length > 5) {
+        if (!existing.content.includes(currentQ.content)) {
+          existing.content += '\n【中文译文】' + currentQ.content
+          existing.title = existing.content
+        }
+      }
+    } else {
+      const optCount = currentQ.options.length
+      let type = currentQ.type || 'single'
+      if (optCount >= 2) {
+        if (currentQ.answer && currentQ.answer.length > 1 && /^[A-E]+$/.test(currentQ.answer)) {
+          type = 'multiple'
+        } else {
+          type = 'single'
+        }
+      } else if (/正确|错误|对|错|√|×/i.test(currentQ.answer) || /判断/i.test(currentQ.content)) {
+        type = 'judge'
+      } else if (optCount === 0 && ((currentQ.answer && currentQ.answer.length > 8) || /简述|论述|简答|案例|分析/i.test(currentQ.content))) {
+        type = 'essay'
+      }
+
+      const typeTextMap: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', essay: '问答' }
+
+      let valid = true
+      let errorMsg = ''
+      if (!currentQ.content || currentQ.content.length < 2) {
+        valid = false
+        errorMsg = '题干不能为空'
+      } else if (type === 'single' && currentQ.options.length < 2) {
+        valid = false
+        errorMsg = '单选缺少选项'
+      } else if (!currentQ.answer) {
+        valid = false
+        errorMsg = '缺少正确答案'
+      }
+
+      questionsMap.set(qNum, {
+        rowNo: questionsMap.size + 1,
+        num: qNum,
+        type,
+        typeText: typeTextMap[type] || '单选',
+        content: currentQ.content.trim(),
+        title: currentQ.content.trim(),
+        options: currentQ.options,
+        answer: currentQ.answer.trim().toUpperCase() || (type === 'essay' ? '详见解析' : 'A'),
+        analysis: currentQ.analysis.trim() || '详见教材对应核心考点解析。',
+        chapter: currentQ.chapter || currentChapter,
+        chapterName: currentQ.chapter || currentChapter,
+        difficulty: 3,
+        valid,
+        errorMsg,
+        isDuplicate: false,
+      })
+      lastSavedNum = qNum
+    }
+    currentQ = null
   }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+    if (isAdOrHeader(line)) continue
 
     if (/^第\s*\d+\s*章\s+[^\n]+/i.test(line) || /^第[一二三四五六七八九十百]+章\s+[^\n]+/i.test(line)) {
       currentChapter = line.replace(/\s+/g, ' ')
       continue
     }
 
-    if (/^【?(?:单选|多选|判断|问答|简答|案例)题?】?$/i.test(line)) {
-      if (/多选/i.test(line)) currentTypeHint = 'multiple'
-      else if (/判断/i.test(line)) currentTypeHint = 'judge'
-      else if (/问答|简答|案例/i.test(line)) currentTypeHint = 'essay'
-      else currentTypeHint = 'single'
-      continue
-    }
+    const activeNum = currentQ ? currentQ.num : lastSavedNum
+    const qStart = extractQuestionStart(line, activeNum)
+    if (qStart) {
+      saveCurrentQ()
+      let type = 'single'
+      if (qStart.content.includes('多选')) type = 'multiple'
+      else if (qStart.content.includes('判断')) type = 'judge'
+      else if (qStart.content.includes('问答') || qStart.content.includes('案例')) type = 'essay'
 
-    // 遇到下午案例大题
-    if (/案例分析试题|下午试题|【\d+年\d+月试题[一二三四五六七八九十]】/.test(line)) {
-      finalizeQuestion(currentQ)
-      currentQ = null
-      break
-    }
-
-    // 识别新试题
-    let isNewQuestionStart = false
-    if (/^(?:试题\s*\d+|第\s*\d+\s*题)/i.test(line)) {
-      isNewQuestionStart = true
-    } else if (!useExplicitOnly && /^\d{1,3}[.、．\s]\s*\S+/i.test(line)) {
-      if (!currentQ || (currentQ.state !== 'stem' && currentQ.state !== 'analysis') || currentQ.answer) {
-        isNewQuestionStart = true
-      }
-    }
-
-    if (isNewQuestionStart) {
-      finalizeQuestion(currentQ)
       currentQ = {
-        stemLines: [line],
+        num: qStart.num,
+        type,
+        content: qStart.content.replace(/【(?:单选|多选|判断|问答)题?】/g, '').trim(),
         options: [],
         answer: '',
-        analysisLines: [],
+        analysis: '',
         chapter: currentChapter,
-        type: currentTypeHint,
-        rawType: currentTypeHint,
         state: 'stem',
       }
       continue
@@ -769,8 +783,8 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
 
     if (!currentQ) continue
 
-    const ansMatch = line.match(/^【?(?:正确答案|参考答案|答案)】?[：:]\s*(.+)/i) ||
-                     line.match(/^【答案】\s*(.+)/i)
+    // 答案识别
+    const ansMatch = line.match(/^【?(?:参考|正确)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
     if (ansMatch) {
       currentQ.state = 'answer'
       let rawAns = ansMatch[1].trim()
@@ -780,35 +794,60 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       continue
     }
 
-    const anaMatch = line.match(/^【?(?:考点分析|试题解析|解析说明|解析)】?[：:]\s*(.*)/i) ||
-                     line.match(/^【解析】\s*(.*)/i)
+    // 解析识别
+    const anaMatch = line.match(/^【?(?:答案|试题|考点)?解析】?[:：\s]*(.*)/i)
     if (anaMatch) {
       currentQ.state = 'analysis'
-      if (anaMatch[1].trim()) {
-        currentQ.analysisLines.push(anaMatch[1].trim())
+      currentQ.analysis = anaMatch[1].trim()
+      continue
+    }
+
+    // 如果处于解析阶段
+    if (currentQ.state === 'analysis') {
+      currentQ.analysis += (currentQ.analysis ? '\n' : '') + line
+      continue
+    }
+
+    // 单行多个选项: A. xxx B. yyy C. zzz D. kkk
+    if (/[A-Da-d][.、．:：\s].+[B-Eb-e][.、．:：\s]/.test(line)) {
+      const inlineRegex = /([A-Ga-g])[.、．:：\s]\s*([^A-Ga-g]+)/g
+      let m: RegExpExecArray | null
+      let count = 0
+      while ((m = inlineRegex.exec(line)) !== null) {
+        count++
+        const key = m[1].toUpperCase()
+        currentQ.options.push({ key, label: key, content: m[2].trim() })
       }
-      continue
+      if (count > 0) {
+        currentQ.state = 'option'
+        continue
+      }
     }
 
-    if (currentQ.state === 'analysis' || (currentQ.answer && currentQ.options.length > 0)) {
-      currentQ.analysisLines.push(line)
-      continue
-    }
-
-    const lineOptions = extractOptionsFromLine(line)
-    if (lineOptions && lineOptions.length > 0) {
+    // 独立选项: A. / A、 / A． / (A) / （A） / A: / A
+    const optMatch = line.match(/^[\(（]?([A-Ga-g])[\)）]?\s*[.、．:：\s]\s*(.*)/)
+    if (optMatch) {
       currentQ.state = 'option'
-      currentQ.options.push(...lineOptions)
+      const key = optMatch[1].toUpperCase()
+      currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
       continue
     }
 
+    // 选项换行追加
+    if (currentQ.state === 'option' && currentQ.options.length > 0) {
+      const lastOpt = currentQ.options[currentQ.options.length - 1]
+      lastOpt.content += (lastOpt.content ? '\n' : '') + line
+      continue
+    }
+
+    // 题干多行追加
     if (currentQ.state === 'stem') {
-      currentQ.stemLines.push(line)
+      currentQ.content += (currentQ.content ? '\n' : '') + line
     }
   }
 
-  finalizeQuestion(currentQ)
-  return parsedQuestions
+  saveCurrentQ()
+  return Array.from(questionsMap.values())
 }
 
 // 解析 Word / 纯文本文件
