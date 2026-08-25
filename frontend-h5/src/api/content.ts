@@ -24,7 +24,7 @@ export interface AnnouncementItem {
  */
 export function getBanners() {
   return request<BannerItem[]>({
-    url: '/api/content/banners',
+    url: '/content/banners',
     method: 'get',
   })
 }
@@ -34,7 +34,7 @@ export function getBanners() {
  */
 export function getAnnouncements() {
   return request<AnnouncementItem[]>({
-    url: '/api/content/announcements',
+    url: '/content/announcements',
     method: 'get',
   })
 }
@@ -44,7 +44,7 @@ export function getAnnouncements() {
  */
 export function getAnnouncementDetail(id: number) {
   return request<AnnouncementItem>({
-    url: `/api/content/announcements/${id}`,
+    url: `/content/announcements/${id}`,
     method: 'get',
   })
 }
