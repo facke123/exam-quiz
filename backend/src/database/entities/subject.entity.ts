@@ -39,22 +39,6 @@ export class Subject {
   })
   status: number;
 
-  @Column({
-    name: 'exam_date',
-    length: 50,
-    nullable: true,
-    comment: '考试日期时间',
-  })
-  examDate: string;
-
-  @Column({
-    name: 'exam_title',
-    length: 100,
-    nullable: true,
-    comment: '考试名称/副标题',
-  })
-  examTitle: string;
-
   @CreateDateColumn({ comment: '创建时间' })
   createdAt: Date;
 
