@@ -478,7 +478,7 @@ export class ExamService implements OnModuleInit {
   }
 
   /**
-   * 获取试卷详情
+   * 获取试卷详情（含完整题目列表，用于全景预览与编辑）
    */
   async getPaper(id: number): Promise<any> {
     const paper = await this.paperRepository.findOne({ where: { id } });
@@ -486,10 +486,47 @@ export class ExamService implements OnModuleInit {
       throw new NotFoundException('试卷不存在');
     }
     const subject = await this.subjectRepository.findOne({ where: { id: paper.subjectId } });
+
+    let questions: any[] = [];
+    if (paper.questionIds && Array.isArray(paper.questionIds) && paper.questionIds.length > 0) {
+      const qList = await this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.id IN (:...ids)', { ids: paper.questionIds })
+        .getMany();
+
+      const qMap = new Map(qList.map((q) => [Number(q.id), q]));
+      questions = paper.questionIds
+        .map((qid) => {
+          const found = qMap.get(Number(qid));
+          if (!found) return null;
+          let options = found.options;
+          if (typeof options === 'string') {
+            try {
+              options = JSON.parse(options);
+            } catch {
+              options = [];
+            }
+          }
+          return {
+            ...found,
+            id: Number(found.id),
+            options: options || [],
+            score: (found as any).score || 1,
+          };
+        })
+        .filter(Boolean);
+    }
+
     return {
       ...paper,
       id: Number(paper.id),
-      subjectName: subject ? subject.name : '',
+      subjectId: Number(paper.subjectId),
+      subjectName: subject ? subject.name : '软考科目',
+      questionCount: (paper.questionIds && paper.questionIds.length) || questions.length,
+      totalTime: paper.duration,
+      duration: paper.duration,
+      passScore: Math.round(paper.totalScore * 0.6),
+      questions,
     };
   }
 
@@ -514,13 +551,22 @@ export class ExamService implements OnModuleInit {
    * 更新试卷
    */
   async updatePaper(id: number, dto: Partial<CreatePaperDto> | any): Promise<Paper> {
-    const paper = await this.getPaper(id);
+    const paper = await this.paperRepository.findOne({ where: { id } });
+    if (!paper) {
+      throw new NotFoundException('试卷不存在');
+    }
     if (dto.name !== undefined) paper.name = dto.name;
+    if (dto.subjectId !== undefined) paper.subjectId = dto.subjectId;
     if (dto.type !== undefined) paper.type = dto.type;
     if (dto.totalTime !== undefined) paper.duration = dto.totalTime;
     if (dto.duration !== undefined) paper.duration = dto.duration;
     if (dto.totalScore !== undefined) paper.totalScore = dto.totalScore;
-    if (dto.questionIds !== undefined) paper.questionIds = dto.questionIds;
+    if (dto.questionIds !== undefined) {
+      paper.questionIds = dto.questionIds;
+      if (dto.totalScore === undefined) {
+        paper.totalScore = dto.questionIds.length || paper.totalScore;
+      }
+    }
     if (dto.status !== undefined) paper.status = dto.status === 0 || dto.status === 'draft' ? 0 : 1;
     return this.paperRepository.save(paper);
   }
