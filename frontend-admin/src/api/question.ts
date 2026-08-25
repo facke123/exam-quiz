@@ -122,6 +122,18 @@ export function importQuestions(data: any) {
   })
 }
 
+// 上传题目配图
+export function uploadQuestionImage(file: File, purpose = 'questions') {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request<{ url: string; filename: string; size: number }>({
+    url: `/upload/image?purpose=${purpose}`,
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
 // 导出题目
 export function exportQuestions(params: QuestionQuery) {
   return request({

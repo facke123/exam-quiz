@@ -136,11 +136,15 @@
         <el-table-column label="题干内容（点击预览）" min-width="280">
           <template #default="{ row }">
             <div
-              class="stem-text clickable"
-              :title="row.content || row.title"
+              class="stem-text-cell clickable"
               @click="handlePreview(row)"
             >
-              {{ row.content || row.title }}
+              <span v-if="hasImageInQuestion(row)" class="has-img-badge" title="本题包含图片/图表">
+                🖼️ 图
+              </span>
+              <span class="stem-plain-text" :title="getPlainText(row.content || row.title)">
+                {{ getPlainText(row.content || row.title) }}
+              </span>
             </div>
           </template>
         </el-table-column>
@@ -227,11 +231,11 @@
       </div>
     </div>
 
-    <!-- 题目全真预览与质量诊断抽屉 -->
+    <!-- 题目全真预览与质量诊断抽屉（支持图文多媒体渲染） -->
     <el-drawer
       v-model="previewDrawerVisible"
       title="题目详情预览与质量体检"
-      size="720px"
+      size="760px"
       direction="rtl"
       destroy-on-close
       class="question-preview-drawer"
@@ -294,7 +298,7 @@
               <span class="c-val">
                 {{
                   currentPreviewQuality.optionCount
-                    ? `${currentPreviewQuality.optionCount} 个选项${currentPreviewQuality.optionCount > 4 ? '（选项冗余过多）' : ''}`
+                    ? `${currentPreviewQuality.optionCount} 个选项${currentPreviewQuality.optionCount > 4 ? '（选项冗余）' : ''}`
                     : (['single', 'multiple'].includes(currentPreviewQuestion.type) ? '缺失选项' : '主观题型')
                 }}
               </span>
@@ -348,11 +352,14 @@
           </div>
         </div>
 
-        <!-- 题目全真排版展示区 -->
+        <!-- 题目全真排版展示区（支持图文渲染） -->
         <div class="paper-simulator-box">
           <div class="sim-stem-title">
             <span class="stem-badge">{{ typeMap[currentPreviewQuestion.type] || '单选题' }}</span>
-            <div class="stem-text-full">{{ currentPreviewQuestion.content || currentPreviewQuestion.title }}</div>
+            <div
+              class="stem-text-full rich-content-render"
+              v-html="renderRichContent(currentPreviewQuestion.content || currentPreviewQuestion.title)"
+            />
           </div>
 
           <!-- 选项列表 -->
@@ -366,7 +373,10 @@
               }"
             >
               <div class="opt-prefix">{{ opt.key }}</div>
-              <div class="opt-text">{{ opt.content }}</div>
+              <div
+                class="opt-text rich-content-render"
+                v-html="renderRichContent(opt.content)"
+              />
               <div v-if="isOptionCorrect(opt.key, currentPreviewQuestion.answer)" class="opt-correct-badge">
                 ✔️ 正确答案
               </div>
@@ -384,9 +394,11 @@
               <div class="ana-header">
                 <span class="tag-bold">💡 【试题解析 / 考点说明】</span>
               </div>
-              <div v-if="currentPreviewQuestion.analysis" class="ana-content">
-                {{ currentPreviewQuestion.analysis }}
-              </div>
+              <div
+                v-if="currentPreviewQuestion.analysis"
+                class="ana-content rich-content-render"
+                v-html="renderRichContent(currentPreviewQuestion.analysis)"
+              />
               <div v-else class="ana-empty">
                 ⚠️ 本题暂无官方解析，建议点击下方【编辑此题】进行补充完善。
               </div>
@@ -418,11 +430,11 @@
       </template>
     </el-drawer>
 
-    <!-- 题目新增/编辑弹窗 -->
+    <!-- 题目新增/编辑弹窗（支持图片上传与富文本插入） -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogType === 'create' ? '新增题目' : '编辑题目'"
-      width="820px"
+      width="840px"
       destroy-on-close
     >
       <!-- 异常检测提示与一键修复按钮 -->
@@ -498,19 +510,55 @@
           </el-col>
         </el-row>
 
+        <!-- 题干内容（支持文本、公式、配图上传） -->
         <el-form-item label="题干内容" required>
           <div style="width: 100%;">
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
-              <el-button type="primary" link size="small" @click="autoCleanStem">
-                ✨ 智能清洗题干前缀残留
-              </el-button>
+            <div class="field-actions-bar">
+              <span class="field-hint">支持 LaTeX 数学公式，支持插入图表配图</span>
+              <div class="field-btns">
+                <el-upload
+                  :show-file-list="false"
+                  :before-upload="handleUploadStemImage"
+                  accept="image/*"
+                >
+                  <el-button type="success" link size="small">
+                    🖼️ 上传题干配图
+                  </el-button>
+                </el-upload>
+                <el-button type="primary" link size="small" @click="autoCleanStem">
+                  ✨ 智能清洗题干前缀
+                </el-button>
+              </div>
             </div>
             <el-input
               v-model="formData.content"
               type="textarea"
               :rows="4"
-              placeholder="请输入题目描述，支持 LaTeX 数学公式，如 $E=mc^2$"
+              placeholder="请输入题目描述，如需插入图片可点击右上角「上传题干配图」或直接粘贴 Markdown 图片 ![配图](url)"
             />
+
+            <!-- 题干中包含的图片缩略预览 -->
+            <div v-if="extractImagesFromText(formData.content).length > 0" class="img-preview-chips">
+              <div class="chip-title">题干已包含图片 ({{ extractImagesFromText(formData.content).length }})：</div>
+              <div class="chip-list">
+                <div
+                  v-for="(imgSrc, i) in extractImagesFromText(formData.content)"
+                  :key="i"
+                  class="img-thumb-item"
+                >
+                  <img :src="imgSrc" class="thumb-img" />
+                  <el-button
+                    type="danger"
+                    size="small"
+                    link
+                    title="从题干中移除该图片"
+                    @click="removeImageFromContent(imgSrc)"
+                  >
+                    ✕ 移除
+                  </el-button>
+                </div>
+              </div>
+            </div>
           </div>
         </el-form-item>
 
@@ -546,9 +594,18 @@
             />
             <el-input
               v-model="opt.content"
-              placeholder="请输入选项描述..."
+              placeholder="请输入选项描述或图片链接..."
               style="flex: 1"
             />
+            <el-upload
+              :show-file-list="false"
+              :before-upload="(file: File) => handleUploadOptionImage(file, idx)"
+              accept="image/*"
+            >
+              <el-button link size="small" title="为此选项上传配图">
+                🖼️
+              </el-button>
+            </el-upload>
             <el-checkbox
               v-if="formData.type === 'multiple'"
               v-model="opt.isAnswer"
@@ -584,13 +641,51 @@
           />
         </el-form-item>
 
+        <!-- 考点解析 -->
         <el-form-item label="解析内容">
-          <el-input
-            v-model="formData.analysis"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入官方答案解析..."
-          />
+          <div style="width: 100%;">
+            <div class="field-actions-bar">
+              <span class="field-hint">官方权威解析与考点扩展说明</span>
+              <el-upload
+                :show-file-list="false"
+                :before-upload="handleUploadAnalysisImage"
+                accept="image/*"
+              >
+                <el-button type="success" link size="small">
+                  🖼️ 上传解析配图
+                </el-button>
+              </el-upload>
+            </div>
+            <el-input
+              v-model="formData.analysis"
+              type="textarea"
+              :rows="3"
+              placeholder="请输入官方答案解析，支持上传图表..."
+            />
+
+            <!-- 解析图片缩略预览 -->
+            <div v-if="extractImagesFromText(formData.analysis).length > 0" class="img-preview-chips">
+              <div class="chip-title">解析已包含图片 ({{ extractImagesFromText(formData.analysis).length }})：</div>
+              <div class="chip-list">
+                <div
+                  v-for="(imgSrc, i) in extractImagesFromText(formData.analysis)"
+                  :key="i"
+                  class="img-thumb-item"
+                >
+                  <img :src="imgSrc" class="thumb-img" />
+                  <el-button
+                    type="danger"
+                    size="small"
+                    link
+                    title="从解析中移除该图片"
+                    @click="removeImageFromAnalysis(imgSrc)"
+                  >
+                    ✕ 移除
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
         </el-form-item>
 
         <el-form-item label="题目来源">
@@ -618,9 +713,11 @@ import {
   deleteQuestion,
   batchDeleteQuestions,
   exportQuestions,
+  uploadQuestionImage,
 } from '@/api/question'
 import { getAllSubjects, getChapterTree } from '@/api/exam'
 import { downloadBlob } from '@/utils/export'
+import { renderRichContent, extractImagesFromText } from '@/utils/richText'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -688,6 +785,31 @@ const formData = reactive<any>({
   analysis: '',
   source: '历年真题',
 })
+
+// 判断题目中是否包含图片
+function hasImageInQuestion(row: any): boolean {
+  if (!row) return false
+  const content = row.content || row.title || ''
+  const analysis = row.analysis || ''
+  if (content.includes('![') || content.includes('<img') || content.includes('data:image/')) return true
+  if (analysis.includes('![') || analysis.includes('<img') || analysis.includes('data:image/')) return true
+  if (Array.isArray(row.options)) {
+    return row.options.some((o: any) => {
+      const c = typeof o === 'string' ? o : o.content || o.text || ''
+      return c.includes('![') || c.includes('<img') || c.includes('data:image/')
+    })
+  }
+  return false
+}
+
+function getPlainText(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/!\[.*?\]\(.*?\)/g, '[图片]')
+    .replace(/<img[^>]*>/gi, '[图片]')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+}
 
 // 题目质量体检算法
 function checkQuestionQuality(row: any) {
@@ -801,6 +923,70 @@ function isOptionCorrect(key: string, answer?: string) {
   const cleanAns = String(answer).trim().toUpperCase()
   const cleanKey = String(key).trim().toUpperCase()
   return cleanAns.includes(cleanKey)
+}
+
+// 题干配图上传处理
+async function handleUploadStemImage(file: File) {
+  try {
+    ElMessage.info('正在上传图片...')
+    const res = await uploadQuestionImage(file, 'stem')
+    if (res?.data?.url) {
+      const imgMd = `\n![配图](${res.data.url})\n`
+      formData.content = (formData.content || '').trim() + imgMd
+      ElMessage.success('题干配图上传成功！已自动插入题干')
+    }
+  } catch (err: any) {
+    ElMessage.error(`图片上传失败: ${err.message || '网络异常'}`)
+  }
+  return false
+}
+
+// 解析配图上传处理
+async function handleUploadAnalysisImage(file: File) {
+  try {
+    ElMessage.info('正在上传图片...')
+    const res = await uploadQuestionImage(file, 'analysis')
+    if (res?.data?.url) {
+      const imgMd = `\n![解析图](${res.data.url})\n`
+      formData.analysis = (formData.analysis || '').trim() + imgMd
+      ElMessage.success('解析配图上传成功！已自动插入解析')
+    }
+  } catch (err: any) {
+    ElMessage.error(`图片上传失败: ${err.message || '网络异常'}`)
+  }
+  return false
+}
+
+// 选项配图上传处理
+async function handleUploadOptionImage(file: File, optIdx: number) {
+  try {
+    ElMessage.info('正在上传选项配图...')
+    const res = await uploadQuestionImage(file, 'option')
+    if (res?.data?.url && formData.options[optIdx]) {
+      const imgMd = `![选项图](${res.data.url})`
+      formData.options[optIdx].content = (formData.options[optIdx].content || '').trim() + ' ' + imgMd
+      ElMessage.success('选项配图上传成功！')
+    }
+  } catch (err: any) {
+    ElMessage.error(`图片上传失败: ${err.message || '网络异常'}`)
+  }
+  return false
+}
+
+function removeImageFromContent(imgSrc: string) {
+  const mdImg = new RegExp(`!\\[.*?\\]\\(${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g')
+  formData.content = (formData.content || '').replace(mdImg, '').trim()
+  const htmlImg = new RegExp(`<img[^>]+src=["']${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>`, 'gi')
+  formData.content = (formData.content || '').replace(htmlImg, '').trim()
+  ElMessage.success('已从题干中移除配图')
+}
+
+function removeImageFromAnalysis(imgSrc: string) {
+  const mdImg = new RegExp(`!\\[.*?\\]\\(${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g')
+  formData.analysis = (formData.analysis || '').replace(mdImg, '').trim()
+  const htmlImg = new RegExp(`<img[^>]+src=["']${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>`, 'gi')
+  formData.analysis = (formData.analysis || '').replace(htmlImg, '').trim()
+  ElMessage.success('已从解析中移除配图')
 }
 
 // 智能清洗题干前缀残留
@@ -993,7 +1179,6 @@ async function fetchList() {
     if (res?.data) {
       list.value = res.data.list || []
       total.value = res.data.total || 0
-      // 如果当前预览题目在列表中，同步刷新数据
       if (currentPreviewQuestion.value) {
         const found = list.value.find((q) => q.id === currentPreviewQuestion.value.id)
         if (found) currentPreviewQuestion.value = found
@@ -1261,17 +1446,31 @@ onMounted(() => {
   }
 }
 
-.stem-text {
-  font-size: 13px;
-  color: var(--gray-8);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 380px;
+.stem-text-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
 
-  &.clickable {
-    cursor: pointer;
+  .has-img-badge {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .stem-plain-text {
+    font-size: 13px;
     color: var(--primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 340px;
+
     &:hover {
       text-decoration: underline;
     }
@@ -1370,6 +1569,64 @@ onMounted(() => {
   border-top: 1px solid var(--gray-2);
 }
 
+.field-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+
+  .field-hint {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .field-btns {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+}
+
+.img-preview-chips {
+  margin-top: 8px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 12px;
+
+  .chip-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+  }
+
+  .chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .img-thumb-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 4px;
+
+    .thumb-img {
+      width: 90px;
+      height: 60px;
+      object-fit: contain;
+      border-radius: 2px;
+      background: #fafafa;
+    }
+  }
+}
+
 .options-form {
   margin: 10px 0 16px;
   background: var(--gray-1);
@@ -1403,7 +1660,7 @@ onMounted(() => {
   }
 }
 
-// 预览抽屉样式
+// 抽屉与全真试卷渲染
 .drawer-custom-header {
   display: flex;
   align-items: center;
@@ -1706,6 +1963,23 @@ onMounted(() => {
         color: #d97706;
       }
     }
+  }
+}
+
+// 富文本与多媒体配图样式
+:deep(.rich-content-render) {
+  .rich-img-wrapper {
+    margin: 8px 0;
+  }
+  img.question-rich-img {
+    max-width: 100%;
+    max-height: 420px;
+    object-fit: contain;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fafafa;
+    display: block;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
 }
 

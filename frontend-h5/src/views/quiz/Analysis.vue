@@ -34,9 +34,7 @@
         </div>
 
         <span class="question-type-tag">{{ typeText }}</span>
-        <div class="question-content">
-          {{ analysis.question?.title }}
-        </div>
+        <div class="question-content" v-html="renderWithFormula(analysis.question?.title || '')" />
 
         <!-- 选项对比 -->
         <div class="options-list">
@@ -52,9 +50,10 @@
             <div class="opt-letter">
               {{ opt.key }}
             </div>
-            <div class="opt-text">
-              {{ opt.content }}
-            </div>
+            <div
+              class="opt-text"
+              v-html="renderWithFormula(opt.content || '')"
+            />
             <div
               v-if="isOptionCorrect(opt.key)"
               class="opt-icon correct"
@@ -89,9 +88,7 @@
           <div class="ac-label">
             📖 试题解析
           </div>
-          <div class="ac-body">
-            {{ analysis.analysis }}
-          </div>
+          <div class="ac-body" v-html="renderWithFormula(analysis.analysis || '暂无解析')" />
 
           <div
             v-if="analysis.knowledgePoints?.length"
@@ -234,6 +231,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 import { getAnalysis } from '@/api/question'
 import { questionTypeText } from '@/utils/format'
+import { renderWithFormula } from '@/utils/katex'
 
 const route = useRoute()
 const router = useRouter()

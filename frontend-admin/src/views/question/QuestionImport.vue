@@ -856,8 +856,16 @@ async function parseTextOrDocFile(file: File) {
   try {
     if (file.name.endsWith('.docx')) {
       const arrayBuffer = await file.arrayBuffer()
-      const result = await mammoth.extractRawText({ arrayBuffer })
-      text = result.value || ''
+      const htmlResult = await mammoth.convertToHtml({ arrayBuffer })
+      const rawHtml = htmlResult.value || ''
+      // 保留 <img> 图片标签，将 <p>、<br>、<tr> 转换为换行，去除其它无关 HTML 标签
+      text = rawHtml
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/tr>/gi, '\n')
+        .replace(/<td[^>]*>/gi, ' ')
+        .replace(/<th[^>]*>/gi, ' ')
+        .replace(/<(?!\/?img\b)[^>]+>/gi, '')
     } else {
       text = await file.text()
     }
