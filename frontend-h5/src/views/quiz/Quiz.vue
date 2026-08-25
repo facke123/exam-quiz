@@ -220,12 +220,22 @@ async function onSubmit() {
       }
     }
 
+    const dParam = route.query.duration ? Number(route.query.duration) : undefined
+    const durationVal = dParam ? dParam * 60 : (needCountdown.value ? (9000 - remainingSeconds.value) : 180)
+    const reportData = {
+      answers: answers.value,
+      questions: questions.value,
+      duration: durationVal,
+    }
+    try {
+      sessionStorage.setItem('last_quiz_report', JSON.stringify(reportData))
+    } catch {
+      // ignore
+    }
+
     router.push({
       path: '/quiz/report/1',
-      state: {
-        answers: answers.value,
-        questions: questions.value,
-      },
+      state: reportData,
     })
   })
 }
