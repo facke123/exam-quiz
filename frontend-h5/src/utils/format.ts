@@ -61,14 +61,24 @@ export function daysUntil(date: Date | string): number {
 
 /** 题型文字 */
 export function questionTypeText(type: string): string {
+  const t = String(type || '').toLowerCase()
   const map: Record<string, string> = {
     single: '单选题',
+    single_choice: '单选题',
     multiple: '多选题',
+    multiple_choice: '多选题',
     judge: '判断题',
+    judgment: '判断题',
+    true_false: '判断题',
     case: '案例分析',
-    subjective: '主观题'
+    case_analysis: '案例分析',
+    subjective: '主观论述',
+    essay: '简答题',
+    qa: '问答题',
+    blank: '填空题',
+    fill_blank: '填空题'
   }
-  return map[type] || type
+  return map[t] || type || '单选题'
 }
 
 /** 难度文字 */

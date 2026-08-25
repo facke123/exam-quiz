@@ -518,6 +518,13 @@ export class QuestionService implements OnModuleInit {
           })
         : [];
 
+      if ((q.type === 'true_false' || q.type === 'judge') && formattedOptions.length === 0) {
+        formattedOptions.push(
+          { key: 'A', label: 'A', content: '正确', isCorrect: q.answer === 'A' || q.answer === '正确' || q.answer === 'T' || q.answer === 'true' },
+          { key: 'B', label: 'B', content: '错误', isCorrect: q.answer === 'B' || q.answer === '错误' || q.answer === 'F' || q.answer === 'false' }
+        );
+      }
+
       return {
         id: Number(q.id),
         subjectId: Number(q.subjectId),
