@@ -151,3 +151,39 @@ export function getLogDetail(id: number) {
     method: 'get',
   })
 }
+
+// 邮件服务配置
+export interface EmailConfig {
+  host: string
+  port: number
+  secure: boolean
+  user: string
+  pass?: string
+  fromName: string
+  subject: string
+  expireMinutes: number
+  isPassSet?: boolean
+}
+
+export function getEmailConfig() {
+  return request<EmailConfig>({
+    url: '/admin/settings/email',
+    method: 'get',
+  })
+}
+
+export function updateEmailConfig(data: EmailConfig) {
+  return request({
+    url: '/admin/settings/email',
+    method: 'put',
+    data,
+  })
+}
+
+export function testEmailConfig(data: { to: string } & Partial<EmailConfig>) {
+  return request<{ success: boolean; message: string }>({
+    url: '/admin/settings/email/test',
+    method: 'post',
+    data,
+  })
+}

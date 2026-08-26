@@ -15,6 +15,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { ExamModule } from './modules/exam/exam.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { ContentModule } from './modules/content/content.module';
+import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ContentModule } from './modules/content/content.module';
     ExamModule,
     UploadModule,
     ContentModule,
+    MailModule,
   ],
 })
 export class AppModule {}

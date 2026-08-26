@@ -18,19 +18,25 @@
     </div>
 
     <div class="form-card">
+      <div class="reg-tip-banner">
+        📬 支持邮箱快速注册，注册成功即可畅享题库与智能解析
+      </div>
+
       <van-field
         v-model="form.account"
-        placeholder="手机号 / 邮箱"
-        left-icon="manager-o"
+        placeholder="请输入常用邮箱地址（如 xxx@qq.com）"
+        left-icon="envelop-o"
         clearable
+        type="email"
         class="input-field"
       />
       <van-field
         v-model="form.code"
         center
         clearable
-        placeholder="验证码"
-        left-icon="envelop-o"
+        placeholder="6位邮箱验证码"
+        left-icon="shield-o"
+        maxlength="6"
         class="input-field"
       >
         <template #button>
@@ -38,6 +44,7 @@
             size="small"
             type="primary"
             plain
+            round
             :disabled="counting"
             @click="sendCode"
           >
@@ -45,10 +52,14 @@
           </van-button>
         </template>
       </van-field>
+      <div class="code-tip">
+        验证码将发送至上述邮箱，5分钟内有效
+      </div>
+
       <van-field
         v-model="form.password"
         type="password"
-        placeholder="密码（6-20位）"
+        placeholder="设置登录密码（6-20位）"
         left-icon="lock"
         clearable
         class="input-field"
@@ -69,7 +80,7 @@
       <van-field
         v-model="form.confirmPassword"
         type="password"
-        placeholder="确认密码"
+        placeholder="再次确认登录密码"
         left-icon="lock"
         clearable
         class="input-field"
@@ -83,7 +94,7 @@
         class="register-btn"
         @click="onRegister"
       >
-        注册
+        立即注册
       </van-button>
 
       <div class="form-actions">
@@ -103,7 +114,7 @@ import { reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import { register, sendCode as apiSendCode } from '@/api/auth'
-import { isAccount, isValidPassword, passwordStrength, strengthText, strengthColor } from '@/utils/validate'
+import { isAccount, isEmail, isValidPassword, passwordStrength, strengthText, strengthColor } from '@/utils/validate'
 
 const router = useRouter()
 const form = reactive({
@@ -124,10 +135,13 @@ const strengthTextVal = computed(() => strengthText(score.value))
 const codeText = computed(() => (counting.value ? `${count}s 后重发` : '获取验证码'))
 
 async function sendCode() {
-  if (!isAccount(form.account)) return showToast('请输入正确的手机号或邮箱')
+  const acc = form.account.trim()
+  if (!acc) return showToast('请输入注册邮箱')
+  if (!isEmail(acc) && !isAccount(acc)) return showToast('请输入有效的邮箱地址（如 example@qq.com）')
+
   try {
-    await apiSendCode(form.account, 'register')
-    showToast({ type: 'success', message: '验证码已发送' })
+    const res = await apiSendCode(acc, 'register')
+    showToast({ type: 'success', message: res.data?.message || '验证码已发送至邮箱，请查收' })
     counting.value = true
     const timer = setInterval(() => {
       count--
@@ -137,24 +151,26 @@ async function sendCode() {
         count = 60
       }
     }, 1000)
-  } catch {
-    // ...
+  } catch (err: any) {
+    showToast(err.message || '发送失败，请稍后重试')
   }
 }
 
 async function onRegister() {
-  if (!isAccount(form.account)) return showToast('请输入正确的手机号或邮箱')
-  if (!/^\d{6}$/.test(form.code)) return showToast('请输入6位验证码')
-  if (!isValidPassword(form.password)) return showToast('密码长度为6-20位')
-  if (form.password !== form.confirmPassword) return showToast('两次密码不一致')
+  const acc = form.account.trim()
+  if (!acc) return showToast('请输入注册邮箱')
+  if (!isEmail(acc) && !isAccount(acc)) return showToast('请输入有效的邮箱地址')
+  if (!/^\d{6}$/.test(form.code.trim())) return showToast('请输入6位数字验证码')
+  if (!isValidPassword(form.password)) return showToast('密码长度需为6-20位')
+  if (form.password !== form.confirmPassword) return showToast('两次输入的密码不一致')
 
   loading.value = true
   try {
-    await register({ account: form.account, code: form.code, password: form.password })
-    showToast({ type: 'success', message: '注册成功' })
+    await register({ account: acc, code: form.code.trim(), password: form.password })
+    showToast({ type: 'success', message: '恭喜！注册成功' })
     router.replace('/auth/login')
-  } catch {
-    // ...
+  } catch (err: any) {
+    showToast(err.message || '注册失败，请检查验证码或邮箱')
   } finally {
     loading.value = false
   }
@@ -232,6 +248,23 @@ async function onRegister() {
   border-radius: var(--radius-lg);
   padding: var(--space-xl);
   box-shadow: var(--shadow-lg);
+}
+
+.reg-tip-banner {
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #1e40af;
+  line-height: 1.4;
+  margin-bottom: var(--space-md);
+}
+
+.code-tip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: -6px 0 var(--space-md) 4px;
 }
 
 .input-field {

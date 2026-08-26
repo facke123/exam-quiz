@@ -172,6 +172,12 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: '系统配置', icon: 'Tools', keepAlive: true },
       },
       {
+        path: 'email',
+        name: 'EmailSetting',
+        component: () => import('@/views/system/SystemConfig.vue'),
+        meta: { title: '邮件设置', icon: 'Message', keepAlive: true },
+      },
+      {
         path: 'log',
         name: 'OperationLog',
         component: () => import('@/views/system/OperationLog.vue'),

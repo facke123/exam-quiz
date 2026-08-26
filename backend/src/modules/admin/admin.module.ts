@@ -9,12 +9,14 @@ import { User } from '@/database/entities/user.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
 import { OperationLog } from '@/database/entities/operation-log.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
+import { MailModule } from '../mail/mail.module';
 
 /**
  * 管理模块
  */
 @Module({
   imports: [
+    MailModule,
     TypeOrmModule.forFeature([Admin, User, SystemConfig, OperationLog, PracticeRecord]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

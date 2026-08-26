@@ -8,12 +8,14 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from '@/database/entities/user.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
+import { MailModule } from '../mail/mail.module';
 
 /**
  * 认证模块
  */
 @Module({
   imports: [
+    MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([User, PracticeRecord]),
     JwtModule.registerAsync({

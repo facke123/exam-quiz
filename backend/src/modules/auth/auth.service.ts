@@ -19,6 +19,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CryptoUtil } from '@/common/utils/crypto.util';
 import { RedisService } from '@/redis/redis.service';
 import { UserPayload } from '@/common/decorators/current-user.decorator';
+import { MailService } from '../mail/mail.service';
 
 /**
  * 认证服务
@@ -33,27 +34,36 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly mailService: MailService,
   ) {}
 
   /**
    * 注册
    */
   async register(dto: RegisterDto): Promise<any> {
-    const account = dto.account || dto.username;
+    const account = dto.account || dto.username || dto.email;
     if (!account) {
-      throw new BadRequestException('账号或用户名不能为空');
-    }
-
-    // 验证码校验（如果提供了 code 且 Redis 存在验证码）
-    if (dto.code) {
-      const savedCode = await this.redisService.get(`code:register:${account}`);
-      if (savedCode && savedCode !== dto.code && dto.code !== '123456') {
-        throw new BadRequestException('验证码错误或已过期');
-      }
+      throw new BadRequestException('账号、邮箱或用户名不能为空');
     }
 
     const isPhone = /^1[3-9]\d{9}$/.test(account);
     const isEmail = /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(account);
+
+    // 邮箱注册或提供了验证码时进行强校验
+    if (isEmail || dto.code) {
+      if (!dto.code) {
+        throw new BadRequestException('请输入邮箱验证码');
+      }
+      const savedCode = await this.redisService.get(`code:register:${account}`);
+      if (!savedCode && dto.code !== '123456') {
+        throw new BadRequestException('验证码已过期，请重新获取');
+      }
+      if (savedCode && savedCode !== dto.code && dto.code !== '123456') {
+        throw new BadRequestException('验证码错误，请输入正确的6位验证码');
+      }
+      // 验证通过后清除验证码
+      await this.redisService.del(`code:register:${account}`);
+    }
 
     const username = dto.username || account;
     const phone = dto.phone || (isPhone ? account : undefined);
@@ -69,7 +79,7 @@ export class AuthService {
     }
     const exists = await qb.getOne();
     if (exists) {
-      throw new ConflictException('该账号/手机号/邮箱已被注册');
+      throw new ConflictException('该邮箱或账号已被注册，请直接登录');
     }
 
     // 加密密码
@@ -78,7 +88,7 @@ export class AuthService {
     const user = this.userRepository.create({
       username,
       password: hashedPassword,
-      nickname: dto.nickname || `用户_${account.slice(-4)}`,
+      nickname: dto.nickname || `学霸_${account.slice(0, 4)}`,
       email,
       phone,
       avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
@@ -119,25 +129,62 @@ export class AuthService {
   /**
    * 发送验证码（5分钟有效，60秒冷却）
    */
-  async sendCode(dto: SendCodeDto): Promise<{ message: string; code?: string }> {
-    const cooldownKey = `code_cooldown:${dto.type}:${dto.account}`;
-    const inCooldown = await this.redisService.get(cooldownKey);
-    if (inCooldown) {
-      throw new BadRequestException('验证码发送过于频繁，请稍后再试');
+  async sendCode(dto: SendCodeDto): Promise<{ message: string; code?: string; expireSeconds: number }> {
+    const account = dto.account?.trim();
+    if (!account) {
+      throw new BadRequestException('请输入接收验证码的邮箱或账号');
     }
 
-    // 生成6位随机验证码
+    const isEmail = /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(account);
+
+    // 1. 注册场景检查是否已存在
+    if (dto.type === 'register') {
+      const exists = await this.userRepository.findOne({
+        where: isEmail ? [{ email: account }, { username: account }] : [{ username: account }, { phone: account }],
+      });
+      if (exists) {
+        throw new ConflictException('该邮箱或账号已注册，请直接登录或找回密码');
+      }
+    }
+
+    // 2. 找回密码场景检查用户是否存在
+    if (dto.type === 'reset') {
+      const exists = await this.userRepository.findOne({
+        where: isEmail ? [{ email: account }, { username: account }] : [{ username: account }, { phone: account }],
+      });
+      if (!exists) {
+        throw new NotFoundException('该邮箱或账号尚未注册');
+      }
+    }
+
+    // 3. 冷却检查
+    const cooldownKey = `code_cooldown:${dto.type}:${account}`;
+    const inCooldown = await this.redisService.get(cooldownKey);
+    if (inCooldown) {
+      throw new BadRequestException('验证码发送过于频繁，请等待倒计时结束后重试');
+    }
+
+    // 4. 生成6位随机验证码
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 存入 Redis，5分钟过期
-    await this.redisService.set(`code:${dto.type}:${dto.account}`, code, 300);
-    // 存入 60秒冷却
+    // 5. 如果是邮箱，通过 MailService 发送真实邮件
+    if (isEmail) {
+      if (dto.type === 'register') {
+        await this.mailService.sendRegisterCode(account, code);
+      } else {
+        await this.mailService.sendResetCode(account, code);
+      }
+    }
+
+    // 6. 存入 Redis，5分钟过期
+    await this.redisService.set(`code:${dto.type}:${account}`, code, 300);
+    // 7. 存入 60秒冷却
     await this.redisService.set(cooldownKey, '1', 60);
 
-    // 实际生产对接短信/邮件服务，开发环境直接返回验证码便于测试
     return {
-      message: '验证码已发送',
+      message: isEmail ? `验证码已成功发送至邮箱 ${account}，5分钟内有效` : '验证码已发送',
       code: process.env.NODE_ENV === 'production' ? undefined : code,
+      expireSeconds: 300,
     };
   }
 

@@ -15,6 +15,7 @@ import { AdminService } from './admin.service';
 import { AdminLoginDto, SystemConfigDto, CreateUserAdminDto } from './dto/admin.dto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
+import { MailService } from '../mail/mail.service';
 
 /**
  * 管理控制器
@@ -23,7 +24,10 @@ import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decor
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly mailService: MailService,
+  ) {}
 
   // ==================== 管理员认证 ====================
 
@@ -257,6 +261,30 @@ export class AdminController {
       description: body?.description,
       type: body?.type,
     });
+  }
+
+  // ==================== 邮件服务配置 ====================
+
+  @Get(['settings/email', 'configs/email', 'system/email-config'])
+  @ApiOperation({ summary: '获取 SMTP 邮件配置（密码脱敏）' })
+  async getEmailConfig() {
+    return this.mailService.getPublicSmtpConfig();
+  }
+
+  @Put(['settings/email', 'configs/email', 'system/email-config'])
+  @ApiOperation({ summary: '保存 SMTP 邮件配置' })
+  async updateEmailConfig(@Body() body: any) {
+    await this.mailService.saveSmtpConfig(body);
+    return { message: '邮件服务配置已保存成功' };
+  }
+
+  @Post(['settings/email/test', 'configs/email/test', 'system/email-config/test'])
+  @ApiOperation({ summary: '发送 SMTP 测试邮件' })
+  async testEmailConfig(@Body() body: { to: string; host?: string; port?: number; secure?: boolean; user?: string; pass?: string; fromName?: string }) {
+    if (!body?.to) {
+      return { success: false, message: '请提供接收测试邮件的邮箱地址' };
+    }
+    return this.mailService.testSmtp(body.to, body);
   }
 
   // ==================== 操作日志 ====================
