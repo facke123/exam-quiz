@@ -18,15 +18,15 @@
       <div class="daily-card">
         <div class="date-badge">
           <div class="date-day">
-            {{ day }}
+            {{ currentDay }}
           </div>
           <div class="date-month">
-            {{ month }}月
+            {{ currentMonth }}月
           </div>
         </div>
         <div class="daily-info">
           <div class="daily-title">
-            今日 20 道核心考点精选题
+            {{ isCompleted ? '今日已完成 20 题打卡' : '今日 20 道核心考点精选题' }}
           </div>
           <div class="daily-desc">
             智能抽取全科核心考点 · 碎片时间高效提分
@@ -35,27 +35,41 @@
             <div class="dp-track">
               <div
                 class="dp-fill"
-                style="width: 0%"
+                :style="{ width: `${progress}%` }"
               />
             </div>
-            <span class="dp-text">每日精选 20 题随机自测</span>
+            <span class="dp-text">
+              {{ progress >= 100 ? '已达成 20/20 题' : (completedCount > 0 ? `已完成 ${completedCount}/20 题` : '每日精选 20 题随机自测') }}
+            </span>
           </div>
         </div>
       </div>
 
-      <!-- 连续打卡日历 -->
+      <!-- 连续打卡日历（当前周真实实时数据） -->
       <div class="streak-card">
-        <div class="sc-title">
-          🔥 坚持打卡 · 每日提分
+        <div class="sc-header">
+          <div class="sc-title">
+            🔥 坚持打卡 · 每日提分
+          </div>
+          <div
+            v-if="streakDays > 0"
+            class="sc-badge"
+          >
+            已连续打卡 {{ streakDays }} 天
+          </div>
         </div>
         <div class="streak-grid">
           <div
-            v-for="(d, i) in last7Days"
+            v-for="(d, i) in weekDays"
             :key="i"
             class="streak-item"
-            :class="{ done: d.done, today: i === last7Days.length - 1 }"
+            :class="{
+              done: d.done,
+              today: d.isToday,
+              future: d.isFuture,
+            }"
           >
-            <span class="streak-day">{{ d.label }}</span>
+            <span class="streak-day">{{ d.isToday ? '今天' : d.label }}</span>
             <div class="streak-mark">
               <span v-if="d.done">✓</span>
               <span v-else>○</span>
@@ -68,16 +82,17 @@
         class="start-btn"
         @click="onStart"
       >
-        开始今日刷题（20题）
+        {{ isCompleted ? '今日已完成（再次自测）' : (completedCount > 0 ? `继续今日刷题（${completedCount}/20题）` : '开始今日刷题（20题）') }}
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
+import { getDailyStatus } from '@/api/quiz'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
@@ -89,22 +104,80 @@ function onBack() {
     router.push('/')
   }
 }
-const now = new Date()
-const day = now.getDate()
-const month = now.getMonth() + 1
 
-const last7Days = ref([
-  { label: '周一', done: true },
-  { label: '周二', done: true },
-  { label: '周三', done: true },
-  { label: '周四', done: true },
-  { label: '周五', done: true },
-  { label: '周六', done: true },
-  { label: '今天', done: false },
-])
+const now = new Date()
+const currentDay = ref(now.getDate())
+const currentMonth = ref(now.getMonth() + 1)
+const completedCount = ref(0)
+const progress = ref(0)
+const isCompleted = ref(false)
+const streakDays = ref(0)
+
+// 本地实时生成本周（周一至周日）精准日期与星期
+function generateCurrentWeek() {
+  const n = new Date()
+  const year = n.getFullYear()
+  const month = n.getMonth()
+  const date = n.getDate()
+  const dayOfWeek = n.getDay() // 0 是周日，1..6 是周一至周六
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(year, month, date + mondayOffset)
+  const todayZero = new Date(year, month, date).getTime()
+
+  const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  return labels.map((label, idx) => {
+    const cur = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + idx)
+    const curZero = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()).getTime()
+    const isToday = curZero === todayZero
+    const isPast = curZero < todayZero
+    const isFuture = curZero > todayZero
+    return {
+      label,
+      date: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`,
+      day: cur.getDate(),
+      month: cur.getMonth() + 1,
+      isToday,
+      isPast,
+      isFuture,
+      done: false,
+      count: 0,
+    }
+  })
+}
+
+const weekDays = ref(generateCurrentWeek())
+
+async function loadData() {
+  try {
+    const subId = subjectStore.currentSubjectId || undefined
+    const res = await getDailyStatus(subId)
+    if (res?.data) {
+      const data = res.data
+      if (data.today) {
+        currentDay.value = data.today.day
+        currentMonth.value = data.today.month
+        completedCount.value = data.today.completedCount
+        progress.value = data.today.progress
+        isCompleted.value = data.today.isCompleted
+      }
+      if (data.streakDays !== undefined) {
+        streakDays.value = data.streakDays
+      }
+      if (Array.isArray(data.weekList) && data.weekList.length === 7) {
+        weekDays.value = data.weekList
+      }
+    }
+  } catch {
+    // 保留本地精确计算的时间与日历
+  }
+}
+
+onMounted(() => {
+  loadData()
+})
 
 function onStart() {
-  const subId = subjectStore.currentSubjectId || '4'
+  const subId = subjectStore.currentSubjectId || '1'
   router.push(`/quiz/daily?mode=daily&subjectId=${subId}&count=20`)
 }
 </script>
@@ -217,6 +290,7 @@ function onStart() {
           height: 100%;
           background: var(--primary);
           border-radius: 3px;
+          transition: width 0.3s ease;
         }
       }
 
@@ -234,11 +308,26 @@ function onStart() {
   padding: 18px;
   box-shadow: var(--shadow-sm);
 
+  .sc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+
   .sc-title {
     font-size: 15px;
     font-weight: 700;
     color: var(--gray-8);
-    margin-bottom: 14px;
+  }
+
+  .sc-badge {
+    font-size: 11px;
+    color: #ea580c;
+    background: #ffedd5;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
   }
 }
 
@@ -268,6 +357,7 @@ function onStart() {
       justify-content: center;
       font-size: 14px;
       font-weight: 700;
+      transition: all 0.2s;
     }
 
     &.done {
@@ -280,11 +370,25 @@ function onStart() {
     &.today {
       .streak-day {
         color: var(--primary);
-        font-weight: 700;
+        font-weight: 800;
       }
       .streak-mark {
         border: 2px solid var(--primary);
+        background: var(--primary-bg);
+        color: var(--primary);
       }
+
+      &.done {
+        .streak-mark {
+          background: var(--success-bg);
+          color: var(--success);
+          border: 2px solid var(--success);
+        }
+      }
+    }
+
+    &.future {
+      opacity: 0.6;
     }
   }
 }

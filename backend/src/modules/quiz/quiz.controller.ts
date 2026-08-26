@@ -20,6 +20,7 @@ import {
   NoteDto,
 } from './dto/quiz.dto';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 
 /**
  * 做题控制器
@@ -31,6 +32,16 @@ export class QuizController {
   constructor(private readonly quizService: QuizService) {}
 
   // ==================== 做题与报告 ====================
+
+  @Public()
+  @Get('quiz/daily/status')
+  @ApiOperation({ summary: '获取每日一练及本周打卡状态' })
+  async getDailyStatus(
+    @CurrentUser() user: UserPayload,
+    @Query('subjectId') subjectId?: number,
+  ) {
+    return this.quizService.getDailyStatus(user ? user.id : 1, subjectId ? Number(subjectId) : undefined);
+  }
 
   @Post(['quiz/record', 'quiz/practice'])
   @ApiOperation({ summary: '创建做题记录' })

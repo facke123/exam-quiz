@@ -737,4 +737,146 @@ export class QuizService {
     item.lastReviewedAt = new Date();
     await this.reviewQueueRepository.save(item);
   }
+
+  /**
+   * 获取每日一练及本周打卡实时状态
+   */
+  async getDailyStatus(userId: number, subjectId?: number): Promise<{
+    today: {
+      date: string;
+      day: number;
+      month: number;
+      year: number;
+      weekday: number;
+      weekdayName: string;
+      totalCount: number;
+      completedCount: number;
+      isCompleted: boolean;
+      progress: number;
+    };
+    weekList: Array<{
+      date: string;
+      day: number;
+      month: number;
+      label: string;
+      isToday: boolean;
+      isPast: boolean;
+      isFuture: boolean;
+      done: boolean;
+      count: number;
+    }>;
+    streakDays: number;
+  }> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    const dayOfWeek = now.getDay(); // 0 是周日，1 是周一 ... 6 是周六
+    const weekdayMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const weekdayName = weekdayMap[dayOfWeek];
+
+    const todayDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    // 计算本周周一
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(year, now.getMonth(), day + mondayOffset);
+
+    // 查询该用户的所有做题记录
+    const records = await this.recordRepository.find({
+      where: { userId },
+      order: { startedAt: 'DESC' },
+    });
+
+    // 统计各日期做题情况
+    const dateCountMap = new Map<string, number>();
+    for (const r of records) {
+      if (r.startedAt) {
+        const d = new Date(r.startedAt);
+        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const prev = dateCountMap.get(dStr) || 0;
+        dateCountMap.set(dStr, prev + (r.answeredQuestions || r.totalQuestions || 1));
+      }
+    }
+
+    const weekLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    const weekList: Array<{
+      date: string;
+      day: number;
+      month: number;
+      label: string;
+      isToday: boolean;
+      isPast: boolean;
+      isFuture: boolean;
+      done: boolean;
+      count: number;
+    }> = [];
+
+    const todayZero = new Date(year, now.getMonth(), day).getTime();
+
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const tYear = targetDate.getFullYear();
+      const tMonth = targetDate.getMonth() + 1;
+      const tDay = targetDate.getDate();
+      const tDateStr = `${tYear}-${String(tMonth).padStart(2, '0')}-${String(tDay).padStart(2, '0')}`;
+      const targetZero = new Date(tYear, targetDate.getMonth(), tDay).getTime();
+
+      const isToday = tDateStr === todayDateStr;
+      const isPast = targetZero < todayZero;
+      const isFuture = targetZero > todayZero;
+
+      const count = dateCountMap.get(tDateStr) || 0;
+      const done = count > 0;
+
+      weekList.push({
+        date: tDateStr,
+        day: tDay,
+        month: tMonth,
+        label: weekLabels[i],
+        isToday,
+        isPast,
+        isFuture,
+        done,
+        count,
+      });
+    }
+
+    // 今日做题进度
+    const todayAnswered = dateCountMap.get(todayDateStr) || 0;
+    const isCompleted = todayAnswered >= 20;
+    const progress = Math.min(100, Math.round((todayAnswered / 20) * 100));
+
+    // 计算连续打卡天数
+    let streakDays = 0;
+    let checkDate = new Date(year, now.getMonth(), day);
+    if (!dateCountMap.has(todayDateStr)) {
+      checkDate = new Date(year, now.getMonth(), day - 1);
+    }
+    while (true) {
+      const cStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+      if ((dateCountMap.get(cStr) || 0) > 0) {
+        streakDays++;
+        checkDate = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return {
+      today: {
+        date: todayDateStr,
+        day,
+        month,
+        year,
+        weekday: dayOfWeek,
+        weekdayName,
+        totalCount: 20,
+        completedCount: todayAnswered,
+        isCompleted,
+        progress,
+      },
+      weekList,
+      streakDays: Math.max(streakDays, todayAnswered > 0 ? 1 : 0),
+    };
+  }
 }

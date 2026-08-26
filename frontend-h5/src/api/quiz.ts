@@ -70,3 +70,36 @@ export function getReport(id: string) {
     method: 'get'
   })
 }
+
+export function getDailyStatus(subjectId?: string | number) {
+  return request<{
+    today: {
+      date: string
+      day: number
+      month: number
+      year: number
+      weekday: number
+      weekdayName: string
+      totalCount: number
+      completedCount: number
+      isCompleted: boolean
+      progress: number
+    }
+    weekList: Array<{
+      date: string
+      day: number
+      month: number
+      label: string
+      isToday: boolean
+      isPast: boolean
+      isFuture: boolean
+      done: boolean
+      count: number
+    }>
+    streakDays: number
+  }>({
+    url: '/quiz/daily/status',
+    method: 'get',
+    params: subjectId ? { subjectId } : undefined
+  })
+}
