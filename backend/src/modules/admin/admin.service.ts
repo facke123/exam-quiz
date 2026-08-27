@@ -21,34 +21,67 @@ import { CryptoUtil } from '@/common/utils/crypto.util';
  */
 @Injectable()
 export class AdminService {
-  // 内存存储角色数据以支持角色管理
+  // 内存存储角色数据以支持角色与权限管理
   private static roles = [
     {
       id: 1,
       name: '超级管理员',
       code: 'super_admin',
-      description: '拥有系统全部权限',
+      description: '拥有系统全部模块的最高管理与配置权限',
       permissions: ['*'],
       adminCount: 1,
-      createdAt: new Date().toISOString(),
+      createdAt: '2026-01-01T00:00:00.000Z',
     },
     {
       id: 2,
-      name: '教研管理员',
+      name: '教研命题专家',
       code: 'editor',
-      description: '负责题库、试卷与AI出题管理',
-      permissions: ['question:*', 'exam:*', 'ai:*'],
+      description: '负责软考题库、章节试题、历年真题、试卷组卷与 AI 智能出题审核',
+      permissions: [
+        'question:view', 'question:edit', 'question:delete', 'question:import', 'question:feedback',
+        'exam:view', 'exam:edit', 'exam:generate', 'exam:publish',
+        'ai:prompt', 'ai:generate', 'ai:audit',
+      ],
       adminCount: 1,
-      createdAt: new Date().toISOString(),
+      createdAt: '2026-01-02T00:00:00.000Z',
     },
     {
       id: 3,
-      name: '运营管理员',
+      name: '运营管理人员',
       code: 'operator',
-      description: '负责用户、内容与统计管理',
-      permissions: ['user:*', 'content:*', 'stats:*', 'vip:*'],
+      description: '负责注册用户、会员等级、Banner轮播图、公告发布与数据统计',
+      permissions: [
+        'user:view', 'user:status', 'user:member', 'user:records',
+        'content:announcement', 'content:banner', 'content:feedback',
+        'stats:overview', 'stats:user', 'stats:quiz',
+      ],
       adminCount: 1,
-      createdAt: new Date().toISOString(),
+      createdAt: '2026-01-03T00:00:00.000Z',
+    },
+    {
+      id: 4,
+      name: '客服与财务专员',
+      code: 'finance',
+      description: '负责用户订单处理、VIP会员开通及题目报错工单跟进',
+      permissions: [
+        'user:view', 'user:records',
+        'content:feedback',
+        'stats:revenue',
+      ],
+      adminCount: 0,
+      createdAt: '2026-01-04T00:00:00.000Z',
+    },
+    {
+      id: 5,
+      name: '系统运维工程师',
+      code: 'devops',
+      description: '负责系统配置、邮件服务SMTP设置、模型接口参数及操作审计日志',
+      permissions: [
+        'system:config', 'system:email', 'system:log', 'system:admin',
+        'ai:model_config',
+      ],
+      adminCount: 0,
+      createdAt: '2026-01-05T00:00:00.000Z',
     },
   ];
 
@@ -626,18 +659,29 @@ export class AdminService {
       take: pageSize,
       order: { createdAt: 'DESC' },
     });
-    const formatted = list.map(({ password: _p, ...a }) => ({
-      id: Number(a.id),
-      username: a.username,
-      nickname: a.realName || a.username,
-      avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-      phone: '',
-      email: '',
-      roles: [a.role || 'super_admin'],
-      status: a.status === 1 ? 'active' : 'disabled',
-      lastLoginAt: a.lastLoginAt ? a.lastLoginAt.toISOString() : null,
-      createdAt: a.createdAt ? a.createdAt.toISOString() : null,
-    }));
+    const formatted = list.map(({ password: _p, ...a }) => {
+      const roleCode = a.role || 'super_admin';
+      const roleObj = AdminService.roles.find(
+        (r) => r.code === roleCode || r.name === roleCode || (roleCode === 'admin' && r.code === 'super_admin'),
+      );
+      return {
+        id: Number(a.id),
+        username: a.username,
+        realName: a.realName || a.username,
+        nickname: a.realName || a.username,
+        avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+        phone: '',
+        email: '',
+        role: roleCode,
+        roles: [roleCode],
+        roleName: roleObj ? roleObj.name : (roleCode === 'super_admin' ? '超级管理员' : roleCode),
+        roleDescription: roleObj?.description || '',
+        permissions: roleObj ? roleObj.permissions : (roleCode === 'super_admin' ? ['*'] : []),
+        status: a.status === 1 ? 'active' : 'disabled',
+        lastLoginAt: a.lastLoginAt ? a.lastLoginAt.toISOString() : null,
+        createdAt: a.createdAt ? a.createdAt.toISOString() : null,
+      };
+    });
     return { list: formatted, total };
   }
 
@@ -651,13 +695,14 @@ export class AdminService {
     if (exists) {
       throw new ConflictException('管理员账号已存在');
     }
-    const hashedPassword = await CryptoUtil.hashPassword(data.password || 'Admin1234');
+    const hashedPassword = await CryptoUtil.hashPassword(data.password || 'admin123');
+    const roleCode = (data.roles && data.roles[0]) || data.role || 'teacher';
     const admin = this.adminRepository.create({
       username: data.username,
       password: hashedPassword,
       realName: data.nickname || data.realName || data.username,
-      role: (data.roles && data.roles[0]) || data.role || 'admin',
-      status: data.status === 'disabled' ? 0 : 1,
+      role: roleCode,
+      status: data.status === 'disabled' || data.status === 0 ? 0 : 1,
     });
     return this.adminRepository.save(admin);
   }
@@ -682,6 +727,10 @@ export class AdminService {
    * 删除管理员
    */
   async deleteAdmin(id: number): Promise<void> {
+    const admin = await this.adminRepository.findOne({ where: { id } });
+    if (admin && admin.username === 'admin') {
+      throw new BadRequestException('超级管理员账号 admin 不允许删除');
+    }
     const result = await this.adminRepository.delete(id);
     if (!result.affected) {
       throw new NotFoundException('管理员不存在');
@@ -696,7 +745,7 @@ export class AdminService {
     if (!admin) {
       throw new NotFoundException('管理员不存在');
     }
-    admin.password = await CryptoUtil.hashPassword(newPassword || 'Admin1234');
+    admin.password = await CryptoUtil.hashPassword(newPassword || 'admin123');
     await this.adminRepository.save(admin);
   }
 
@@ -704,7 +753,16 @@ export class AdminService {
    * 获取角色列表
    */
   async getRoles(): Promise<any[]> {
-    return AdminService.roles;
+    const allAdmins = await this.adminRepository.find();
+    return AdminService.roles.map((r) => {
+      const count = allAdmins.filter(
+        (a) => a.role === r.code || (r.code === 'super_admin' && (a.role === 'admin' || a.role === 'super_admin')),
+      ).length;
+      return {
+        ...r,
+        adminCount: count,
+      };
+    });
   }
 
   /**
