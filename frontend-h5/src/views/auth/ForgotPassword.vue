@@ -93,10 +93,11 @@ let count = 60
 const codeText = computed(() => (counting.value ? `${count}s 后重发` : '获取验证码'))
 
 async function sendCode() {
-  if (!isAccount(form.account)) return showToast('请输入正确的手机号或邮箱')
+  const acc = form.account.trim()
+  if (!acc) return showToast('请输入账号、手机号或邮箱')
   try {
-    await apiSendCode(form.account, 'reset')
-    showToast({ type: 'success', message: '验证码已发送' })
+    const res = await apiSendCode(acc, 'reset')
+    showToast({ type: 'success', message: res.data?.message || '验证码已发送' })
     counting.value = true
     const timer = setInterval(() => {
       count--
@@ -106,27 +107,28 @@ async function sendCode() {
         count = 60
       }
     }, 1000)
-  } catch {
-    // ...
+  } catch (err: any) {
+    showToast(err.message || '发送失败，请稍后重试')
   }
 }
 
 async function onReset() {
-  if (!isAccount(form.account)) return showToast('请输入正确的手机号或邮箱')
-  if (!/^\d{6}$/.test(form.code)) return showToast('请输入6位验证码')
-  if (!isValidPassword(form.newPassword)) return showToast('密码长度为6-20位')
+  const acc = form.account.trim()
+  if (!acc) return showToast('请输入账号、手机号或邮箱')
+  if (!/^\d{6}$/.test(form.code.trim())) return showToast('请输入6位验证码')
+  if (!isValidPassword(form.newPassword)) return showToast('密码长度需为6-20位')
 
   loading.value = true
   try {
     await forgotPassword({
-      account: form.account,
-      code: form.code,
+      account: acc,
+      code: form.code.trim(),
       newPassword: form.newPassword
     })
     showToast({ type: 'success', message: '密码已重置，请登录' })
     router.replace('/auth/login')
-  } catch {
-    // ...
+  } catch (err: any) {
+    showToast(err.message || '重置失败，请检查验证码')
   } finally {
     loading.value = false
   }

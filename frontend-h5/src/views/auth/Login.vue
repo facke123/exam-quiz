@@ -22,19 +22,23 @@
       <van-field
         v-model="form.account"
         label=""
-        placeholder="手机号 / 邮箱"
+        placeholder="手机号 / 邮箱 / 用户名"
         left-icon="manager-o"
         clearable
+        autocomplete="username"
         class="input-field"
+        @keyup.enter="onLogin"
       />
       <van-field
         v-model="form.password"
         type="password"
         label=""
-        placeholder="密码"
+        placeholder="密码（6-20位）"
         left-icon="lock"
         clearable
+        autocomplete="current-password"
         class="input-field"
+        @keyup.enter="onLogin"
       />
 
       <van-button
@@ -75,7 +79,7 @@ import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
-import { isAccount, isValidPassword } from '@/utils/validate'
+import { isValidPassword } from '@/utils/validate'
 
 const router = useRouter()
 const route = useRoute()
@@ -85,20 +89,42 @@ const form = reactive({ account: '', password: '' })
 const loading = ref(false)
 
 async function onLogin() {
-  if (!isAccount(form.account)) {
-    return showToast('请输入正确的手机号或邮箱')
+  const acc = form.account.trim()
+  if (!acc) {
+    return showToast('请输入账号、手机号或邮箱')
+  }
+  if (!form.password) {
+    return showToast('请输入登录密码')
   }
   if (!isValidPassword(form.password)) {
     return showToast('密码长度为6-20位')
   }
+
   loading.value = true
   try {
-    await userStore.login(form.account, form.password)
+    await userStore.login(acc, form.password)
     showToast({ type: 'success', message: '登录成功' })
-    const redirect = (route.query.redirect as string) || '/'
-    router.replace(redirect)
-  } catch {
-    // 错误由拦截器处理
+
+    // 解析目标跳转路径
+    let redirect = (route.query.redirect as string) || '/'
+    try {
+      redirect = decodeURIComponent(redirect)
+    } catch {
+      // ignore
+    }
+
+    // 防止重定向到认证相关页面形成死循环
+    if (!redirect || redirect.startsWith('/auth/login') || redirect.startsWith('/auth/register') || redirect.startsWith('/auth/forgot')) {
+      redirect = '/'
+    }
+
+    try {
+      await router.replace(redirect)
+    } catch {
+      window.location.href = redirect
+    }
+  } catch (err: any) {
+    showToast(err.message || '登录失败，请检查账号密码')
   } finally {
     loading.value = false
   }
