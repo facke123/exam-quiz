@@ -133,3 +133,75 @@ textarea {
 .katex {
   font-size: 1.05em;
 }
+
+// ==================== PC 桌面端适配样式 ====================
+@media (min-width: 768px) {
+  body {
+    background-color: #0b0f19 !important;
+    background-image: 
+      radial-gradient(at 10% 20%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+      radial-gradient(at 90% 80%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+      radial-gradient(at 50% 50%, #0f172a 0px, #0b0f19 100%) !important;
+    background-attachment: fixed !important;
+  }
+
+  // 修复 PC 端所有的 position: fixed 组件，使其居中限制在 520px 画布内
+  .van-tabbar,
+  .app-tabbar,
+  .quiz-footer,
+  .vip-buy-bar,
+  .nav-bar,
+  .fixed-bottom-bar,
+  .bottom-bar,
+  .fixed-btn-wrap {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 520px !important;
+  }
+
+  // 修复底部抽屉/弹窗在 PC 端的居中与最大宽度
+  .van-popup--bottom {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 520px !important;
+    border-top-left-radius: 16px !important;
+    border-top-right-radius: 16px !important;
+  }
+
+  // 修复顶部弹窗在 PC 端的居中
+  .van-popup--top {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 520px !important;
+  }
+
+  // 修复 Dialog 在 PC 端的大小
+  .van-dialog {
+    max-width: 420px !important;
+    border-radius: 16px !important;
+  }
+
+  // 优化 PC 端滚动条样式
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+  }
+}
+

@@ -318,11 +318,80 @@ onMounted(async () => {
       else onSubmit()
     }, 1000)
   }
+
+  // 绑定 PC 键盘快捷键监听
+  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  window.removeEventListener('keydown', handleKeydown)
 })
+
+// PC 桌面端快捷键处理
+function handleKeydown(e: KeyboardEvent) {
+  // 如果焦点在输入框/富文本中则忽略
+  const tag = (document.activeElement?.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) {
+    return
+  }
+
+  // 方向键左 / PageUp：上一题
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault()
+    onPrev()
+    return
+  }
+
+  // 方向键右 / PageDown：下一题
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+    e.preventDefault()
+    onNext()
+    return
+  }
+
+  // 空格键：展开/收起答题卡
+  if (e.code === 'Space') {
+    e.preventDefault()
+    sheetVisible.value = !sheetVisible.value
+    return
+  }
+
+  // A/B/C/D 或 1/2/3/4 选择选项
+  const q = currentQuestion.value
+  if (!q) return
+
+  const keyMap: Record<string, string> = {
+    '1': 'A',
+    '2': 'B',
+    '3': 'C',
+    '4': 'D',
+    'a': 'A',
+    'b': 'B',
+    'c': 'C',
+    'd': 'D',
+    'A': 'A',
+    'B': 'B',
+    'C': 'C',
+    'D': 'D',
+  }
+
+  const selectedOpt = keyMap[e.key]
+  if (selectedOpt) {
+    if (q.type === 'multiple') {
+      const current = Array.isArray(currentAnswer.value) ? [...currentAnswer.value] : []
+      const idx = current.indexOf(selectedOpt)
+      if (idx > -1) {
+        current.splice(idx, 1)
+      } else {
+        current.push(selectedOpt)
+      }
+      currentAnswer.value = current
+    } else if (q.type === 'single' || q.type === 'judge') {
+      currentAnswer.value = selectedOpt
+    }
+  }
+}
 </script>
 
 <style scoped lang="scss">

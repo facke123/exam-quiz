@@ -13,6 +13,8 @@ declare module 'vue' {
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']
     LoadingState: typeof import('./src/components/LoadingState.vue')['default']
     OptionItem: typeof import('./src/components/OptionItem.vue')['default']
+    PcDesktopSidebarLeft: typeof import('./src/components/PcDesktopSidebarLeft.vue')['default']
+    PcDesktopSidebarRight: typeof import('./src/components/PcDesktopSidebarRight.vue')['default']
     QuestionCard: typeof import('./src/components/QuestionCard.vue')['default']
     QuizFooter: typeof import('./src/components/QuizFooter.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
