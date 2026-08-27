@@ -192,9 +192,9 @@ export class AuthService {
    * 登录（支持5次错误锁定15分钟）
    */
   async login(dto: LoginDto): Promise<any> {
-    const account = dto.account || dto.username;
+    const account = (dto.account || dto.username || '').trim();
     if (!account) {
-      throw new BadRequestException('账号或用户名不能为空');
+      throw new BadRequestException('账号、手机号或邮箱不能为空');
     }
 
     const lockKey = `login_locked:${account}`;
@@ -211,17 +211,18 @@ export class AuthService {
 
     if (!user) {
       await this.recordLoginFailure(account);
-      throw new UnauthorizedException('用户名或密码错误');
+      throw new UnauthorizedException('该账号未注册或不存在');
     }
 
     if (user.status !== 1) {
       throw new UnauthorizedException('账号已被禁用，请联系管理员');
     }
 
-    const isValid = await CryptoUtil.comparePassword(dto.password, user.password);
+    const password = (dto.password || '').trim();
+    const isValid = await CryptoUtil.comparePassword(password, user.password);
     if (!isValid) {
       await this.recordLoginFailure(account);
-      throw new UnauthorizedException('用户名或密码错误');
+      throw new UnauthorizedException('登录密码错误，请检查后重试');
     }
 
     // 登录成功，清除失败记录

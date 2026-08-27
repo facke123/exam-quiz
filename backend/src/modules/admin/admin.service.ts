@@ -115,59 +115,59 @@ export class AdminService {
       }
 
       // 2. 初始化真实用户样本
-      const userCount = await this.userRepository.count();
-      if (userCount === 0) {
-        const defaultUsers = [
-          {
-            username: 'ruankao_master',
-            nickname: '软考学霸小张',
-            phone: '13800138001',
-            email: 'master@ruankao.com',
-            vipLevel: 2,
-            vipExpireAt: new Date(Date.now() + 180 * 24 * 3600 * 1000),
-            status: 1,
-          },
-          {
-            username: 'sys_architect',
-            nickname: '架构进阶者',
-            phone: '13800138002',
-            email: 'architect@ruankao.com',
-            vipLevel: 1,
-            vipExpireAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-            status: 1,
-          },
-          {
-            username: 'pm_expert',
-            nickname: '集成项目经理',
-            phone: '13800138003',
-            email: 'pm@ruankao.com',
-            vipLevel: 1,
-            vipExpireAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
-            status: 1,
-          },
-          {
-            username: 'code_runner',
-            nickname: '程序员小李',
-            phone: '13800138004',
-            email: 'coder@ruankao.com',
-            vipLevel: 0,
-            vipExpireAt: null,
-            status: 1,
-          },
-          {
-            username: 'net_engineer',
-            nickname: '网络通关小白',
-            phone: '13800138005',
-            email: 'network@ruankao.com',
-            vipLevel: 0,
-            vipExpireAt: null,
-            status: 1,
-          },
-        ];
+      const defaultUsers = [
+        {
+          username: 'ruankao_master',
+          nickname: '软考学霸小张',
+          phone: '13800138001',
+          email: 'master@ruankao.com',
+          vipLevel: 2,
+          vipExpireAt: new Date(Date.now() + 180 * 24 * 3600 * 1000),
+          status: 1,
+        },
+        {
+          username: 'sys_architect',
+          nickname: '架构进阶者',
+          phone: '13800138002',
+          email: 'architect@ruankao.com',
+          vipLevel: 1,
+          vipExpireAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+          status: 1,
+        },
+        {
+          username: 'pm_expert',
+          nickname: '集成项目经理',
+          phone: '13800138003',
+          email: 'pm@ruankao.com',
+          vipLevel: 1,
+          vipExpireAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
+          status: 1,
+        },
+        {
+          username: 'code_runner',
+          nickname: '程序员小李',
+          phone: '13800138004',
+          email: 'coder@ruankao.com',
+          vipLevel: 0,
+          vipExpireAt: null,
+          status: 1,
+        },
+        {
+          username: 'net_engineer',
+          nickname: '网络通关小白',
+          phone: '13800138005',
+          email: 'network@ruankao.com',
+          vipLevel: 0,
+          vipExpireAt: null,
+          status: 1,
+        },
+      ];
 
-        for (const u of defaultUsers) {
+      for (const u of defaultUsers) {
+        let user = await this.userRepository.findOne({ where: { username: u.username } });
+        if (!user) {
           const hash = await CryptoUtil.hashPassword('123456');
-          const user = this.userRepository.create({
+          user = this.userRepository.create({
             username: u.username,
             password: hash,
             nickname: u.nickname,
@@ -193,13 +193,22 @@ export class AdminService {
               totalQuestions: answered,
               answeredQuestions: answered,
               correctCount: correct,
-              score: Math.round((correct / answered) * 100),
-              duration: answered * 60,
-              status: 'completed',
+              score: correct,
+              duration: Math.floor(answered * 60 * 1.5),
               startedAt: date,
               submittedAt: new Date(date.getTime() + answered * 60 * 1000),
+              status: 'completed',
+              createdAt: date,
             });
             await this.recordRepository.save(record);
+          }
+        } else {
+          // 确保演示账号密码为 123456 且状态为正常
+          const isMatch = await CryptoUtil.comparePassword('123456', user.password);
+          if (!isMatch || user.status !== 1) {
+            user.password = await CryptoUtil.hashPassword('123456');
+            user.status = 1;
+            await this.userRepository.save(user);
           }
         }
       }
