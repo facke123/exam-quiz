@@ -111,12 +111,19 @@ export const constantRoutes: RouteRecordRaw[] = [
     path: '/user',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/user/list',
+    meta: { title: '学员与VIP管理', icon: 'User' },
     children: [
       {
         path: 'list',
         name: 'UserList',
         component: () => import('@/views/user/UserList.vue'),
-        meta: { title: '用户管理', icon: 'User', keepAlive: true },
+        meta: { title: '学员账号管理', icon: 'User', keepAlive: true },
+      },
+      {
+        path: 'vip',
+        name: 'VipManage',
+        component: () => import('@/views/user/VipManage.vue'),
+        meta: { title: 'VIP会员与套餐设置', icon: 'Medal', keepAlive: true },
       },
     ],
   },

@@ -13,6 +13,8 @@ import { User } from '@/database/entities/user.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
 import { OperationLog } from '@/database/entities/operation-log.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
+import { MemberPlan } from '@/database/entities/member-plan.entity';
+import { Order } from '@/database/entities/order.entity';
 import { AdminLoginDto, SystemConfigDto, CreateUserAdminDto } from './dto/admin.dto';
 import { CryptoUtil } from '@/common/utils/crypto.util';
 
@@ -39,8 +41,9 @@ export class AdminService {
       description: '负责软考题库、章节试题、历年真题、试卷组卷与 AI 智能出题审核',
       permissions: [
         'question:view', 'question:edit', 'question:delete', 'question:import', 'question:feedback',
-        'exam:view', 'exam:edit', 'exam:generate', 'exam:publish',
-        'ai:prompt', 'ai:generate', 'ai:audit',
+        'exam:generate', 'exam:publish',
+        'ai:generate', 'ai:analysis', 'ai:prompt', 'ai:audit',
+        'stats:quiz',
       ],
       adminCount: 1,
       createdAt: '2026-01-02T00:00:00.000Z',
@@ -96,6 +99,10 @@ export class AdminService {
     private readonly logRepository: Repository<OperationLog>,
     @InjectRepository(PracticeRecord)
     private readonly recordRepository: Repository<PracticeRecord>,
+    @InjectRepository(MemberPlan)
+    private readonly planRepository: Repository<MemberPlan>,
+    @InjectRepository(Order)
+    private readonly orderRepository: Repository<Order>,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -516,9 +523,24 @@ export class AdminService {
       qb.andWhere('u.status = :status', { status: numStatus });
     }
     if (memberLevel) {
-      const levelMap: Record<string, number> = { free: 0, basic: 1, pro: 2, max: 3 };
-      if (levelMap[memberLevel] !== undefined) {
-        qb.andWhere('u.vipLevel = :vipLevel', { vipLevel: levelMap[memberLevel] });
+      if (memberLevel === 'vip' || memberLevel === 'isVip') {
+        qb.andWhere('u.vipLevel > 0 AND (u.vipExpireAt > NOW() OR u.vipLevel >= 4)');
+      } else if (memberLevel === 'free') {
+        qb.andWhere('(u.vipLevel = 0 OR u.vipExpireAt IS NULL OR (u.vipExpireAt <= NOW() AND u.vipLevel < 4))');
+      } else {
+        const levelMap: Record<string, number> = {
+          free: 0,
+          monthly: 1,
+          basic: 1,
+          quarterly: 2,
+          pro: 2,
+          yearly: 3,
+          max: 3,
+          lifetime: 4,
+        };
+        if (levelMap[memberLevel] !== undefined) {
+          qb.andWhere('u.vipLevel = :vipLevel', { vipLevel: levelMap[memberLevel] });
+        }
       }
     }
 
@@ -528,23 +550,56 @@ export class AdminService {
 
     const [list, total] = await qb.getManyAndCount();
 
-    const levelReverseMap: Record<number, string> = { 0: 'free', 1: 'basic', 2: 'pro', 3: 'max' };
+    const formattedList = list.map(({ password: _p, ...u }) => {
+      const isLifetime =
+        u.vipLevel >= 4 ||
+        (u.vipExpireAt && new Date(u.vipExpireAt).getFullYear() >= 2090);
+      const isVip =
+        isLifetime ||
+        (u.vipLevel > 0 &&
+          u.vipExpireAt &&
+          new Date(u.vipExpireAt).getTime() > Date.now());
 
-    const formattedList = list.map(({ password: _p, ...u }) => ({
-      id: Number(u.id),
-      username: u.username,
-      nickname: u.nickname || u.username,
-      avatar: u.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-      phone: u.phone || '',
-      email: u.email || '',
-      status: u.status === 1 ? 'active' : 'disabled',
-      memberLevel: levelReverseMap[u.vipLevel] || 'free',
-      memberExpireAt: u.vipExpireAt ? new Date(u.vipExpireAt).toISOString() : null,
-      questionCount: 0,
-      correctRate: 0,
-      registerAt: u.createdAt,
-      lastLoginAt: u.updatedAt,
-    }));
+      let memberLevel = 'free';
+      let vipLevelName = '免费学员';
+      let expireText = '未开通';
+
+      if (isLifetime) {
+        memberLevel = 'lifetime';
+        vipLevelName = '永久尊享会员';
+        expireText = '永久有效';
+      } else if (isVip) {
+        const lvlNames: Record<number, string> = { 1: '月卡会员', 2: '季卡会员', 3: '年卡会员' };
+        const lvlKeys: Record<number, string> = { 1: 'monthly', 2: 'quarterly', 3: 'yearly' };
+        memberLevel = lvlKeys[u.vipLevel] || 'monthly';
+        vipLevelName = lvlNames[u.vipLevel] || 'VIP会员';
+        const days = Math.ceil(
+          (new Date(u.vipExpireAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        );
+        expireText = `${new Date(u.vipExpireAt).toLocaleDateString()} (余${days}天)`;
+      }
+
+      return {
+        id: Number(u.id),
+        username: u.username,
+        nickname: u.nickname || u.username,
+        avatar: u.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+        phone: u.phone || '',
+        email: u.email || '',
+        status: u.status === 1 ? 'active' : 'disabled',
+        isVip,
+        isLifetime,
+        vipLevel: u.vipLevel,
+        vipLevelName,
+        memberLevel,
+        memberExpireAt: u.vipExpireAt ? new Date(u.vipExpireAt).toISOString() : null,
+        expireText,
+        questionCount: 0,
+        correctRate: 0,
+        registerAt: u.createdAt,
+        lastLoginAt: u.updatedAt,
+      };
+    });
 
     return { list: formattedList, total };
   }
@@ -561,7 +616,33 @@ export class AdminService {
     }
 
     const { password: _p, ...u } = user;
-    const levelReverseMap: Record<number, string> = { 0: 'free', 1: 'basic', 2: 'pro', 3: 'max' };
+    const isLifetime =
+      u.vipLevel >= 4 ||
+      (u.vipExpireAt && new Date(u.vipExpireAt).getFullYear() >= 2090);
+    const isVip =
+      isLifetime ||
+      (u.vipLevel > 0 &&
+        u.vipExpireAt &&
+        new Date(u.vipExpireAt).getTime() > Date.now());
+
+    let memberLevel = 'free';
+    let vipLevelName = '免费学员';
+    let expireText = '未开通';
+
+    if (isLifetime) {
+      memberLevel = 'lifetime';
+      vipLevelName = '永久尊享会员';
+      expireText = '永久有效';
+    } else if (isVip) {
+      const lvlNames: Record<number, string> = { 1: '月卡会员', 2: '季卡会员', 3: '年卡会员' };
+      const lvlKeys: Record<number, string> = { 1: 'monthly', 2: 'quarterly', 3: 'yearly' };
+      memberLevel = lvlKeys[u.vipLevel] || 'monthly';
+      vipLevelName = lvlNames[u.vipLevel] || 'VIP会员';
+      const days = Math.ceil(
+        (new Date(u.vipExpireAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      expireText = `${new Date(u.vipExpireAt).toLocaleDateString()} (余${days}天)`;
+    }
 
     return {
       id: Number(u.id),
@@ -571,8 +652,13 @@ export class AdminService {
       phone: u.phone,
       email: u.email,
       status: u.status === 1 ? 'active' : 'disabled',
-      memberLevel: levelReverseMap[u.vipLevel] || 'free',
+      isVip,
+      isLifetime,
+      vipLevel: u.vipLevel,
+      vipLevelName,
+      memberLevel,
       memberExpireAt: u.vipExpireAt ? new Date(u.vipExpireAt).toISOString() : null,
+      expireText,
       registerAt: u.createdAt,
       lastLoginAt: u.updatedAt,
     };
@@ -608,11 +694,17 @@ export class AdminService {
   }
 
   /**
-   * 修改用户会员状态
+   * 修改用户会员状态与权限
    */
   async updateUserMember(
     userId: number,
-    data: { memberLevel: string; expireAt?: string },
+    data: {
+      memberLevel?: string | number;
+      vipLevel?: number;
+      expireAt?: string | null;
+      isLifetime?: boolean;
+      durationDays?: number;
+    },
   ): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -620,14 +712,327 @@ export class AdminService {
     if (!user) {
       throw new NotFoundException('用户不存在');
     }
-    const levelMap: Record<string, number> = { free: 0, basic: 1, pro: 2, max: 3 };
-    user.vipLevel = levelMap[data.memberLevel] !== undefined ? levelMap[data.memberLevel] : 1;
+
+    const levelStr = String(data.memberLevel || data.vipLevel || '').toLowerCase();
+    if (levelStr === 'free' || levelStr === '0') {
+      user.vipLevel = 0;
+      user.vipExpireAt = null;
+      await this.userRepository.save(user);
+      return;
+    }
+
+    if (data.isLifetime || levelStr === 'lifetime' || levelStr === '4') {
+      user.vipLevel = 4;
+      user.vipExpireAt = new Date('2099-12-31T23:59:59.000Z');
+      await this.userRepository.save(user);
+      return;
+    }
+
+    let lvl = 1;
+    let days = data.durationDays || 30;
+    if (levelStr === 'yearly' || levelStr === '3' || levelStr === 'max') {
+      lvl = 3;
+      days = data.durationDays || 365;
+    } else if (levelStr === 'quarterly' || levelStr === '2' || levelStr === 'pro') {
+      lvl = 2;
+      days = data.durationDays || 90;
+    } else if (
+      levelStr === 'monthly' ||
+      levelStr === '1' ||
+      levelStr === 'basic' ||
+      levelStr === 'vip'
+    ) {
+      lvl = 1;
+      days = data.durationDays || 30;
+    }
+
+    user.vipLevel = lvl;
     if (data.expireAt) {
       user.vipExpireAt = new Date(data.expireAt);
     } else {
-      user.vipExpireAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      const baseDate =
+        user.vipExpireAt &&
+        new Date(user.vipExpireAt).getTime() > Date.now() &&
+        user.vipLevel < 4
+          ? new Date(user.vipExpireAt)
+          : new Date();
+      baseDate.setDate(baseDate.getDate() + days);
+      user.vipExpireAt = baseDate;
     }
+
     await this.userRepository.save(user);
+  }
+
+  // ==================== VIP 会员套餐与价格管理 ====================
+
+  /**
+   * 获取所有会员套餐（后台管理）
+   */
+  async getMemberPlans(): Promise<MemberPlan[]> {
+    let plans = await this.planRepository.find({
+      order: { price: 'ASC', id: 'ASC' },
+    });
+    if (plans.length === 0) {
+      await this.resetDefaultMemberPlans();
+      plans = await this.planRepository.find({
+        order: { price: 'ASC', id: 'ASC' },
+      });
+    }
+    return plans;
+  }
+
+  /**
+   * 新增会员套餐
+   */
+  async createMemberPlan(dto: any): Promise<MemberPlan> {
+    const plan = this.planRepository.create({
+      name: dto.name,
+      type: dto.type || 'monthly',
+      price: Number(dto.price),
+      originalPrice: dto.originalPrice ? Number(dto.originalPrice) : Number(dto.price) * 2,
+      duration: Number(dto.duration || 30),
+      features: Array.isArray(dto.features)
+        ? dto.features
+        : dto.features
+        ? String(dto.features).split('\n').filter(Boolean)
+        : [],
+      status: dto.status !== undefined ? Number(dto.status) : 1,
+    });
+    return this.planRepository.save(plan);
+  }
+
+  /**
+   * 编辑会员套餐
+   */
+  async updateMemberPlan(id: number, dto: any): Promise<MemberPlan> {
+    const plan = await this.planRepository.findOne({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException('套餐不存在');
+    }
+    if (dto.name !== undefined) plan.name = dto.name;
+    if (dto.type !== undefined) plan.type = dto.type;
+    if (dto.price !== undefined) plan.price = Number(dto.price);
+    if (dto.originalPrice !== undefined) plan.originalPrice = Number(dto.originalPrice);
+    if (dto.duration !== undefined) plan.duration = Number(dto.duration);
+    if (dto.features !== undefined) {
+      plan.features = Array.isArray(dto.features)
+        ? dto.features
+        : typeof dto.features === 'string'
+        ? dto.features.split('\n').filter(Boolean)
+        : dto.features;
+    }
+    if (dto.status !== undefined) plan.status = Number(dto.status);
+
+    return this.planRepository.save(plan);
+  }
+
+  /**
+   * 删除会员套餐
+   */
+  async deleteMemberPlan(id: number): Promise<void> {
+    const plan = await this.planRepository.findOne({ where: { id } });
+    if (!plan) {
+      throw new NotFoundException('套餐不存在');
+    }
+    await this.planRepository.remove(plan);
+  }
+
+  /**
+   * 重置为官方默认会员套餐与价格（月卡6/季卡15/年卡60/永久68）
+   */
+  async resetDefaultMemberPlans(): Promise<void> {
+    await this.planRepository.clear();
+    const defaults = [
+      {
+        name: '月卡会员',
+        type: 'monthly',
+        price: 6.0,
+        originalPrice: 19.0,
+        duration: 30,
+        features: ['解锁全部章节题目', 'AI 智能考点解析', '错题本无上限', '艾宾浩斯智能复习', '考后自动估分'],
+        status: 1,
+      },
+      {
+        name: '季卡会员',
+        type: 'quarterly',
+        price: 15.0,
+        originalPrice: 45.0,
+        duration: 90,
+        features: ['解锁全部题目与历年真题', 'AI 智能深度解析', '错题本无上限', '艾宾浩斯智能复习', '历年真题详细考点解析', '全真模拟考试'],
+        status: 1,
+      },
+      {
+        name: '年卡会员',
+        type: 'yearly',
+        price: 60.0,
+        originalPrice: 180.0,
+        duration: 365,
+        features: ['解锁全部科目全部题库', 'AI 智能极速解析', '无限次全真模拟考试', '错题本智能巩固', '艾宾浩斯智能复习', '专属答疑社群'],
+        status: 1,
+      },
+      {
+        name: '永久尊享会员',
+        type: 'lifetime',
+        price: 68.0,
+        originalPrice: 298.0,
+        duration: 36500,
+        features: ['永久终身买断 · 无限期有效', '解锁全科全部历年真题与题库', 'AI 深度无限次出题与解析', '未来新考季题库永久免费更新', 'VIP 尊享身份标识与专属客服'],
+        status: 1,
+      },
+    ];
+    for (const d of defaults) {
+      const p = this.planRepository.create(d);
+      await this.planRepository.save(p);
+    }
+  }
+
+  /**
+   * 查询 VIP 会员用户列表（支持筛选与统计）
+   */
+  async getVipUsers(query: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    vipLevel?: string | number;
+  }): Promise<{ list: any[]; total: number; stats: any }> {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+
+    const qb = this.userRepository.createQueryBuilder('u');
+    qb.where('u.vipLevel > 0 AND (u.vipExpireAt > NOW() OR u.vipLevel >= 4)');
+
+    if (query.keyword) {
+      qb.andWhere(
+        '(u.username LIKE :kw OR u.nickname LIKE :kw OR u.phone LIKE :kw OR u.email LIKE :kw)',
+        { kw: `%${query.keyword}%` },
+      );
+    }
+
+    if (query.vipLevel !== undefined && query.vipLevel !== '') {
+      const lvlMap: Record<string, number> = {
+        monthly: 1,
+        quarterly: 2,
+        yearly: 3,
+        lifetime: 4,
+      };
+      const lvlNum =
+        typeof query.vipLevel === 'number'
+          ? query.vipLevel
+          : lvlMap[query.vipLevel] || Number(query.vipLevel);
+      if (!isNaN(lvlNum) && lvlNum > 0) {
+        qb.andWhere('u.vipLevel = :lvl', { lvl: lvlNum });
+      }
+    }
+
+    qb.skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('u.vipLevel', 'DESC')
+      .addOrderBy('u.vipExpireAt', 'DESC');
+
+    const [list, total] = await qb.getManyAndCount();
+    const stats = await this.getVipStats();
+
+    const formatted = list.map((u) => {
+      const isLifetime =
+        u.vipLevel >= 4 ||
+        (u.vipExpireAt && new Date(u.vipExpireAt).getFullYear() >= 2090);
+      const lvlNames: Record<number, string> = {
+        1: '月卡会员',
+        2: '季卡会员',
+        3: '年卡会员',
+        4: '永久尊享会员',
+      };
+      const lvlCodes: Record<number, string> = {
+        1: 'monthly',
+        2: 'quarterly',
+        3: 'yearly',
+        4: 'lifetime',
+      };
+      const vipLevelName = isLifetime ? '永久尊享会员' : lvlNames[u.vipLevel] || 'VIP会员';
+      let expireText = '永久有效';
+      let daysRemaining = 99999;
+      if (!isLifetime && u.vipExpireAt) {
+        daysRemaining = Math.max(
+          0,
+          Math.ceil((new Date(u.vipExpireAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+        );
+        expireText = `${new Date(u.vipExpireAt).toLocaleDateString()} (余${daysRemaining}天)`;
+      }
+
+      return {
+        id: Number(u.id),
+        username: u.username,
+        nickname: u.nickname || u.username,
+        avatar: u.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+        phone: u.phone || '',
+        email: u.email || '',
+        status: u.status === 1 ? 'active' : 'disabled',
+        vipLevel: u.vipLevel,
+        vipLevelCode: isLifetime ? 'lifetime' : lvlCodes[u.vipLevel] || 'monthly',
+        vipLevelName,
+        isLifetime,
+        vipExpireAt: u.vipExpireAt,
+        expireText,
+        daysRemaining,
+        createdAt: u.createdAt,
+      };
+    });
+
+    return { list: formatted, total, stats };
+  }
+
+  /**
+   * 获取 VIP 会员统计数据
+   */
+  async getVipStats(): Promise<{
+    totalVipCount: number;
+    lifetimeCount: number;
+    yearlyCount: number;
+    quarterlyCount: number;
+    monthlyCount: number;
+    planCount: number;
+  }> {
+    const totalVipCount = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel > 0 AND (u.vipExpireAt > NOW() OR u.vipLevel >= 4)')
+      .getCount();
+
+    const lifetimeCount = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel >= 4 OR (u.vipExpireAt >= :farFuture)', { farFuture: '2090-01-01' })
+      .getCount();
+
+    const yearlyCount = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel = 3 AND u.vipExpireAt > NOW() AND u.vipExpireAt < :farFuture', {
+        farFuture: '2090-01-01',
+      })
+      .getCount();
+
+    const quarterlyCount = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel = 2 AND u.vipExpireAt > NOW() AND u.vipExpireAt < :farFuture', {
+        farFuture: '2090-01-01',
+      })
+      .getCount();
+
+    const monthlyCount = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel = 1 AND u.vipExpireAt > NOW() AND u.vipExpireAt < :farFuture', {
+        farFuture: '2090-01-01',
+      })
+      .getCount();
+
+    const planCount = await this.planRepository.count();
+
+    return {
+      totalVipCount,
+      lifetimeCount,
+      yearlyCount,
+      quarterlyCount,
+      monthlyCount,
+      planCount,
+    };
   }
 
   /**

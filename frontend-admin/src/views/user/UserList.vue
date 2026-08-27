@@ -78,14 +78,28 @@
         <el-table-column prop="registerAt" label="注册时间" width="160" align="center" />
         <el-table-column prop="lastLoginAt" label="最近登录" width="160" align="center" />
 
-        <el-table-column label="会员状态" width="160">
+        <el-table-column label="会员状态" width="180" align="center">
           <template #default="{ row }">
-            <span v-if="row.isVip || row.memberLevel === 'vip' || row.memberLevel === 'pro'" class="vip-badge">
-              👑 VIP会员
-            </span>
-            <span v-else class="free-badge">
-              免费用户
-            </span>
+            <div class="vip-status-col">
+              <span v-if="row.isLifetime || row.vipLevel >= 4 || row.memberLevel === 'lifetime'" class="vip-badge-lifetime">
+                👑 永久尊享会员
+              </span>
+              <span v-else-if="row.vipLevel === 3 || row.memberLevel === 'yearly'" class="vip-badge-yearly">
+                📅 年卡会员
+              </span>
+              <span v-else-if="row.vipLevel === 2 || row.memberLevel === 'quarterly'" class="vip-badge-quarterly">
+                ⏱️ 季卡会员
+              </span>
+              <span v-else-if="row.vipLevel === 1 || row.isVip || row.memberLevel === 'monthly' || row.memberLevel === 'vip' || row.memberLevel === 'pro'" class="vip-badge-monthly">
+                ⏱️ 月卡会员
+              </span>
+              <span v-else class="free-badge">
+                免费用户
+              </span>
+              <div v-if="row.expireText" class="vip-exp-hint">
+                {{ row.expireText }}
+              </div>
+            </div>
           </template>
         </el-table-column>
 
@@ -211,6 +225,43 @@
         <el-button type="primary" :loading="resetPwdLoading" @click="confirmResetPwd">确认重置</el-button>
       </template>
     </el-dialog>
+
+    <!-- 调整 / 赠送 VIP 弹窗 -->
+    <el-dialog
+      v-model="giftVipDialogVisible"
+      :title="`为学员 [${giftVipUser?.username || ''}] 调整 / 开通 VIP 权益`"
+      width="480px"
+      append-to-body
+    >
+      <el-form label-width="110px" style="margin-top: 10px">
+        <el-form-item label="学员账号">
+          <el-input :model-value="giftVipUser?.username || giftVipUser?.phone || giftVipUser?.email" disabled />
+        </el-form-item>
+        <el-form-item label="会员等级" required>
+          <el-radio-group v-model="giftVipForm.memberLevel" style="display: flex; flex-direction: column; gap: 10px">
+            <el-radio value="lifetime">
+              <span style="font-weight: 700; color: #dc2626">👑 永久尊享会员 (终身有效免续费)</span>
+            </el-radio>
+            <el-radio value="yearly">
+              <span style="font-weight: 600; color: #d97706">📅 年卡会员 (365天)</span>
+            </el-radio>
+            <el-radio value="quarterly">
+              <span style="font-weight: 600; color: #2563eb">⏱️ 季卡会员 (90天)</span>
+            </el-radio>
+            <el-radio value="monthly">
+              <span style="font-weight: 600; color: #16a34a">⏱️ 月卡会员 (30天)</span>
+            </el-radio>
+            <el-radio value="free">
+              <span style="color: #64748b">🚫 撤销会员 (设为普通免费学员)</span>
+            </el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="giftVipDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="giftVipLoading" @click="confirmGiftVip">确认保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -232,6 +283,14 @@ const resetPwdUser = ref<any>(null)
 const resetPwdForm = reactive({
   password: '',
   confirmPassword: '',
+})
+
+// 调整 / 赠送 VIP 相关
+const giftVipDialogVisible = ref(false)
+const giftVipLoading = ref(false)
+const giftVipUser = ref<any>(null)
+const giftVipForm = reactive({
+  memberLevel: 'lifetime',
 })
 
 const query = reactive({
@@ -285,19 +344,28 @@ async function handleStatusChange(row: any, active: any) {
 }
 
 function handleGiftVip(row: any) {
-  ElMessageBox.prompt('请输入赠送月数（默认1个月）', `为 [${row.username}] 赠送 VIP`, {
-    inputValue: '1',
-  }).then(async ({ value }) => {
-    try {
-      await updateMember(row.id, { level: 'pro', duration: Number(value) || 1 })
-      row.isVip = true
-      row.memberLevel = 'vip'
-      ElMessage.success(`已成功为 ${row.username} 开通 ${value} 个月 VIP 权益！`)
-    } catch {
-      row.isVip = true
-      ElMessage.success('VIP 已开通')
+  giftVipUser.value = row
+  giftVipForm.memberLevel = row.isLifetime || row.vipLevel >= 4 ? 'lifetime' : (row.vipLevel === 3 ? 'yearly' : (row.vipLevel === 2 ? 'quarterly' : (row.vipLevel === 1 ? 'monthly' : 'yearly')))
+  giftVipDialogVisible.value = true
+}
+
+async function confirmGiftVip() {
+  if (!giftVipUser.value) return
+  giftVipLoading.value = true
+  try {
+    const payload = {
+      memberLevel: giftVipForm.memberLevel,
+      isLifetime: giftVipForm.memberLevel === 'lifetime',
     }
-  })
+    await updateMember(giftVipUser.value.id, payload)
+    ElMessage.success(`已成功更新学员 [${giftVipUser.value.username}] 的 VIP 权限！`)
+    giftVipDialogVisible.value = false
+    fetchList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '更新 VIP 权限失败')
+  } finally {
+    giftVipLoading.value = false
+  }
 }
 
 function handleResetPwd(row: any) {
@@ -448,6 +516,62 @@ onMounted(fetchList)
     font-size: 13px;
     color: var(--gray-8);
   }
+}
+
+.vip-status-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.vip-badge-lifetime {
+  display: inline-block;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+}
+
+.vip-badge-yearly {
+  display: inline-block;
+  background: #fffbeb;
+  color: #d97706;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #fde68a;
+}
+
+.vip-badge-quarterly {
+  display: inline-block;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #bfdbfe;
+}
+
+.vip-badge-monthly {
+  display: inline-block;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #bbf7d0;
+}
+
+.vip-exp-hint {
+  font-size: 11px;
+  color: var(--gray-5);
 }
 
 .vip-badge {

@@ -129,10 +129,75 @@ export class AdminController {
   @ApiOperation({ summary: '修改用户会员状态' })
   async updateUserMember(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { memberLevel: string; expireAt?: string },
+    @Body() body: {
+      memberLevel?: string | number;
+      vipLevel?: number;
+      expireAt?: string;
+      isLifetime?: boolean;
+      durationDays?: number;
+    },
   ) {
     await this.adminService.updateUserMember(id, body);
     return { message: '会员状态修改成功' };
+  }
+
+  // ==================== VIP 会员套餐与价格配置 ====================
+
+  @Get('member/plans')
+  @ApiOperation({ summary: '获取全部会员套餐列表' })
+  async getMemberPlans() {
+    return this.adminService.getMemberPlans();
+  }
+
+  @Post('member/plans')
+  @ApiOperation({ summary: '新增会员套餐' })
+  async createMemberPlan(@Body() body: any) {
+    return this.adminService.createMemberPlan(body);
+  }
+
+  @Put('member/plans/:id')
+  @ApiOperation({ summary: '修改会员套餐价格与设置' })
+  async updateMemberPlan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+  ) {
+    return this.adminService.updateMemberPlan(id, body);
+  }
+
+  @Delete('member/plans/:id')
+  @ApiOperation({ summary: '删除会员套餐' })
+  async deleteMemberPlan(@Param('id', ParseIntPipe) id: number) {
+    await this.adminService.deleteMemberPlan(id);
+    return { message: '套餐已删除' };
+  }
+
+  @Post('member/plans/reset-defaults')
+  @ApiOperation({ summary: '重置为官方默认会员套餐(月卡6/季卡15/年卡60/永久68)' })
+  async resetDefaultMemberPlans() {
+    await this.adminService.resetDefaultMemberPlans();
+    return { message: '默认套餐已重置为：月卡6元、季卡15元、年卡60元、永久会员68元' };
+  }
+
+  @Get('member/users')
+  @ApiOperation({ summary: '查询 VIP 会员用户列表' })
+  async getVipUsers(
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+    @Query('keyword') keyword?: string,
+    @Query('vipLevel') vipLevel?: string,
+  ) {
+    return this.adminService.getVipUsers({
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 20,
+      keyword,
+      vipLevel,
+    });
+  }
+
+  @Get('member/stats')
+  @ApiOperation({ summary: '获取 VIP 会员统计数据' })
+  async getVipStats() {
+    return this.adminService.getVipStats();
   }
 
   @Get('users/:id/records')
