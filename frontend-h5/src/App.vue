@@ -29,15 +29,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSubjectStore } from '@/stores/subject'
+import { useConfigStore } from '@/stores/config'
 import PcDesktopSidebarLeft from '@/components/PcDesktopSidebarLeft.vue'
 import PcDesktopSidebarRight from '@/components/PcDesktopSidebarRight.vue'
 
 const cachedViews = ref<string[]>(['Home', 'ChapterList', 'WrongBook', 'Stats', 'Mine'])
 const globalLoading = ref(false)
 const subjectStore = useSubjectStore()
+const configStore = useConfigStore()
 
 onMounted(() => {
   subjectStore.fetchSubjects()
+  configStore.fetchConfig()
 })
 </script>
 

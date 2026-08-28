@@ -393,44 +393,26 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
+import { useConfigStore } from '@/stores/config'
 import { getOverview, getRadar } from '@/api/stats'
-import { getBanners, getAnnouncements, getPublicConfig, type BannerItem, type AnnouncementItem } from '@/api/content'
+import { getBanners, getAnnouncements, type BannerItem, type AnnouncementItem } from '@/api/content'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
+const configStore = useConfigStore()
 
 const radarList = ref<any[]>([])
 const radarColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
-// 全局系统配置（全局统一考试倒计时）
-const globalConfig = ref<Record<string, string>>({
-  exam_countdown_date: '2026-11-08 09:00:00',
-  exam_countdown_title: '2026年软考统一认证',
-})
-
-// 全局统一考试时间字符串
-const targetExamDateStr = computed(() => {
-  return globalConfig.value?.exam_countdown_date || '2026-11-08 09:00:00'
-})
-
 // 全局统一考试倒计时副标题
 const examSubtitle = computed(() => {
-  return globalConfig.value?.exam_countdown_title || '2026年软考统一认证'
+  return configStore.examCountdownTitle || '2026年软考统一认证'
 })
 
 // 倒计时天数计算（根据全局统一考试时间）
 const examDays = computed(() => {
-  try {
-    const rawStr = targetExamDateStr.value.trim()
-    const target = new Date(rawStr.replace(/-/g, '/'))
-    if (isNaN(target.getTime())) return 0
-    const now = new Date()
-    const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    return Math.max(0, diffDays)
-  } catch {
-    return 0
-  }
+  return configStore.examDays
 })
 
 const reviewCount = ref(0)
@@ -459,10 +441,10 @@ function formatDate(d?: string) {
 
 async function fetchContentData() {
   try {
-    const [bRes, aRes, cRes] = await Promise.allSettled([
+    configStore.fetchConfig(true)
+    const [bRes, aRes] = await Promise.allSettled([
       getBanners(),
       getAnnouncements(),
-      getPublicConfig(),
     ])
     if (bRes.status === 'fulfilled' && bRes.value?.data) {
       banners.value = (bRes.value.data as any[]).filter(
@@ -471,12 +453,6 @@ async function fetchContentData() {
     }
     if (aRes.status === 'fulfilled' && aRes.value?.data) {
       announcements.value = aRes.value.data
-    }
-    if (cRes.status === 'fulfilled' && cRes.value?.data) {
-      globalConfig.value = {
-        ...globalConfig.value,
-        ...cRes.value.data,
-      }
     }
   } catch {
     // ignore

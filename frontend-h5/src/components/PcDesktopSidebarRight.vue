@@ -1,17 +1,17 @@
 <template>
   <aside class="pc-desktop-right-sidebar">
-    <!-- 考试倒计时卡片 -->
+    <!-- 考试倒计时卡片（从系统配置读取） -->
     <div class="pc-card countdown-card">
       <div class="card-head">
         <span class="icon">⏱️</span>
-        <span class="title">2026年全国软考统考</span>
+        <span class="title">{{ configStore.examCountdownTitle }}</span>
       </div>
       <div class="cd-body">
-        <div class="days-num">{{ examDays }}<span class="unit">天</span></div>
+        <div class="days-num">{{ configStore.examDays }}<span class="unit">天</span></div>
         <div class="cd-desc">距离下一次全国软考开考还有</div>
       </div>
       <div class="cd-foot">
-        <span>📅 考试预计时间：2026年11月08日</span>
+        <span>📅 考试预计时间：{{ configStore.examCountdownDateFormatted }}</span>
       </div>
     </div>
 
@@ -123,26 +123,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
+import { useConfigStore } from '@/stores/config'
 
-const examDays = ref(73)
-
-function calculateExamDays() {
-  const target = new Date('2026-11-08T09:00:00')
-  const now = new Date()
-  const diff = target.getTime() - now.getTime()
-  if (diff > 0) {
-    examDays.value = Math.ceil(diff / (1000 * 60 * 60 * 24))
-  } else {
-    examDays.value = 0
-  }
-}
+const configStore = useConfigStore()
 
 function openAdmin() {
   window.open('https://admin.wothat.com', '_blank')
 }
 
-onMounted(calculateExamDays)
+onMounted(() => {
+  configStore.fetchConfig()
+})
 </script>
 
 <style scoped lang="scss">
