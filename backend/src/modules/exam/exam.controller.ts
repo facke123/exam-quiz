@@ -138,26 +138,38 @@ export class ExamController {
   }
 
   @Public()
-  @Get(['exam/knowledge-points/detail/:id', 'exam/knowledge-points/:id/detail', 'knowledge-points/:id'])
+  @Get([
+    'admin/knowledge-points/detail/:id',
+    'admin/knowledge-points/:id',
+    'exam/knowledge-points/detail/:id',
+    'exam/knowledge-points/:id/detail',
+    'knowledge-points/:id',
+  ])
   @ApiOperation({ summary: '知识点详情与配套题目' })
   async getKnowledgePointDetail(@Param('id', ParseIntPipe) id: number) {
     return this.examService.getKnowledgePointDetail(id);
   }
 
   @Public()
-  @Get('exam/knowledge-points/:chapterId')
+  @Get([
+    'admin/knowledge-points',
+    'admin/knowledge-points/:chapterId',
+    'exam/knowledge-points/:chapterId',
+    'knowledge-points/:chapterId',
+  ])
   @ApiOperation({ summary: '获取章节知识点列表' })
   async getKnowledgePoints(@Param('chapterId', ParseIntPipe) chapterId: number) {
     return this.examService.getKnowledgePoints(chapterId);
   }
 
-  @Post('exam/knowledge-points')
+  @Post(['admin/knowledge-points', 'exam/knowledge-points', 'knowledge-points'])
   @ApiOperation({ summary: '创建知识点' })
   async createKnowledgePoint(@Body() dto: CreateKnowledgePointDto) {
     return this.examService.createKnowledgePoint(dto);
   }
 
-  @Patch('exam/knowledge-points/:id')
+  @Put(['admin/knowledge-points/:id', 'exam/knowledge-points/:id', 'knowledge-points/:id'])
+  @Patch(['admin/knowledge-points/:id', 'exam/knowledge-points/:id', 'knowledge-points/:id'])
   @ApiOperation({ summary: '更新知识点' })
   async updateKnowledgePoint(
     @Param('id', ParseIntPipe) id: number,
@@ -166,7 +178,7 @@ export class ExamController {
     return this.examService.updateKnowledgePoint(id, dto);
   }
 
-  @Delete('exam/knowledge-points/:id')
+  @Delete(['admin/knowledge-points/:id', 'exam/knowledge-points/:id', 'knowledge-points/:id'])
   @ApiOperation({ summary: '删除知识点' })
   async deleteKnowledgePoint(@Param('id', ParseIntPipe) id: number) {
     await this.examService.deleteKnowledgePoint(id);
