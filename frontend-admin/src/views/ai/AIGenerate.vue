@@ -786,9 +786,42 @@ function toggleAnalysis(id: number) {
   }
 }
 
+function parseMarkdownTable(text: string) {
+  return text.replace(/((?:\|[^\n\r]+\|\r?\n?){2,})/g, (match) => {
+    const rawLines = match.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    if (rawLines.length < 2) return match
+    if (!rawLines[1].includes('-')) return match
+
+    const parseRow = (line: string) => {
+      const parts = line.split('|').map((p) => p.trim())
+      if (parts[0] === '') parts.shift()
+      if (parts[parts.length - 1] === '') parts.pop()
+      return parts
+    }
+
+    const headerCells = parseRow(rawLines[0])
+    const bodyRows = rawLines.slice(2).map(parseRow)
+
+    let html = '<div class="q-table-responsive"><table class="q-case-table"><thead><tr>'
+    headerCells.forEach((h) => {
+      html += `<th>${h}</th>`
+    })
+    html += '</tr></thead><tbody>'
+    bodyRows.forEach((row) => {
+      html += '<tr>'
+      row.forEach((cell) => {
+        html += `<td>${cell}</td>`
+      })
+      html += '</tr>'
+    })
+    html += '</tbody></table></div>'
+    return html
+  })
+}
+
 function formatQuestionContent(content: string) {
   if (!content) return ''
-  let html = content
+  let html = String(content)
 
   // 1. Markdown 图片语法 ![alt](url) 转为响应式图片
   html = html.replace(
@@ -796,7 +829,10 @@ function formatQuestionContent(content: string) {
     '<div class="q-img-wrap"><img src="$2" alt="$1" class="q-diagram-img" /><span class="q-img-caption">$1</span></div>'
   )
 
-  // 2. 案例分节与小问加粗排版
+  // 2. Markdown 表格转为专业考卷响应式表格
+  html = parseMarkdownTable(html)
+
+  // 3. 案例分节与小问加粗排版
   html = html
     .replace(/(【案例背景】|【案例说明】|【说明】)/g, '<div class="case-section-title">$1</div>')
     .replace(/(【问题\s*\d+】[（(][^）)]*[）)]|【问题\s*\d+】)/g, '<div class="case-question-title">$1</div>')
@@ -1739,5 +1775,46 @@ onMounted(() => {
   height: auto;
   margin: 8px 0;
   display: block;
+}
+
+:deep(.q-table-responsive) {
+  width: 100%;
+  overflow-x: auto;
+  margin: 12px 0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  .q-case-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+
+    th {
+      background: #f1f5f9;
+      color: #1e293b;
+      font-weight: 700;
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      text-align: center;
+    }
+
+    tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    tr:hover {
+      background: #f0fdf4;
+    }
+  }
 }
 </style>

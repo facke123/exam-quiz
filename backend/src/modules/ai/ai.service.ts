@@ -993,8 +993,86 @@ export class AiService implements OnModuleInit {
       },
     ];
 
-    // 案例题专属题库池 (Case Analysis Question Pool - 涵盖双代号网络图、EVM挣值图、拓扑架构图、变更流程图)
+    // 案例题专属题库池 (Case Analysis Question Pool - 涵盖真实表格、双代号网络图、EVM挣值图、拓扑架构图、变更流程图)
     const casePool = [
+      {
+        content: `【案例背景】某工程项目部分信息如下表所示：
+
+| 活动 | 紧前活动 | 正常工作时间(天) | 正常工作每天人工费用(元) | 赶工时间(天) | 赶工每天人工费用(元) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| A | / | 10 | 40 | 6 | 75 |
+| B | / | 8 | 40 | 8 | 40 |
+| C | A、B | 6 | 35 | 4 | 60 |
+| D | B | 16 | 60 | 12 | 85 |
+| E | C | 24 | 5 | 24 | 5 |
+| F | D、E | 4 | 10 | 2 | 25 |
+| G | F | 4 | 15 | 2 | 35 |
+| H | F | 10 | 30 | 8 | 40 |
+| I | F | 4 | 30 | 3 | 45 |
+| J | G | 12 | 25 | 8 | 40 |
+| K | H、I、J | 16 | 50 | 12 | 72 |
+| L | C | 8 | 40 | 6 | 60 |
+| M | L | 24 | 5 | 24 | 5 |
+| N | K、M | 4 | 10 | 4 | 10 |
+
+【问题1】（5分）
+结合案例：
+(1) 请写出项目关键路径，并计算项目工期。
+(2) 如果活动L工期拖延10天，对整个工期是否有影响，请说明原因。
+
+【问题2】（8分）
+假设项目总成本为100万，按进度计划平均分摊到项目活动中。工程执行到第40天结束，项目经理发现已经完成了3/5的工作量，花费的成本为65万元。请计算项目的成本绩效和进度绩效，并说明项目此时的绩效情况。
+
+【问题3】（7分）
+若要求该工程在70天内完工，为保证工程能在70天内完成，且人工费用最低，请按照案例表格中提供的时间和费用信息，写出哪些活动需要赶工，并计算赶工后增加的总人工费用。`,
+        options: [],
+        answer: `【参考采分点】
+【问题1 解答】（5分）
+(1) 关键路径与工期计算：
+- 路径 A-C-E-F-H-K-N：10+6+24+4+10+16+4 = 74 天；
+- 路径 A-C-E-F-I-K-N：10+6+24+4+4+16+4 = 68 天；
+- 路径 A-C-E-F-G-J-K-N：10+6+24+4+4+12+16+4 = 80 天；
+- 路径 B-C-E-F-G-J-K-N：8+6+24+4+4+12+16+4 = 78 天；
+- 路径 B-D-F-G-J-K-N：8+16+4+4+12+16+4 = 64 天；
+- 路径 A-C-L-M-N：10+6+8+24+4 = 52 天。
+项目关键路径为：A-C-E-F-G-J-K-N（3分），项目总工期为 80 天（1分）。
+(2) 活动L工期拖延10天对整个工期没有影响（1分）。
+原因：活动L所在路径长度为 52 天，活动L的总时差 TF = 80 - 52 = 28 天。拖延 10 天 < 28 天，因此不会延误总工期。（1分）
+
+【问题2 解答】（8分）
+1. 参数计算：
+- 计划价值 PV = 100万元 * (40 / 80) = 50 万元（2分）；
+- 挣值 EV = 100万元 * (3 / 5) = 60 万元（1分）；
+- 实际成本 AC = 65 万元（1分）。
+2. 绩效指标：
+- 成本偏差 CV = EV - AC = 60 - 65 = -5 万元（成本超支）（1分）；
+- 进度偏差 SV = EV - PV = 60 - 50 = +10 万元（进度提前）（1分）；
+- 成本绩效指数 CPI = EV / AC = 60 / 65 ≈ 0.92 < 1（成本超支）；
+- 进度绩效指数 SPI = EV / PV = 60 / 50 = 1.20 > 1（进度提前）。
+3. 状态评价：项目当前处于“进度提前、成本超支”状态。（2分）
+
+【问题3 解答】（7分）
+1. 目标工期压缩量：当前工期 80 天，要求 70 天完工，需压缩 10 天。（1分）
+2. 关键路径活动单位赶工人工费用对比：
+- 活动 A：每天增加 (6*75 - 10*40) / (10 - 6) = 12.5 元/天，可赶工 4 天；
+- 活动 C：每天增加 (4*60 - 6*35) / (6 - 4) = 15 元/天，可赶工 2 天；
+- 活动 E：赶工天数与正常天数相同（均为24天），不可赶工；
+- 活动 F：每天增加 (2*25 - 4*10) / (4 - 2) = 5 元/天，可赶工 2 天；
+- 活动 G：每天增加 (2*35 - 4*15) / (4 - 2) = 5 元/天，可赶工 2 天；
+- 活动 J：每天增加 (8*40 - 12*25) / (12 - 8) = 5 元/天，可赶工 4 天；
+- 活动 K：每天增加 (12*72 - 16*50) / (16 - 12) = 16 元/天，可赶工 4 天；
+- 活动 N：不可赶工。
+3. 优先选择单位赶工费用最低的活动：
+- 先赶工 F（压缩2天，增加费用 2 * 5 = 10 元）；
+- 再赶工 G（压缩2天，增加费用 2 * 5 = 10 元）；
+- 再赶工 J（压缩4天，增加费用 4 * 5 = 20 元）；
+- 从剩余活动 A（12.5元/天）和 C（15元/天）中，优先选择赶工 A 压缩 2 天（增加费用 2 * 12.5 = 25 元）。（3分）
+4. 赶工活动汇总与总费用：
+- 需要赶工的活动为：F（2天）、G（2天）、J（4天）、A（2天）。（2分）
+- 赶工增加的总人工费用 = 10 + 10 + 20 + 25 = 65 元。（1分）`,
+        analysis: `【案例考点定位】软考下午案例经典必考大题：关键路径计算（CPM）、时差计算、EVM挣值分析与工期赶工成本优化决策。`,
+        difficulty: 4,
+      },
       {
         content: `【案例背景】某市智慧城市政务云平台系统集成项目，包含 A、B、C、D、E、F、G 七项核心活动，各项活动之间的紧前紧后逻辑关系与持续时间如下图所示：
 <svg viewBox="0 0 680 180" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; margin:12px 0; display:block;">
@@ -1408,7 +1486,30 @@ export class AiService implements OnModuleInit {
             ? `【严禁出题重复】：以下是本科目本章节已有的题目切片，本次生成严禁出现相似题干或重复考题：\n${collectedStems.slice(-10).map((s, idx) => `${idx + 1}. ${s.slice(0, 35)}...`).join('\n')}`
             : '';
 
-        const systemPrompt = `你是一位中国计算机软件资格考试（软考）命题组资深专家与官方教材主编。
+        const isCaseQuestion = dbType === 'case_analysis';
+        const systemPrompt = isCaseQuestion
+          ? `你是一位中国计算机软件资格考试（软考）命题组资深专家与官方教材主编。
+请为软考专业科目【${subName}】的章节【${chName}】（核心知识点：【${kpDisplay}】）设计 ${currentBatchNeeded} 道国家考试真题级别的【案例分析主观问答题】（绝不可出单选题/多选题/选择题，options 必须严格为空数组 []）。
+
+【案例分析大题规范要求】
+1. 背景材料（500~800字）：包含真实工程或IT项目场景，必须包含专业数据表格（Markdown 表格格式）或内联 SVG 图表。
+2. 小问设置：必须拆解为 2~3 个具体小问（如【问题1】（5分）、【问题2】（8分）、【问题3】（7分））。
+3. 标准答案：提供规范的【参考采分点】，针对每个小问给出详细推导过程、计算公式与评分要点。
+4. 名师解析：提供详尽的考点定位与答题技巧。
+
+${negativeStemsNote}
+
+【输出格式】必须严格输出纯 JSON 数组：
+[
+  {
+    "content": "【案例背景】某工程项目部分信息如下表所示：\\n\\n| 活动 | 紧前活动 | 正常工作时间(天) | 正常费用(元) | 赶工时间(天) | 赶工费用(元) |\\n| :--- | :--- | :--- | :--- | :--- | :--- |\\n| A | / | 10 | 40 | 6 | 75 |\\n| B | / | 8 | 40 | 8 | 40 |\\n\\n【问题1】（5分）\\n结合案例：(1)请写出关键路径并计算工期。(2)说明时差影响。\\n\\n【问题2】（8分）\\n计算项目成本与进度绩效指标并评价当前状态。\\n\\n【问题3】（7分）\\n写出赶工方案与增加的总费用。",
+    "options": [],
+    "answer": "【参考采分点】\\n【问题1 解答】（5分）\\n(1) 关键路径为：...，工期为 XX 天。（3分）\\n(2) 活动拖延对总工期无影响。（2分）\\n\\n【问题2 解答】（8分）\\nPV=...，EV=...，AC=...，CV=...，SV=...。（6分）\\n状态评价：...。（2分）\\n\\n【问题3 解答】（7分）\\n...",
+    "analysis": "【案例核心考点】考核关键路径法、EVM挣值分析与工期成本优化。",
+    "difficulty": ${difficulty}
+  }
+]`
+          : `你是一位中国计算机软件资格考试（软考）命题组资深专家与官方教材主编。
 请为软考专业科目【${subName}】的章节【${chName}】（核心知识点：【${kpDisplay}】）设计 ${currentBatchNeeded} 道国家考试真题级别的专业试题。
 
 【题型与规范要求】
@@ -1539,7 +1640,7 @@ ${negativeStemsNote}
   }
 
   /**
-   * AI 大模型一键生成整套试卷（全章节考点覆盖，直接自动入库至试卷管理）
+   * AI 大模型一键生成整套试卷（支持 案例分析大题整卷、客观单选综合卷、全景混合卷，直接自动入库至试卷管理）
    */
   async generateEntirePaper(dto: AiGeneratePaperDto, adminId: number = 1): Promise<{
     paperId: number;
@@ -1549,9 +1650,209 @@ ${negativeStemsNote}
   }> {
     const subjectId = Number(dto.subjectId || 1);
     const subject = await this.subjectRepository.findOne({ where: { id: subjectId } });
-    const subName = subject ? subject.name : '软考专业科目';
+    const subName = subject ? subject.name : '系统集成项目管理工程师';
 
-    // 1. 获取该科目下的章节体系
+    const isCasePaper = dto.questionTypeCategory === 'case' || dto.paperType === 'case';
+    const currentYear = dto.paperName
+      ? Number((dto.paperName.match(/(20\d{2})/) || [])[1]) || new Date().getFullYear()
+      : new Date().getFullYear();
+
+    const paperType = ['mock', 'real', 'practice'].includes(String(dto.paperType)) ? String(dto.paperType) : 'mock';
+    const duration = Number(dto.duration) || 150;
+    const difficulty = Number(dto.difficulty) || 4;
+
+    // ==================== 1. 案例分析大题整卷流水线 (Case Analysis Full Paper) ====================
+    if (isCasePaper) {
+      const caseCount = Math.min(Math.max(Number(dto.questionCount) || 4, 2), 6);
+      const paperName =
+        dto.paperName && dto.paperName.trim().length > 0
+          ? dto.paperName.trim()
+          : `${currentYear}年${subName}【全国统考下午案例分析全真模拟卷·第1套】`;
+
+      this.logger.log(`🚀 启动 AI 案例分析大题整卷命题: 科目=${subName}, 卷名=${paperName}, 题量=${caseCount}道大题`);
+
+      const caseDomains = [
+        {
+          domain: '进度管理与工期赶工优化',
+          focus: '包含活动/紧前关系/正常赶工时间与费用数据表格（Markdown表格）、关键路径CPM判定、总时差自由时差计算、工期压缩与最低成本赶工方案决策',
+          score: 20,
+        },
+        {
+          domain: '成本管理与 EVM 挣值分析',
+          focus: '包含项目执行数据表或EVM曲线图、PV/EV/AC参数核算、CV/SV/CPI/SPI状态评价、典型与非典型完工尚需ETC/完工估算EAC预测及纠偏方案',
+          score: 20,
+        },
+        {
+          domain: '网络工程、安全防护与系统架构',
+          focus: '包含网络拓扑架构图（内联自适应SVG图）、DMZ区隔离访问控制策略、纵深安全防御、等保2.0合规与数据容灾备份体系',
+          score: 18,
+        },
+        {
+          domain: '项目范围蔓延、配置管理与 CCB 变更控制闭环',
+          focus: '包含真实业务多方变更冲突场景、配置基线管理失控诊断、CCB变更控制规范流程六步骤及项目范围纠偏对策',
+          score: 17,
+        },
+        {
+          domain: '质量管理与风险定量/定性分析',
+          focus: '包含质量因果鱼骨图/帕累托图、风险登记册、风险应对策略选择（规避/减轻/转移/接受）及应急预案',
+          score: 18,
+        },
+      ];
+
+      const generatedQuestionsData: any[] = [];
+      const existingStems = await this.getRecentQuestionStems(subjectId, 40);
+
+      // 为每道大题调用 LLM 生成或从高精池抽取
+      for (let i = 0; i < caseCount; i++) {
+        const domainItem = caseDomains[i % caseDomains.length];
+        const questionScore = domainItem.score || Math.round(75 / caseCount);
+        const qIndexStr = ['一', '二', '三', '四', '五', '六'][i] || String(i + 1);
+
+        const prompt = `你是一位国家软考高级命题专家（${subName}专家组成员）。
+现在请为【${subName}】命制 1 道国家级考试标准的【试题${qIndexStr}：案例分析主观大题】（满分 ${questionScore} 分）。
+
+【考点核心领域】
+领域：${domainItem.domain}
+核心要求：${domainItem.focus}
+
+【试题硬性规范】
+1. 试题形式：国家软考下午科目二 案例分析主观问答题（绝不是单选题/多选题/选择题，options 必须严格为空数组 []）。
+2. 背景材料（500~800字）：包含真实完整的工程或IT项目情境，必须包含专业数据表格（Markdown 表格格式）或自适应矢量 SVG 图表代码。
+3. 问题设置：必须拆解为 2~3 个具体小问，每个小问严格标明分值（如：“【问题1】（5分）”、“【问题2】（8分）”、“【问题3】（7分）”，所有小问分值之和必须等于 ${questionScore} 分）。
+4. 标准答案：必须提供规范的【参考采分点】，针对每个小问逐一给出计算推导过程、得分要点与分值分配（如：“(1) 关键路径为...（3分）”、“(2) 不影响工期...（2分）”）。
+5. 名师解析：提供详尽的考点定位与答题避坑技巧。
+
+【输出格式】必须严格输出单个标准 JSON 对象：
+{
+  "title": "试题${qIndexStr}（${questionScore}分）",
+  "content": "【案例背景】某工程项目部分信息如下表所示：\\n\\n| 活动 | 紧前活动 | 正常工作时间(天) | 正常工作每天费用(元) | 赶工时间(天) | 赶工每天费用(元) |\\n| :--- | :--- | :--- | :--- | :--- | :--- |\\n| A | / | 10 | 40 | 6 | 75 |\\n| B | / | 8 | 40 | 8 | 40 |\\n| C | A、B | 6 | 35 | 4 | 60 |\\n| D | B | 16 | 60 | 12 | 85 |\\n| E | C | 24 | 5 | 24 | 5 |\\n| F | D、E | 4 | 10 | 2 | 25 |\\n\\n【问题1】（5分）\\n结合案例：(1) 请写出项目关键路径，并计算项目总工期。(2) 如果活动L工期拖延10天，对整个工期是否有影响？请说明原因。\\n\\n【问题2】（8分）\\n假设项目总预算为100万，按进度计划平均分摊。工程执行到第40天结束，完成了3/5工作量，实际花费65万元。请计算成本与进度绩效指标并评价当前状态。\\n\\n【问题3】（7分）\\n若要求工程在70天内完工且费用最低，请写出哪些活动需要赶工，并计算赶工增加的总费用。",
+  "options": [],
+  "answer": "【参考采分点】\\n【问题1 解答】（5分）\\n(1) 关键路径为：...，工期为 XX 天。（3分）\\n(2) 活动L拖延10天对总工期无影响。（1分）原因：活动L总时差为28天 > 10天。（1分）\\n\\n【问题2 解答】（8分）\\nPV=50万，EV=60万，AC=65万。CV=-5万（超支），SV=+10万（提前），CPI=0.92，SPI=1.20。（6分）\\n状态评价：进度提前、成本超支。（2分）\\n\\n【问题3 解答】（7分）\\n...",
+  "analysis": "【案例考点定位】软考下午案例核心考点：关键路径法、挣值分析EVM与赶工工期成本优化。",
+  "difficulty": 4,
+  "score": ${questionScore}
+}`;
+
+        let questionItem: any = null;
+        try {
+          const llmRes = await this.callLlm([{ role: 'user', content: prompt }], {
+            json: true,
+            model: dto.model,
+            temperature: 0.6,
+          });
+          if (llmRes && (llmRes.content || llmRes.title)) {
+            questionItem = {
+              content: String(llmRes.content || llmRes.title).trim(),
+              options: [],
+              answer: String(llmRes.answer || '【参考采分点】详见官方名师参考答案与评分细则。'),
+              analysis: String(llmRes.analysis || `【案例考点】考核《${subName}》案例分析核心知识域。`),
+              type: 'case_analysis',
+              difficulty: Number(llmRes.difficulty) || 4,
+              score: Number(llmRes.score) || questionScore,
+            };
+          }
+        } catch (err: any) {
+          this.logger.warn(`AI 案例大题大模型生成异常: ${err.message}`);
+        }
+
+        // 若大模型生成未就绪，使用专业高精题库池
+        if (!questionItem) {
+          const fallbacks = this.getEnhancedFallbackQuestions(
+            subName,
+            domainItem.domain,
+            domainItem.domain,
+            'case_analysis',
+            1,
+            4,
+            dto.promptStyle,
+            existingStems,
+          );
+          if (fallbacks.length > 0) {
+            questionItem = {
+              ...fallbacks[0],
+              score: questionScore,
+            };
+          }
+        }
+
+        if (questionItem) {
+          existingStems.push(questionItem.content);
+          generatedQuestionsData.push(questionItem);
+        }
+      }
+
+      // 存储入库到 questions 表
+      const savedQuestionIds: number[] = [];
+      let totalPaperScore = 0;
+      for (const qData of generatedQuestionsData) {
+        const qScore = Number(qData.score) || Math.round(75 / generatedQuestionsData.length);
+        totalPaperScore += qScore;
+        const qEntity = this.questionRepository.create({
+          subjectId,
+          chapterId: dto.chapterIds?.[0] ? Number(dto.chapterIds[0]) : 1,
+          knowledgePointIds: [],
+          type: 'case_analysis',
+          difficulty: qData.difficulty || 4,
+          content: qData.content,
+          options: [],
+          answer: qData.answer,
+          analysis: qData.analysis,
+          aiConfidence: 0.98,
+          source: 'ai',
+          status: 'published',
+          score: qScore,
+        } as any);
+
+        const saved = await this.questionRepository.save(qEntity as any);
+        if (saved && saved.id) {
+          savedQuestionIds.push(Number(saved.id));
+        }
+      }
+
+      // 创建试卷实体 (满分 75分，时长 150分钟)
+      const paper = this.paperRepository.create({
+        subjectId,
+        name: paperName,
+        year: currentYear,
+        type: paperType,
+        duration,
+        totalScore: totalPaperScore || 75,
+        questionIds: savedQuestionIds,
+        status: 1,
+      } as any);
+      const savedPaper: any = await this.paperRepository.save(paper as any);
+
+      // 记录任务
+      try {
+        const task = this.taskRepository.create({
+          type: 'generate_question',
+          status: 'completed',
+          model: dto.model || (await this.getRawAiConfig()).model,
+          params: { ...dto, paperId: Number(savedPaper.id) } as unknown as Record<string, unknown>,
+          result: { paperId: Number(savedPaper.id), count: savedQuestionIds.length, type: 'case_analysis' },
+          adminId,
+        });
+        await this.taskRepository.save(task);
+      } catch {
+        // ignore
+      }
+
+      this.logger.log(`✅ AI 案例分析整卷「${paperName}」生成成功！试卷ID: ${savedPaper.id}, 包含 ${savedQuestionIds.length} 道综合大题`);
+
+      return {
+        paperId: Number(savedPaper.id),
+        paper: {
+          ...savedPaper,
+          id: Number(savedPaper.id),
+          subjectName: subName,
+          questionCount: savedQuestionIds.length,
+        },
+        questionCount: savedQuestionIds.length,
+        message: `🎉 AI 大模型已成功生成国家软考下午【案例分析大题整卷】「${paperName}」（共 ${savedQuestionIds.length} 道综合案例大题，满分 75 分，及格线 45 分），已同步上架至试卷管理！`,
+      };
+    }
+
+    // ==================== 2. 客观单选题/混合整卷流水线 ====================
     let chapters = await this.chapterRepository.find({
       where: { subjectId },
       order: { sort: 'ASC' },
@@ -1567,18 +1868,13 @@ ${negativeStemsNote}
     }
 
     const totalCount = Math.min(Math.max(Number(dto.questionCount) || 75, 5), 100);
-    const currentYear = dto.paperName ? (Number((dto.paperName.match(/(20\d{2})/) || [])[1]) || new Date().getFullYear()) : new Date().getFullYear();
     const paperName = dto.paperName && dto.paperName.trim().length > 0
       ? dto.paperName.trim()
       : `${currentYear}年${subName}【AI全真模拟押题卷·第1套】`;
 
-    const paperType = ['mock', 'real', 'practice'].includes(String(dto.paperType)) ? String(dto.paperType) : 'mock';
-    const duration = Number(dto.duration) || 150;
-    const difficulty = Number(dto.difficulty) || 3;
+    this.logger.log(`开始启动 AI 客观单选题整卷命题: 科目=${subName}, 卷名=${paperName}, 题量=${totalCount}, 章节数=${chapters.length}`);
 
-    this.logger.log(`开始启动 AI 整卷命题流水线: 科目=${subName}, 卷名=${paperName}, 题量=${totalCount}, 章节数=${chapters.length}`);
-
-    // 2. 计算各章节题量配额
+    // 计算各章节题量配额
     const chapterQuotas: Array<{ chapter: Chapter; count: number }> = [];
     const basePerChapter = Math.floor(totalCount / chapters.length);
     let remainder = totalCount % chapters.length;
@@ -1590,7 +1886,7 @@ ${negativeStemsNote}
       }
     }
 
-    // 3. 多批次并发命题生成
+    // 多批次并发命题生成
     const generatedQuestionsData: any[] = [];
     const existingStems = await this.getRecentQuestionStems(subjectId, 80);
 
@@ -1598,11 +1894,9 @@ ${negativeStemsNote}
       const chId = Number(chapter.id);
       const chName = chapter.name;
 
-      // 提取章节下的细分考点
       const kps = await this.knowledgePointRepository.find({ where: { chapterId: chId } });
       const kpNames = kps.map((k) => k.name).join('、') || chName;
 
-      // 针对该章节生成指定数量题目
       const subChunks: number[] = [];
       let rem = count;
       while (rem > 0) {
@@ -1689,7 +1983,7 @@ ${negativeStemsNote}
       generatedQuestionsData.push(...res);
     }
 
-    // 4. 将生成的试题直接入库到 questions 表（发布状态）
+    // 将生成的试题直接入库到 questions 表（发布状态）
     const savedQuestionIds: number[] = [];
     for (const qData of generatedQuestionsData) {
       const qEntity = this.questionRepository.create({
@@ -1704,7 +1998,8 @@ ${negativeStemsNote}
         analysis: qData.analysis,
         aiConfidence: Number((0.95 + Math.random() * 0.04).toFixed(2)),
         source: 'ai',
-        status: 'published', // 整卷题目直接上架
+        status: 'published',
+        score: 1,
       } as any);
 
       const saved = await this.questionRepository.save(qEntity as any);
@@ -1713,7 +2008,7 @@ ${negativeStemsNote}
       }
     }
 
-    // 5. 创建试卷实体
+    // 创建试卷实体
     const paper = this.paperRepository.create({
       subjectId,
       name: paperName,
@@ -1723,10 +2018,10 @@ ${negativeStemsNote}
       totalScore: savedQuestionIds.length || totalCount,
       questionIds: savedQuestionIds,
       status: 1,
-    });
-    const savedPaper = await this.paperRepository.save(paper);
+    } as any);
+    const savedPaper: any = await this.paperRepository.save(paper as any);
 
-    // 6. 记录 AI 任务
+    // 记录 AI 任务
     try {
       const task = this.taskRepository.create({
         type: 'generate_question',
@@ -1741,7 +2036,7 @@ ${negativeStemsNote}
       // ignore
     }
 
-    this.logger.log(`✅ AI 整套试卷「${paperName}」生成成功！试卷ID: ${savedPaper.id}, 题量: ${savedQuestionIds.length}`);
+    this.logger.log(`✅ AI 客观整套试卷「${paperName}」生成成功！试卷ID: ${savedPaper.id}, 题量: ${savedQuestionIds.length}`);
 
     return {
       paperId: Number(savedPaper.id),
