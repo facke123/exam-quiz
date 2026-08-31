@@ -14,6 +14,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AiService } from './ai.service';
 import {
   AiGenerateQuestionDto,
+  AiGeneratePaperDto,
   AiGenerateAnalysisDto,
   AiImportDto,
   CreatePromptDto,
@@ -40,9 +41,18 @@ export class AiController {
   @ApiOperation({ summary: 'AI出题' })
   async generateQuestion(
     @Body() dto: AiGenerateQuestionDto,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user?: UserPayload,
   ) {
-    return this.aiService.generateQuestion(dto, user ? user.id : 1);
+    return this.aiService.generateQuestion(dto, user?.id || 1);
+  }
+
+  @Post(['ai/generate-paper', 'admin/ai/generate-paper', 'exam/ai/generate-paper'])
+  @ApiOperation({ summary: 'AI大模型一键生成整套试卷' })
+  async generateEntirePaper(
+    @Body() dto: AiGeneratePaperDto,
+    @CurrentUser() user?: UserPayload,
+  ) {
+    return this.aiService.generateEntirePaper(dto, user?.id || 1);
   }
 
   @Get(['admin/ai/questions'])

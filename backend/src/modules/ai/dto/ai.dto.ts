@@ -50,6 +50,54 @@ export class AiGenerateQuestionDto {
 }
 
 /**
+ * AI 一键生成整套试卷 DTO
+ */
+export class AiGeneratePaperDto {
+  @ApiProperty({ description: '目标科目ID', example: 1 })
+  @IsNumber()
+  subjectId: number;
+
+  @ApiPropertyOptional({ description: '试卷名称', example: '2026年系统集成项目管理【考前冲刺全真模拟卷·第1套】' })
+  @IsOptional()
+  @IsString()
+  paperName?: string;
+
+  @ApiPropertyOptional({ description: '试卷类型: mock/real/practice', default: 'mock' })
+  @IsOptional()
+  @IsString()
+  paperType?: string;
+
+  @ApiPropertyOptional({ description: '试卷总题量 (10-75)', default: 75 })
+  @IsOptional()
+  @IsNumber()
+  questionCount?: number;
+
+  @ApiPropertyOptional({ description: '考试时长(分钟)', default: 150 })
+  @IsOptional()
+  @IsNumber()
+  duration?: number;
+
+  @ApiPropertyOptional({ description: '难度星级(1-5)', default: 3 })
+  @IsOptional()
+  difficulty?: number | string;
+
+  @ApiPropertyOptional({ description: '出题风格: standard/sprint/trap/calculation/concept', default: 'standard' })
+  @IsOptional()
+  @IsString()
+  promptStyle?: string;
+
+  @ApiPropertyOptional({ description: '指定章节ID列表', type: 'array' })
+  @IsOptional()
+  @IsArray()
+  chapterIds?: number[];
+
+  @ApiPropertyOptional({ description: '模型型号', example: 'gemini-3.7-flash' })
+  @IsOptional()
+  @IsString()
+  model?: string;
+}
+
+/**
  * AI 解析生成 DTO
  */
 export class AiGenerateAnalysisDto {

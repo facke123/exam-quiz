@@ -36,6 +36,9 @@
         </div>
 
         <div class="action-bar">
+          <el-button type="primary" plain :icon="'MagicStick'" @click="openAiPaperDialog">
+            🤖 AI 一键出整卷
+          </el-button>
           <el-button type="warning" @click="openImportDialog">
             📥 导入试卷
           </el-button>
@@ -767,6 +770,108 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- AI 一键出整卷弹窗 -->
+    <el-dialog
+      v-model="aiPaperDialogVisible"
+      title="🤖 AI 大模型一键生成整套试卷并入库"
+      width="780px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="100px">
+        <el-form-item label="基座模型">
+          <el-select v-model="aiPaperForm.model" style="width: 100%">
+            <el-option label="Gemini 3.7 Flash (推荐/秒级)" value="gemini-3.7-flash" />
+            <el-option label="Gemini 3.1 Pro (高阶深度推理)" value="gemini-3.1-pro" />
+            <el-option label="DeepSeek-Chat (深度求索)" value="deepseek-chat" />
+            <el-option label="DeepSeek-Reasoner (R1推理)" value="deepseek-reasoner" />
+            <el-option label="Qwen-Plus (阿里通义千问)" value="qwen-plus" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="目标科目" required>
+          <el-select v-model="aiPaperForm.subjectId" style="width: 100%" @change="onAiSubjectChange">
+            <el-option
+              v-for="s in subjects"
+              :key="s.value"
+              :label="s.label"
+              :value="s.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="试卷名称" required>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input v-model="aiPaperForm.paperName" placeholder="如：2026年系统集成【考前冲刺全真模拟卷·第1套】" style="flex: 1" />
+            <el-button type="info" plain :icon="'MagicStick'" @click="generateAiRandomName">🎲 随机名称</el-button>
+          </div>
+        </el-form-item>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="试卷类型">
+              <el-select v-model="aiPaperForm.paperType" style="width: 100%">
+                <el-option label="全真模拟卷" value="mock" />
+                <el-option label="历年真题仿真" value="real" />
+                <el-option label="专项精练冲刺" value="practice" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="考试时长">
+              <el-input-number v-model="aiPaperForm.duration" :min="30" :max="240" :step="10" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="整卷题量">
+              <el-select v-model="aiPaperForm.questionCount" style="width: 100%">
+                <el-option label="10 题 (考前速测)" :value="10" />
+                <el-option label="25 题 (章节单元冲刺)" :value="25" />
+                <el-option label="50 题 (精选题量)" :value="50" />
+                <el-option label="75 题 (软考国家官方标准卷·推荐)" :value="75" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="难度等级">
+              <el-select v-model="aiPaperForm.difficulty" style="width: 100%">
+                <el-option label="基础巩固 (2星)" :value="2" />
+                <el-option label="核心考点 (3星)" :value="3" />
+                <el-option label="进阶提升 (4星)" :value="4" />
+                <el-option label="压轴冲刺 (5星)" :value="5" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="出题风格">
+          <el-select v-model="aiPaperForm.promptStyle" style="width: 100%">
+            <el-option label="🎯 历年真题风 (标准)" value="standard" />
+            <el-option label="⚠️ 易错陷阱风 (避坑)" value="trap" />
+            <el-option label="🧮 实战计算风 (攻坚)" value="calculation" />
+            <el-option label="📖 概念辨析风 (规范)" value="concept" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #1e40af; line-height: 1.5; margin-top: 10px">
+        ℹ️ 点击「开始生成」后，AI 将自动覆盖本科目全部章节并发命题并完成试卷组装，生成完成后本列表将自动刷新并展示最新试卷！
+      </div>
+
+      <template #footer>
+        <el-button @click="aiPaperDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="aiPaperLoading"
+          @click="submitAiPaper"
+        >
+          🚀 开始生成整套试卷 ({{ aiPaperForm.questionCount }} 题)
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -786,6 +891,7 @@ import {
   getAllSubjects,
   getChapterTree,
 } from '@/api/exam'
+import { generateEntirePaper } from '@/api/ai'
 import { getQuestionList, type Question, type QuestionType } from '@/api/question'
 
 const loading = ref(false)
@@ -1166,6 +1272,69 @@ async function submitAutoPaper() {
     ElMessage.error(err.message || '智能组卷失败')
   } finally {
     autoLoading.value = false
+  }
+}
+
+// ==================== AI 一键整卷生成 ====================
+const aiPaperDialogVisible = ref(false)
+const aiPaperLoading = ref(false)
+const aiPaperForm = reactive({
+  model: 'gemini-3.7-flash',
+  subjectId: 1,
+  paperName: '',
+  paperType: 'mock',
+  duration: 150,
+  questionCount: 75,
+  difficulty: 3,
+  promptStyle: 'standard',
+})
+
+function generateAiRandomName() {
+  const sub = subjects.value.find((s) => s.value === aiPaperForm.subjectId)
+  const subName = sub ? sub.label : '系统集成项目管理'
+  const year = new Date().getFullYear()
+  const names = [
+    `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
+    `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
+    `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
+    `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
+  ]
+  aiPaperForm.paperName = names[Math.floor(Math.random() * names.length)]
+}
+
+function openAiPaperDialog() {
+  aiPaperForm.subjectId = query.subjectId || (subjects.value[0]?.value || 1)
+  generateAiRandomName()
+  aiPaperDialogVisible.value = true
+}
+
+function onAiSubjectChange() {
+  generateAiRandomName()
+}
+
+async function submitAiPaper() {
+  if (!aiPaperForm.paperName || !aiPaperForm.paperName.trim()) {
+    generateAiRandomName()
+  }
+  aiPaperLoading.value = true
+  try {
+    const res = await generateEntirePaper({
+      model: aiPaperForm.model,
+      subjectId: aiPaperForm.subjectId,
+      paperName: aiPaperForm.paperName,
+      paperType: aiPaperForm.paperType,
+      questionCount: aiPaperForm.questionCount,
+      duration: aiPaperForm.duration,
+      difficulty: aiPaperForm.difficulty,
+      promptStyle: aiPaperForm.promptStyle,
+    })
+    ElMessage.success(res?.data?.message || '🎉 AI 大模型成功生成整套试卷并已同步入库！')
+    aiPaperDialogVisible.value = false
+    fetchList()
+  } catch (err: any) {
+    ElMessage.error(err.message || 'AI 整套试卷生成失败')
+  } finally {
+    aiPaperLoading.value = false
   }
 }
 

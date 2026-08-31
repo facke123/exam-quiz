@@ -51,10 +51,36 @@ export interface PromptTemplate {
   updatedAt: string
 }
 
+export interface AIGeneratePaperParams {
+  subjectId: number
+  paperName?: string
+  paperType?: string
+  questionCount?: number
+  duration?: number
+  difficulty?: number | string
+  promptStyle?: string
+  chapterIds?: number[]
+  model?: string
+}
+
 // AI 出题
 export function generateQuestions(data: AIGenerateParams) {
   return request<{ taskId: number; count: number; questions: any[] }>({
     url: '/admin/ai/generate',
+    method: 'post',
+    data,
+  })
+}
+
+// AI 一键生成整套试卷并自动入库
+export function generateEntirePaper(data: AIGeneratePaperParams) {
+  return request<{
+    paperId: number
+    paper: any
+    questionCount: number
+    message: string
+  }>({
+    url: '/admin/ai/generate-paper',
     method: 'post',
     data,
   })

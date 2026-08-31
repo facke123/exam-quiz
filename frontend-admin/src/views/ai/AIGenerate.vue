@@ -7,6 +7,19 @@
           <span class="ph-title">🤖 AI 智能命题引擎控制台</span>
           <span class="ph-badge">软考官方考纲 2026 最新增强版</span>
         </div>
+
+        <!-- 模式切换选项卡 -->
+        <div class="mode-tabs">
+          <el-radio-group v-model="activeMode" size="default">
+            <el-radio-button label="single">
+              ⚡ 单题/批量出题 (题目池待审)
+            </el-radio-button>
+            <el-radio-button label="paper">
+              📑 AI 一键出整卷 (同步至试卷管理)
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+
         <div class="ph-right">
           <span class="quota-pill">
             今日模型配额：<strong>{{ quota.used }}</strong> / {{ quota.total }} 次（剩余 <strong>{{ quota.remaining }}</strong> 次）
@@ -15,8 +28,8 @@
         </div>
       </div>
 
-      <!-- 出题参数表单 -->
-      <div class="generate-form-container">
+      <!-- 模式 1：单题 / 批量智能出题表单 -->
+      <div v-show="activeMode === 'single'" class="generate-form-container">
         <div class="form-row">
           <div class="form-item">
             <span class="label">基座大模型：</span>
@@ -142,6 +155,135 @@
             >
               ⚡ 一键开始智能命题 ({{ generateForm.count }}道)
             </el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模式 2：AI 智能整卷命题控制台 -->
+      <div v-show="activeMode === 'paper'" class="paper-generate-container">
+        <div class="paper-form-box">
+          <div class="form-row">
+            <div class="form-item">
+              <span class="label">基座大模型：</span>
+              <el-select v-model="paperForm.model" style="width: 220px">
+                <el-option label="Gemini 3.7 Flash (推荐/极速)" value="gemini-3.7-flash" />
+                <el-option label="Gemini 3.1 Pro (高阶深度推理)" value="gemini-3.1-pro" />
+                <el-option label="DeepSeek-Chat (深度求索)" value="deepseek-chat" />
+                <el-option label="DeepSeek-Reasoner (R1推理)" value="deepseek-reasoner" />
+                <el-option label="Qwen-Plus (阿里通义千问)" value="qwen-plus" />
+              </el-select>
+            </div>
+
+            <div class="form-item">
+              <span class="label">目标科目：</span>
+              <el-select v-model="paperForm.subjectId" style="width: 240px" @change="onPaperSubjectChange">
+                <el-option
+                  v-for="s in subjects"
+                  :key="s.value"
+                  :label="s.label"
+                  :value="s.value"
+                />
+              </el-select>
+            </div>
+
+            <div class="form-item">
+              <span class="label">试卷类型：</span>
+              <el-select v-model="paperForm.paperType" style="width: 160px">
+                <el-option label="全真模拟卷" value="mock" />
+                <el-option label="历年真题仿真" value="real" />
+                <el-option label="专项精练冲刺" value="practice" />
+              </el-select>
+            </div>
+
+            <div class="form-item">
+              <span class="label">考试时长：</span>
+              <el-input-number v-model="paperForm.duration" :min="30" :max="240" :step="10" style="width: 130px" />
+              <span class="unit-text">分钟</span>
+            </div>
+          </div>
+
+          <div class="form-row name-row">
+            <div class="form-item flex-1">
+              <span class="label">试卷名称：</span>
+              <el-input
+                v-model="paperForm.paperName"
+                placeholder="如：2026年系统集成项目管理工程师【考前冲刺全真模拟卷·第1套】"
+                clearable
+                style="flex: 1"
+              />
+              <el-button type="info" plain :icon="'MagicStick'" @click="generateRandomPaperName">
+                🎲 智能生成名称
+              </el-button>
+            </div>
+          </div>
+
+          <div class="form-row secondary-row">
+            <div class="form-item count-item">
+              <span class="label">整卷题量：</span>
+              <el-input-number
+                v-model="paperForm.questionCount"
+                :min="5"
+                :max="100"
+                :step="5"
+                style="width: 130px"
+              />
+              <div class="quick-count-tags">
+                <span
+                  v-for="item in [
+                    { label: '10题 (速测)', val: 10 },
+                    { label: '25题 (单元冲刺)', val: 25 },
+                    { label: '50题 (精选模考)', val: 50 },
+                    { label: '75题 (国考标准卷)', val: 75 },
+                  ]"
+                  :key="item.val"
+                  class="count-tag"
+                  :class="{ active: paperForm.questionCount === item.val }"
+                  @click="paperForm.questionCount = item.val"
+                >
+                  {{ item.label }}
+                </span>
+              </div>
+            </div>
+
+            <div class="form-item">
+              <span class="label">出题风格：</span>
+              <el-select v-model="paperForm.promptStyle" style="width: 170px">
+                <el-option label="🎯 历年真题风 (标准)" value="standard" />
+                <el-option label="⚠️ 易错陷阱风 (避坑)" value="trap" />
+                <el-option label="🧮 实战计算风 (攻坚)" value="calculation" />
+                <el-option label="📖 概念辨析风 (规范)" value="concept" />
+              </el-select>
+            </div>
+
+            <div class="form-item">
+              <span class="label">难度等级：</span>
+              <el-select v-model="paperForm.difficulty" style="width: 140px">
+                <el-option label="基础巩固 (2星)" :value="2" />
+                <el-option label="核心考点 (3星)" :value="3" />
+                <el-option label="进阶提升 (4星)" :value="4" />
+                <el-option label="压轴冲刺 (5星)" :value="5" />
+              </el-select>
+            </div>
+
+            <div class="form-item action-btn-item">
+              <el-button
+                type="success"
+                size="large"
+                :loading="generatePaperLoading"
+                class="generate-btn paper-btn"
+                @click="handleGenerateEntirePaper"
+              >
+                🚀 启动大模型一键生成整套试卷 ({{ paperForm.questionCount }} 题)
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 章节覆盖提示条 -->
+          <div class="chapter-coverage-tip">
+            <span class="tip-icon">ℹ️</span>
+            <span class="tip-text">
+              大模型整卷流水线将自动根据本科目全部 <strong>{{ chapterOptions.length }} 个章节</strong> 知识体系进行比例分配与并发命题，自动完成去重校验、试题入库与整卷关联，生成后即可直接在 <strong>「试卷管理」</strong> 进行发布、导出或学员模考。
+            </span>
           </div>
         </div>
       </div>
@@ -410,15 +552,72 @@
         <el-button type="primary" @click="submitEdit">保存修改</el-button>
       </template>
     </el-dialog>
+
+    <!-- 整卷生成成果展示弹窗 -->
+    <el-dialog
+      v-model="showPaperSuccessModal"
+      title="🎉 AI 智能整卷命题成功并已同步入库！"
+      width="650px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="generatedPaperResult" class="paper-success-card">
+        <div class="psc-header">
+          <div class="psc-badge">试卷 ID: #{{ generatedPaperResult.paperId }}</div>
+          <div class="psc-title">{{ generatedPaperResult.paper?.name }}</div>
+        </div>
+
+        <div class="psc-grid">
+          <div class="psc-item">
+            <span class="k">目标科目：</span>
+            <span class="v">{{ generatedPaperResult.paper?.subjectName || '软考科目' }}</span>
+          </div>
+          <div class="psc-item">
+            <span class="k">生成题量：</span>
+            <span class="v highlight">{{ generatedPaperResult.questionCount || 75 }} 题</span>
+          </div>
+          <div class="psc-item">
+            <span class="k">试卷满分：</span>
+            <span class="v">{{ generatedPaperResult.paper?.totalScore || 75 }} 分</span>
+          </div>
+          <div class="psc-item">
+            <span class="k">考试时长：</span>
+            <span class="v">{{ generatedPaperResult.paper?.duration || 150 }} 分钟</span>
+          </div>
+          <div class="psc-item">
+            <span class="k">及格标准：</span>
+            <span class="v">45 分及格 (60%)</span>
+          </div>
+          <div class="psc-item">
+            <span class="k">发布状态：</span>
+            <el-tag type="success" size="small">已上架试卷管理</el-tag>
+          </div>
+        </div>
+
+        <div class="psc-tip">
+          ✨ 本套试卷内的所有题目已自动写入官方题库并与试卷建立绑定，支持在「试卷管理」中进行预览、下载导出试卷或安排线上模拟考试。
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="psc-footer">
+          <el-button @click="showPaperSuccessModal = false">留在本页</el-button>
+          <el-button type="primary" :icon="'Tickets'" @click="goToPaperManage">
+            📖 前往试卷管理查看
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getAIQuestionList,
   generateQuestions,
+  generateEntirePaper,
   approveAIQuestion,
   rejectAIQuestion,
   batchApproveAIQuestions,
@@ -430,13 +629,20 @@ import {
 } from '@/api/ai'
 import { getAllSubjects, getChapterTree } from '@/api/exam'
 
+const router = useRouter()
+
+const activeMode = ref<'single' | 'paper'>('single')
 const loading = ref(false)
 const generateLoading = ref(false)
+const generatePaperLoading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
 const selectedRows = ref<any[]>([])
 const expandedAnalysisIds = ref<Set<number>>(new Set())
 const rewritingId = ref<number | null>(null)
+
+const showPaperSuccessModal = ref(false)
+const generatedPaperResult = ref<any>(null)
 
 const quota = reactive({
   total: 5000,
@@ -458,6 +664,7 @@ const subjects = ref<{ label: string; value: number }[]>([])
 const chapterOptions = ref<any[]>([])
 const currentKnowledgePoints = ref<any[]>([])
 
+// 单题/批量出题表单
 const generateForm = reactive<any>({
   model: 'gemini-3.7-flash',
   subjectId: 1,
@@ -468,6 +675,18 @@ const generateForm = reactive<any>({
   difficulty: 3,
   promptStyle: 'standard',
   count: 10,
+})
+
+// 整套试卷出题表单
+const paperForm = reactive<any>({
+  model: 'gemini-3.7-flash',
+  subjectId: 1,
+  paperName: '',
+  paperType: 'mock',
+  questionCount: 75,
+  duration: 150,
+  difficulty: 3,
+  promptStyle: 'standard',
 })
 
 const typeMap: Record<string, string> = {
@@ -521,12 +740,27 @@ function formatAnalysisHtml(analysis: string) {
     .replace(/\n/g, '<br/>')
 }
 
+function generateRandomPaperName() {
+  const sub = subjects.value.find((s) => s.value === paperForm.subjectId)
+  const subName = sub ? sub.label : '系统集成项目管理工程师'
+  const year = new Date().getFullYear()
+  const templates = [
+    `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
+    `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
+    `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
+    `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
+  ]
+  paperForm.paperName = templates[Math.floor(Math.random() * templates.length)]
+}
+
 async function loadSubjects() {
   try {
     const res = await getAllSubjects()
     if (res?.data && res.data.length > 0) {
       subjects.value = res.data.map((s: any) => ({ label: s.name, value: Number(s.id) }))
       generateForm.subjectId = subjects.value[0].value
+      paperForm.subjectId = subjects.value[0].value
+      generateRandomPaperName()
       loadChapters(generateForm.subjectId)
     }
   } catch {
@@ -534,6 +768,7 @@ async function loadSubjects() {
       { label: '系统集成项目管理工程师', value: 1 },
       { label: '信息系统项目管理师', value: 2 },
     ]
+    generateRandomPaperName()
   }
 }
 
@@ -541,6 +776,46 @@ async function onSubjectChange(subId: number) {
   generateForm.subjectId = subId
   await loadChapters(subId)
   fetchReviewList()
+}
+
+async function onPaperSubjectChange(subId: number) {
+  paperForm.subjectId = subId
+  generateRandomPaperName()
+  await loadChapters(subId)
+}
+
+async function handleGenerateEntirePaper() {
+  if (!paperForm.paperName || paperForm.paperName.trim().length === 0) {
+    generateRandomPaperName()
+  }
+  generatePaperLoading.value = true
+  try {
+    const res = await generateEntirePaper({
+      model: paperForm.model,
+      subjectId: paperForm.subjectId,
+      paperName: paperForm.paperName,
+      paperType: paperForm.paperType,
+      questionCount: paperForm.questionCount,
+      duration: paperForm.duration,
+      difficulty: paperForm.difficulty,
+      promptStyle: paperForm.promptStyle,
+    })
+    if (res?.data) {
+      generatedPaperResult.value = res.data
+      showPaperSuccessModal.value = true
+      ElMessage.success(`🎉 ${res.data.message || 'AI 成功生成整套试卷并已同步至试卷管理！'}`)
+      fetchQuota()
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || 'AI 整套试卷生成失败')
+  } finally {
+    generatePaperLoading.value = false
+  }
+}
+
+function goToPaperManage() {
+  showPaperSuccessModal.value = false
+  router.push('/exam/paper')
 }
 
 async function loadChapters(subjectId: number) {
@@ -1203,5 +1478,104 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.paper-generate-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .name-row {
+    margin-top: -4px;
+  }
+
+  .chapter-coverage-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #1e40af;
+    line-height: 1.5;
+
+    .tip-icon {
+      font-size: 15px;
+    }
+  }
+}
+
+.paper-success-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .psc-header {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 16px;
+
+    .psc-badge {
+      font-size: 12px;
+      font-weight: 700;
+      color: #16a34a;
+      margin-bottom: 4px;
+    }
+
+    .psc-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #14532d;
+    }
+  }
+
+  .psc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 20px;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+
+    .psc-item {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .k {
+        color: #64748b;
+      }
+      .v {
+        font-weight: 600;
+        color: #1e293b;
+
+        &.highlight {
+          color: #16a34a;
+          font-weight: 700;
+        }
+      }
+    }
+  }
+
+  .psc-tip {
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.6;
+    background: #faf5ff;
+    border: 1px solid #f3e8ff;
+    padding: 10px 14px;
+    border-radius: 6px;
+  }
+}
+
+.psc-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>

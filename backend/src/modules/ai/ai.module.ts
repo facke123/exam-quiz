@@ -9,6 +9,7 @@ import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
+import { Paper } from '@/database/entities/paper.entity';
 
 /**
  * AI 模块
@@ -23,6 +24,7 @@ import { SystemConfig } from '@/database/entities/system-config.entity';
       Chapter,
       KnowledgePoint,
       SystemConfig,
+      Paper,
     ]),
   ],
   controllers: [AiController],
