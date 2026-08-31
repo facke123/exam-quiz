@@ -4,11 +4,14 @@ import type { PageParams, PageResult } from '@/types/api'
 export interface AIGenerateParams {
   subjectId: number
   chapterId?: number
+  knowledgePointId?: number
+  knowledgePoint?: string
   knowledgePointIds?: number[]
   type: string
   count: number
-  difficulty?: string
+  difficulty?: string | number
   model?: string
+  promptStyle?: string
 }
 
 export interface AIQuota {
@@ -21,15 +24,20 @@ export interface AIQuota {
 export interface AIQuestion {
   id: number
   subjectId: number
+  subjectName?: string
   chapterId: number
+  chapterName?: string
+  knowledgePoint?: string
   type: string
   content: string
-  options?: { label: string; content: string }[]
+  title?: string
+  options?: { key?: string; label?: string; content: string }[]
   answer: string
   analysis: string
-  confidence: number // AI 置信度 0-1
-  status: 'pending' | 'approved' | 'rejected'
-  model: string
+  confidence: number // AI 置信度 0-100
+  status: 'pending' | 'published' | 'approved' | 'rejected'
+  model?: string
+  difficulty?: number
   createdAt: string
 }
 
@@ -45,7 +53,7 @@ export interface PromptTemplate {
 
 // AI 出题
 export function generateQuestions(data: AIGenerateParams) {
-  return request<{ taskId: string }>({
+  return request<{ taskId: number; count: number; questions: any[] }>({
     url: '/admin/ai/generate',
     method: 'post',
     data,
@@ -53,7 +61,7 @@ export function generateQuestions(data: AIGenerateParams) {
 }
 
 // AI 出题任务结果
-export function getGenerateTaskResult(taskId: string) {
+export function getGenerateTaskResult(taskId: string | number) {
   return request<{ status: string; questions: AIQuestion[] }>({
     url: `/admin/ai/generate/${taskId}`,
     method: 'get',
@@ -61,11 +69,37 @@ export function getGenerateTaskResult(taskId: string) {
 }
 
 // 待审核题目列表
-export function getAIQuestionList(params: PageParams & { status?: string; subjectId?: number }) {
+export function getAIQuestionList(
+  params: PageParams & {
+    status?: string
+    subjectId?: number
+    chapterId?: number
+    type?: string
+    difficulty?: number | string
+    keyword?: string
+  },
+) {
   return request<PageResult<AIQuestion>>({
     url: '/admin/ai/questions',
     method: 'get',
     params,
+  })
+}
+
+// 清空所有待审核题目
+export function clearPendingQuestions(data?: { subjectId?: number }) {
+  return request<{ message: string; count: number }>({
+    url: '/admin/ai/questions/clear-pending',
+    method: 'post',
+    data,
+  })
+}
+
+// AI 一键重写/深度优化试题解析
+export function rewriteQuestionAnalysis(id: number) {
+  return request<{ analysis: string }>({
+    url: `/admin/ai/questions/${id}/rewrite-analysis`,
+    method: 'post',
   })
 }
 
@@ -79,11 +113,11 @@ export function approveAIQuestion(id: number, data?: Partial<AIQuestion>) {
 }
 
 // 审核：拒绝
-export function rejectAIQuestion(id: number, reason: string) {
+export function rejectAIQuestion(id: number, reason?: string) {
   return request({
     url: `/admin/ai/questions/${id}/reject`,
     method: 'post',
-    data: { reason },
+    data: { reason: reason || '人工核验不符合标准' },
   })
 }
 

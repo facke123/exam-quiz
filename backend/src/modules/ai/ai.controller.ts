@@ -84,6 +84,19 @@ export class AiController {
     return { message: '批量驳回成功' };
   }
 
+  @Post(['admin/ai/questions/clear-pending', 'ai/questions/clear-pending'])
+  @ApiOperation({ summary: '清空待审核AI题目' })
+  async clearPendingQuestions(@Body() data?: { subjectId?: number }) {
+    const res = await this.aiService.clearPendingQuestions(data?.subjectId);
+    return { message: `已成功清空 ${res.count} 道待审核试题`, count: res.count };
+  }
+
+  @Post(['admin/ai/questions/:id/rewrite-analysis'])
+  @ApiOperation({ summary: 'AI一键重写优化试题解析' })
+  async rewriteAnalysis(@Param('id', ParseIntPipe) id: number) {
+    return this.aiService.rewriteAnalysis(id);
+  }
+
   @Post(['ai/review/:questionId'])
   @ApiOperation({ summary: 'AI审核题目' })
   async reviewQuestion(

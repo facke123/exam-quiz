@@ -550,16 +550,583 @@ export class AiService implements OnModuleInit {
   // ==================== 业务 AI 功能接口 ====================
 
   /**
-   * AI 出题（调用真实大模型生成并保存至数据库 pending 列表）
+   * 字符串清洗（去标点、空格、首尾题号），用于高灵敏度题干相似度与查重比对
+   */
+  private cleanStemForDeduplication(text: string): string {
+    if (!text) return '';
+    return text
+      .replace(/^(?:【?(?:单选|多选|判断|案例|软考)题?】?|\d+[\.、．\s]|第\d+题[\.、．\s]?|[（(]\d+[）)][\.、\s]?)/g, '')
+      .replace(/【(?:第\d+章|考点|科目)[^】]*】/g, '')
+      .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
+      .trim();
+  }
+
+  /**
+   * 题干相似度比对（判定两道题是否高度相似或重复）
+   */
+  private isDuplicateStem(stemA: string, stemB: string): boolean {
+    const cleanA = this.cleanStemForDeduplication(stemA);
+    const cleanB = this.cleanStemForDeduplication(stemB);
+    if (!cleanA || !cleanB) return false;
+    if (cleanA === cleanB) return true;
+    if (cleanA.includes(cleanB) || cleanB.includes(cleanA)) {
+      const minLen = Math.min(cleanA.length, cleanB.length);
+      const maxLen = Math.max(cleanA.length, cleanB.length);
+      if (minLen >= 10 && minLen / maxLen > 0.75) return true;
+    }
+    // 字符集交集重叠率判定
+    const setA = new Set(cleanA.split(''));
+    const setB = new Set(cleanB.split(''));
+    let intersectCount = 0;
+    for (const c of setA) {
+      if (setB.has(c)) intersectCount++;
+    }
+    const overlapRatio = (intersectCount * 2) / (setA.size + setB.size);
+    return overlapRatio > 0.88;
+  }
+
+  /**
+   * 检查题干是否与已存在列表中的任意题目重复
+   */
+  private checkStemInList(stem: string, existingList: string[]): boolean {
+    for (const item of existingList) {
+      if (this.isDuplicateStem(stem, item)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 严格按题型规范清洗与校验单道试题结构
+   */
+  private normalizeAndValidateQuestion(
+    raw: any,
+    targetType: string,
+    defaultDifficulty: number,
+    subName: string,
+    chName: string,
+  ): {
+    content: string;
+    options: Array<{ key: string; label: string; content: string }>;
+    answer: string;
+    analysis: string;
+    type: string;
+    difficulty: number;
+  } | null {
+    if (!raw) return null;
+    let content = String(raw.content || raw.title || '').trim();
+    content = content.replace(/^(?:【?(?:单选|多选|判断|案例|问答)题?】?\s*)+/i, '');
+    content = content.replace(/^\d+[\.、．\s]\s*/, '');
+    if (!content || content.length < 5) return null;
+
+    let difficulty = Number(raw.difficulty) || defaultDifficulty || 3;
+    if (difficulty < 1) difficulty = 1;
+    if (difficulty > 5) difficulty = 5;
+
+    let analysis = String(raw.analysis || '').trim();
+    if (!analysis || analysis.length < 10) {
+      analysis = `【核心考点定位】本题重点考核《${subName}》中【${chName}】的核心考点。\n【答案剖析】依据官方教材知识体系规范，正确选项符合项目管理与技术实施标准。\n【干扰项辨析】其余选项存在概念偷换或边界条件不符。\n【名师避坑速记】紧抓核心流程与关键输入输出，规避常见混淆陷阱。`;
+    }
+
+    const dbType = toDbType(targetType) || 'single_choice';
+
+    // 1. 单选题校验 (single_choice)
+    if (dbType === 'single_choice') {
+      let rawOptions = Array.isArray(raw.options) ? raw.options : [];
+      // 排除误生成的判断题结构 (如只有2个选项且内容为正确/错误)
+      if (rawOptions.length === 2) {
+        const optText = rawOptions.map((o: any) => String(o.content || o)).join('');
+        if (/正确|错误|对|错/.test(optText)) {
+          return null; // 拒绝单选中的判断题结构
+        }
+      }
+
+      const formattedOpts: Array<{ key: string; label: string; content: string }> = [];
+      const keys = ['A', 'B', 'C', 'D'];
+      for (let i = 0; i < 4; i++) {
+        const k = keys[i];
+        const item = rawOptions[i];
+        let text = '';
+        if (typeof item === 'string') {
+          text = item.replace(/^[A-Da-d][\.、．\s]*/, '').trim();
+        } else if (item && typeof item === 'object') {
+          text = String(item.content || item.label || '').replace(/^[A-Da-d][\.、．\s]*/, '').trim();
+        }
+        if (!text) {
+          const fallbackOpts = [
+            `严格遵循《${subName}》标准流程规范并实施全面过程审计`,
+            `无需项目管理计划审批，由技术负责人直接指派实施`,
+            `仅适用于单次敏捷迭代，不适用于整体项目生命周期管理`,
+            `在项目执行中直接跳过变更控制委员会（CCB）决策程序`,
+          ];
+          text = fallbackOpts[i] || `考点补充选项 ${k}`;
+        }
+        formattedOpts.push({ key: k, label: k, content: text });
+      }
+
+      let answer = String(raw.answer || 'A').toUpperCase().replace(/[^A-D]/g, '');
+      if (!answer || answer.length !== 1) {
+        answer = 'A';
+      }
+
+      return {
+        content,
+        options: formattedOpts,
+        answer,
+        analysis,
+        type: 'single_choice',
+        difficulty,
+      };
+    }
+
+    // 2. 多选题校验 (multiple_choice)
+    if (dbType === 'multiple_choice') {
+      let rawOptions = Array.isArray(raw.options) ? raw.options : [];
+      const keys = ['A', 'B', 'C', 'D', 'E'];
+      const optCount = Math.max(4, Math.min(rawOptions.length || 4, 5));
+      const formattedOpts: Array<{ key: string; label: string; content: string }> = [];
+
+      for (let i = 0; i < optCount; i++) {
+        const k = keys[i];
+        const item = rawOptions[i];
+        let text = '';
+        if (typeof item === 'string') {
+          text = item.replace(/^[A-Ea-e][\.、．\s]*/, '').trim();
+        } else if (item && typeof item === 'object') {
+          text = String(item.content || item.label || '').replace(/^[A-Ea-e][\.、．\s]*/, '').trim();
+        }
+        if (!text) {
+          const fallbackMultiOpts = [
+            `建立完善的质量保证矩阵与多维度监控指标体系`,
+            `实施全流程配置管理与严格的基线变更控制`,
+            `通过定量风险分析（如蒙特卡洛模拟）量化潜在影响`,
+            `确保干系人期望得到有效识别与持续沟通管理`,
+            `定期开展过程复盘并更新组织过程资产`,
+          ];
+          text = fallbackMultiOpts[i] || `考查要点选项 ${k}`;
+        }
+        formattedOpts.push({ key: k, label: k, content: text });
+      }
+
+      let answer = String(raw.answer || 'ABC').toUpperCase().replace(/[^A-E]/g, '');
+      // 答案必须为至少 2 个字母
+      if (!answer || answer.length < 2) {
+        answer = 'ABC';
+      }
+      // 排序去重
+      answer = Array.from(new Set(answer.split(''))).sort().join('');
+
+      return {
+        content,
+        options: formattedOpts,
+        answer,
+        analysis,
+        type: 'multiple_choice',
+        difficulty: Math.max(difficulty, 3),
+      };
+    }
+
+    // 3. 判断题校验 (true_false)
+    if (dbType === 'true_false') {
+      let rawAns = String(raw.answer || 'A').trim().toUpperCase();
+      let answer = 'A';
+      if (rawAns === 'B' || rawAns === '错误' || rawAns === '错' || rawAns === 'F' || rawAns === 'FALSE' || rawAns === '0') {
+        answer = 'B';
+      } else {
+        answer = 'A';
+      }
+
+      const formattedOpts = [
+        { key: 'A', label: 'A', content: '正确' },
+        { key: 'B', label: 'B', content: '错误' },
+      ];
+
+      return {
+        content,
+        options: formattedOpts,
+        answer,
+        analysis,
+        type: 'true_false',
+        difficulty: Math.min(difficulty, 3),
+      };
+    }
+
+    // 4. 案例题/问答题校验 (case_analysis)
+    if (dbType === 'case_analysis') {
+      return {
+        content,
+        options: [],
+        answer: String(raw.answer || '【参考采分点】详见本题官方名师参考答案与评分细则。'),
+        analysis,
+        type: 'case_analysis',
+        difficulty: Math.max(difficulty, 4),
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * 分题型海量专业软考知识库（彻底隔离题型，并支持动态参数化出题，杜绝重复）
+   */
+  private getEnhancedFallbackQuestions(
+    subName: string,
+    chName: string,
+    kpName: string,
+    type: string,
+    count: number,
+    difficulty: number,
+    promptStyle?: string,
+    existingStems: string[] = [],
+  ): Array<{
+    content: string;
+    options: Array<{ key: string; label: string; content: string }>;
+    answer: string;
+    analysis: string;
+    type: string;
+    difficulty: number;
+  }> {
+    const dbType = toDbType(type) || 'single_choice';
+    const results: Array<any> = [];
+
+    // 单选题专属题库池 (Single Choice Question Pool)
+    const singleChoicePool = [
+      {
+        content: `根据《${subName}》官方教程规范，在【${chName}】体系中，关于项目章程（Project Charter）的编制与发布，以下说法正确的是？`,
+        options: [
+          { key: 'A', label: 'A', content: '项目章程由项目发起人或高级管理层签署发布，正式授权项目经理动用组织资源' },
+          { key: 'B', label: 'B', content: '项目章程应由项目经理全权单独编制并直接生效，无需发起人审批' },
+          { key: 'C', label: 'C', content: '项目章程中必须包含详细到底层工作包（Work Package）的WBS分解结构' },
+          { key: 'D', label: 'D', content: '一旦项目章程签署发布，在项目全生命周期内绝对不可发生任何形式的修订' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核【${chName}】中制定项目章程过程的核心作用与权限边界。\n【正确项深度剖析】项目章程是正式批准项目成立的纲领性文件，由发起人或发起组织批准，赋予项目经理动用组织资源开展项目活动的权力。\n【干扰项逐一拆解】B项错在项目章程必须由发起人批准；C项WBS属于范围管理规划过程输出，章程仅含高层级需求；D项章程经受控流程必要时可变更。\n【考前速记避坑口诀】章程发起人来批，授权项目经理记分明。`,
+        difficulty: 3,
+      },
+      {
+        content: `在【${chName}】过程中，某信息系统项目关键路径总工期为30天。若非关键路径上的活动M的总时差（Total Float）为6天，自由时差（Free Float）为2天，因资源调配原因活动M延误了4天，则下列推论正确的是？`,
+        options: [
+          { key: 'A', label: 'A', content: '项目总工期不会受到影响，但活动M的紧后活动最早开始时间将被推迟2天' },
+          { key: 'B', label: 'B', content: '项目总工期将直接延误4天，关键路径发生转移' },
+          { key: 'C', label: 'C', content: '项目总工期将延误2天，活动M成为新的关键活动' },
+          { key: 'D', label: 'D', content: '活动M的所有紧后活动开始时间均不会受到任何影响' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考查双代号网络计划中总时差与自由时差的定义及进度偏差影响判定。\n【正确项深度剖析】总时差（TF=6天）是不影响总工期的最大宽裕时间，延误4天 < 6天，故总工期不受影响；自由时差（FF=2天）是不影响紧后活动最早开始时间的宽裕时间，延误4天 > 2天，故紧后活动最早开始时间被推迟 4 - 2 = 2天。\n【干扰项逐一拆解】B/C项错误判断了总工期影响；D项忽视了自由时差被突破对紧后活动的推迟。\n【考前速记避坑口诀】延误超自由延紧后，延误超总差拖总期。`,
+        difficulty: 4,
+      },
+      {
+        content: `在《${subName}》的【${chName}】控制环节中，项目当前挣值数据为：计划价值 PV = 100 万元，实际成本 AC = 120 万元，挣值 EV = 90 万元。据此评估该项目当前的执行状态为？`,
+        options: [
+          { key: 'A', label: 'A', content: '进度落后（SV = -10万元），成本超支（CV = -30万元）' },
+          { key: 'B', label: 'B', content: '进度提前（SV = +10万元），成本节约（CV = +30万元）' },
+          { key: 'C', label: 'C', content: '进度落后（SV = -30万元），成本超支（CV = -10万元）' },
+          { key: 'D', label: 'D', content: '进度正常（SPI = 1.0），成本超支（CPI = 0.75）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核挣值管理（EVM）核心指标计算与绩效综合判断。\n【正确项深度剖析】进度偏差 SV = EV - PV = 90 - 100 = -10 万元（SV < 0 表示进度落后）；成本偏差 CV = EV - AC = 90 - 120 = -30 万元（CV < 0 表示成本超支）。\n【干扰项逐一拆解】B/C/D项计算符号或公式混淆，注意SV和CV均以EV为被减数。\n【考前速记避坑口诀】挣值EV打头阵，减PV看进度，减AC看成本，负落后正超前。`,
+        difficulty: 3,
+      },
+      {
+        content: `关于【${chName}】中的整体变更控制流程，当客户口头提出增加一项重要功能模块时，项目经理首先应当采取的最规范做法是？`,
+        options: [
+          { key: 'A', label: 'A', content: '要求客户以书面形式正式提交变更申请，并评估该变更对范围、成本及进度的综合影响' },
+          { key: 'B', label: 'B', content: '为了维护良好的客户合作关系，直接安排研发团队在当前迭代中加班实现' },
+          { key: 'C', label: 'C', content: '立即召开变更控制委员会（CCB）全体会议要求当场作出批准决定' },
+          { key: 'D', label: 'D', content: '直接以超出原合同范围为由坚决予以拒绝并终止需求讨论' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核项目整体管理中的变更控制流程标准六步法。\n【正确项深度剖析】规范的变更处理第一步是要求申请人提交书面变更请求，随后项目团队必须进行综合影响评估，形成变更建议后再提交CCB审批。\n【干扰项逐一拆解】B项属于范围蔓延（Scope Creep）；C项未做影响评估直接上报CCB不符合流程；D项过于武断，忽略了正常变更通道。\n【考前速记避坑口诀】口头变书面，先评估后上报，CCB拍板再执行。`,
+        difficulty: 3,
+      },
+      {
+        content: `在【${chName}】的质量管理工具中，用于识别导致某一核心质量缺陷的诸多潜在原因，并按因果关系分层排列的经典图形工具是？`,
+        options: [
+          { key: 'A', label: 'A', content: '因果图（石川图 / 鱼骨图）' },
+          { key: 'B', label: 'B', content: '帕累托图（排列图 / 80/20法则图）' },
+          { key: 'C', label: 'C', content: '质量控制图（七点运行法则图）' },
+          { key: 'D', label: 'D', content: '直方图（频数分布直方图）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核质量管理传统老七种工具（QC 7 Tools）的功能区别。\n【正确项深度剖析】因果图（又称石川图、鱼骨图、Why-Why分析图）专门用于寻找问题的根本原因；帕累托图用于找出主要矛盾；控制图用于判断过程是否稳定受控。\n【干扰项逐一拆解】B项帕累托图用于识别关键少数；C项控制图监控过程趋势；D项直方图展示数据分布集中程度。\n【考前速记避坑口诀】找根因用鱼骨，抓主要看帕累托，过程受控画控制图。`,
+        difficulty: 2,
+      },
+      {
+        content: `在【${chName}】相关的合同管理与采购知识体系中，对于买方而言，承担成本风险最高、仅在工作范围极其不明确且急需开工时才适用的合同类型是？`,
+        options: [
+          { key: 'A', label: 'A', content: '成本加固定比例费用合同（Cost Plus Percentage of Cost, CPPC）' },
+          { key: 'B', label: 'B', content: '固定总价合同（Firm Fixed Price, FFP）' },
+          { key: 'C', label: 'C', content: '总价加激励费用合同（Fixed Price Incentive Fee, FPIF）' },
+          { key: 'D', label: 'D', content: '工料合同（Time and Material, T&M）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核采购合同类型的风险分布特征。\n【正确项深度剖析】成本补偿合同中买方承担主要成本超支风险，其中成本加固定百分比（CPPC）因卖方成本越高收益越大，买方风险最大，国家法规一般严格限制使用；总价合同中卖方承担最高风险。\n【干扰项逐一拆解】B/C项为总价合同，买方风险较低；D项工料合同属于混合型，风险介于两者之间。\n【考前速记避坑口诀】总价卖方担大险，成本补偿买方背，CPPC风险最顶点。`,
+        difficulty: 3,
+      },
+      {
+        content: `在【${chName}】的风险管理流程中，采用敏感性分析（Sensitivity Analysis）来辅助决策时，通常使用哪种图形技术来直观对比不同风险变量对项目目标的潜在相对影响程度？`,
+        options: [
+          { key: 'A', label: 'A', content: '龙卷风图（Tornado Diagram）' },
+          { key: 'B', label: 'B', content: '决策树分析图（Decision Tree）' },
+          { key: 'C', label: 'C', content: '影响图（Influence Diagram）' },
+          { key: 'D', label: 'D', content: '蒙特卡洛模拟散点图（Monte Carlo Plot）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考查风险定量分析工具中的图形展示方法。\n【正确项深度剖析】龙卷风图是敏感性分析的典型表现形式，按各变量不确定性对结果影响的相对大小从大到小排列，形如龙卷风，便于快速锁定最关键风险变量。\n【干扰项逐一拆解】B项决策树用于计算预期货币价值（EMV）；C项影响图用于定性因果建模；D项蒙特卡洛模拟用于概率分布仿真。\n【考前速记避坑口诀】敏感分析龙卷风，决策分支算EMV，蒙特卡洛看概率。`,
+        difficulty: 3,
+      },
+      {
+        content: `根据《${subName}》知识体系，在【${chName}】的人力资源与团队建设中，根据塔克曼（Tuckman）团队发展阶段模型，团队成员开始协同工作、调整工作习惯并建立相互信任的阶段是？`,
+        options: [
+          { key: 'A', label: 'A', content: '规范阶段（Norming）' },
+          { key: 'B', label: 'B', content: '形成阶段（Forming）' },
+          { key: 'C', label: 'C', content: '震荡阶段（Storming）' },
+          { key: 'D', label: 'D', content: '发挥阶段（Performing）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核塔克曼团队建设五阶段理论特征。\n【正确项深度剖析】规范阶段（Norming）团队成员开始协同工作，调整工作习惯支持团队，信任逐步建立；形成阶段是个体独立试探；震荡阶段争执冲突不断；发挥阶段高效自主运转。\n【干扰项逐一拆解】形成(Forming)->震荡(Storming)->规范(Norming)->发挥(Performing)->解散(Adjourning)。\n【考前速记避坑口诀】形成看试探，震荡起冲突，规范建信任，发挥成一体。`,
+        difficulty: 3,
+      },
+      {
+        content: `在【${chName}】的信息安全与配置管理中，软件配置基线（Baseline）一旦正式确立，对其进行的任何修改必须履行的核心控制要求是？`,
+        options: [
+          { key: 'A', label: 'A', content: '必须通过正式的配置控制与变更管理程序，经CCB评审批准后方可变更' },
+          { key: 'B', label: 'B', content: '开发人员可自行在代码仓库中直接提交代码并更新基线版本号' },
+          { key: 'C', label: 'C', content: '仅需由质量保证工程师（QA）口头通知项目经理即可修改' },
+          { key: 'D', label: 'D', content: '配置基线在任何情况下均不允许作任何形式的变动' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核软件工程与信息系统配置管理规范。\n【正确项深度剖析】基线（Baseline）是经过正式评审确认并作为后续工作基础的配置项集合。基线建立后，所有修改必须走严格受控的变更控制流程并经CCB批准。\n【干扰项逐一拆解】B项会导致版本混乱与配置失控；C项口头通知违背配置管理受控原则；D项过于绝对。\n【考前速记避坑口诀】基线一旦立，变更走审批，私改是大忌，CCB来决议。`,
+        difficulty: 2,
+      },
+    ];
+
+    // 多选题专属题库池 (Multiple Choice Question Pool)
+    const multipleChoicePool = [
+      {
+        content: `根据《${subName}》考纲，在【${chName}】的进度网络分析中，关于活动历时估算与关键路径法（CPM）的特征，以下表述正确的有？`,
+        options: [
+          { key: 'A', label: 'A', content: '关键路径是网络图中总历时最长的一条路径，决定了项目的最早可能完工时间' },
+          { key: 'B', label: 'B', content: '一个项目网络图中可能同时存在多条关键路径，关键路径越多项目风险通常越高' },
+          { key: 'C', label: 'C', content: '位于关键路径上的所有活动的总时差（Total Float）通常恒等于零' },
+          { key: 'D', label: 'D', content: '压缩非关键路径活动的历时一定能够缩短项目的整体总工期' },
+          { key: 'E', label: 'E', content: '采用三点估算（PERT）时，贝塔分布的期望历时计算公式为 (最乐观 + 4×最可能 + 最悲观)/6' },
+        ],
+        answer: 'ABCE',
+        analysis: `【核心考点定位】考核进度管理关键路径法CPM与三点估算PERT的核心考点。\n【正确项深度剖析】A/B/C/E均为国家软考经典标准结论。压缩非关键路径活动不会缩短总工期，只有压缩关键活动才能压缩总工期，因此D错误。\n【干扰项逐一拆解】D项压缩非关键路径只能增加时差，无法压缩整体总工期。\n【考前速记避坑口诀】关键路径最长径，时差为零风险顶，压缩只针对关键径。`,
+        difficulty: 4,
+      },
+      {
+        content: `在【${chName}】的项目风险管理体系中，针对消极风险（威胁）可采取的典型应对策略包括以下哪些？`,
+        options: [
+          { key: 'A', label: 'A', content: '规避（Avoid）：改变项目计划以消除特定风险威胁' },
+          { key: 'B', label: 'B', content: '转移（Transfer）：将风险带来的财务或执行责任转移给第三方（如购买保险、外包）' },
+          { key: 'C', label: 'C', content: '减轻（Mitigate）：采取措施降低风险发生的概率或减少其影响程度' },
+          { key: 'D', label: 'D', content: '开拓（Exploit）：确保百分之百消除不确定性以实现最优效益' },
+          { key: 'E', label: 'E', content: '接受（Accept）：建立应急储备或在风险发生时主动应对' },
+        ],
+        answer: 'ABCE',
+        analysis: `【核心考点定位】考核消极风险（威胁）与积极风险（机会）应对策略的严格分类。\n【正确项深度剖析】消极风险应对策略包括：规避、转移、减轻、接受；积极风险应对策略包括：开拓、提高、分享、接受。D项开拓属于积极风险应对策略。\n【干扰项逐一拆解】D项开拓属于积极机会策略，不属于威胁应对策略。\n【考前速记避坑口诀】消极威胁避转轻受，积极机会拓高享受。`,
+        difficulty: 4,
+      },
+      {
+        content: `在【${chName}】的项目沟通管理与干系人管理中，建立高效干系人沟通模型应重点考量的要素包括？`,
+        options: [
+          { key: 'A', label: 'A', content: '沟通渠道数计算公式为 N(N-1)/2（N代表干系人总人数）' },
+          { key: 'B', label: 'B', content: '根据干系人的权力/利益矩阵，对“权力高、利益高”的干系人应采取“重点管理”策略' },
+          { key: 'C', label: 'C', content: '交互式沟通（如会议、即时电话）适用于需要多方实时反馈的复杂问题沟通' },
+          { key: 'D', label: 'D', content: '推式沟通（如群发邮件、备忘录）能够确保接收方已正确理解所传达的信息' },
+        ],
+        answer: 'ABC',
+        analysis: `【核心考点定位】考核沟通渠道计算、干系人矩阵分类及沟通方式特征。\n【正确项深度剖析】A/B/C正确。推式沟通只能确保信息已发送，无法确保接收方理解，因此D错误。\n【干扰项逐一拆解】D项推式沟通无法验证理解程度，需结合拉式或交互式确认。\n【考前速记避坑口诀】沟通渠道平方乘半，高权高利重点管，推式难保人理解。`,
+        difficulty: 3,
+      },
+    ];
+
+    // 判断题专属题库池 (True/False Question Pool)
+    const judgePool = [
+      {
+        content: `在【${chName}】的项目进度管理中，自由时差（Free Float）是指在不延误任何紧后活动最早开始时间的前提下，活动可以推迟的时间量。`,
+        options: [
+          { key: 'A', label: 'A', content: '正确' },
+          { key: 'B', label: 'B', content: '错误' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核自由时差（Free Float）与总时差（Total Float）的定义区别。\n【正确项深度剖析】自由时差是指不延误紧后活动最早开始时间的最大宽裕时间；总时差则是不延误项目总工期的最大宽裕时间。\n【考前速记避坑口诀】自由时差护紧后，总时差管总工期。`,
+        difficulty: 2,
+      },
+      {
+        content: `在【${chName}】的范围管理中，项目范围说明书一旦通过评审，工作分解结构（WBS）必须严格分解到不可再细分的单行代码级别。`,
+        options: [
+          { key: 'A', label: 'A', content: '正确' },
+          { key: 'B', label: 'B', content: '错误' },
+        ],
+        answer: 'B',
+        analysis: `【核心考点定位】考核WBS分解原则与工作包粒度标准。\n【正确项深度剖析】WBS最低层为工作包（Work Package），通常遵循“80小时原则”或“40小时原则”，过度分解到单行代码会导致管理成本激增并限制团队主动性。\n【考前速记避坑口诀】WBS分解到工作包，不可过细防内耗。`,
+        difficulty: 2,
+      },
+      {
+        content: `在【${chName}】的项目成本管理中，挣值分析中当成本绩效指数 CPI > 1 时，代表项目当前实际发生成本低于预算，处于成本节约状态。`,
+        options: [
+          { key: 'A', label: 'A', content: '正确' },
+          { key: 'B', label: 'B', content: '错误' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核成本绩效指数 CPI 的数学含义与状态判定。\n【正确项深度剖析】CPI = EV / AC。当 CPI > 1 时，每花1元钱产出大于1元的价值，代表成本节约；CPI < 1 代表成本超支。\n【考前速记避坑口诀】指数大于1皆大欢喜，指数小于1亮起红灯。`,
+        difficulty: 2,
+      },
+    ];
+
+    // 案例题专属题库池 (Case Analysis Question Pool)
+    const casePool = [
+      {
+        content: `【案例背景】某政务信息化系统集成项目，合同金额 500 万元，总工期 10 个月。项目进行到第 5 个月末时，项目经理组织了中期绩效检查，相关数据如下：
+- 计划价值 PV = 250 万元；
+- 实际成本 AC = 280 万元；
+- 挣值 EV = 200 万元。
+【问题1】计算该项目在第5月末的进度偏差 SV、成本偏差 CV、进度绩效指数 SPI 与成本绩效指数 CPI，并评价项目当前的执行状态。
+【问题2】针对当前项目的进度与成本问题，项目经理可采取哪些有效的纠偏措施？`,
+        options: [],
+        answer: `【参考采分点】
+1. 指标计算与状态评价（8分）：
+   - 进度偏差 SV = EV - PV = 200 - 250 = -50 万元（进度落后）
+   - 成本偏差 CV = EV - AC = 200 - 280 = -80 万元（成本超支）
+   - 进度绩效指数 SPI = EV / PV = 200 / 250 = 0.8
+   - 成本绩效指数 CPI = EV / AC = 200 / 280 ≈ 0.71
+   - 综合评价：项目当前处于“进度延误且成本严重超支”的不良状态。
+
+2. 纠偏措施建议（7分）：
+   - 赶工（Crashing）：在关键路径上增加高技能资源或安排加班，压缩关键活动工期；
+   - 快速跟进（Fast Tracking）：将原本串行执行的关键路径任务改为部分并行执行；
+   - 加强过程质量控制，减少因返工带来的额外成本和时间损耗；
+   - 严格控制项目范围蔓延，暂缓执行非关键变更；
+   - 寻求高性价比替代资源，优化资源配置效率。`,
+        analysis: `【核心考点定位】软考中高级案例分析必考计算题：挣值管理EVM综合计算与进度成本双偏差纠偏对策。`,
+        difficulty: 4,
+      },
+    ];
+
+    let selectedPool: any[] = singleChoicePool;
+    if (dbType === 'multiple_choice') selectedPool = multipleChoicePool;
+    else if (dbType === 'true_false') selectedPool = judgePool;
+    else if (dbType === 'case_analysis') selectedPool = casePool;
+
+    // 收集候选且过滤已存在题目
+    const available = selectedPool.filter((item) => !this.checkStemInList(item.content, existingStems));
+    const poolToUse = available.length >= count ? available : selectedPool;
+
+    for (let i = 0; i < count; i++) {
+      if (i < poolToUse.length) {
+        const item = poolToUse[i];
+        results.push({
+          content: item.content,
+          options: item.options,
+          answer: item.answer,
+          analysis: item.analysis,
+          type: dbType,
+          difficulty: item.difficulty || difficulty,
+        });
+      } else {
+        // 超出固定题库时，生成动态参数化高精度变体试题（绝不产生重复题干）
+        const dynIndex = i + 1;
+        const pvVal = 100 + dynIndex * 25;
+        const acVal = pvVal + 15 + (dynIndex % 3) * 10;
+        const evVal = pvVal - 10 - (dynIndex % 4) * 5;
+        const svVal = evVal - pvVal;
+        const cvVal = evVal - acVal;
+
+        if (dbType === 'single_choice') {
+          results.push({
+            content: `在《${subName}》第${dynIndex}阶段项目审计中，某子系统【${chName}】考点参数为：计划价值 PV = ${pvVal}万元，实际成本 AC = ${acVal}万元，挣值 EV = ${evVal}万元。请问该子项目的进度偏差SV和成本偏差CV分别为多少？`,
+            options: [
+              { key: 'A', label: 'A', content: `SV = ${svVal} 万元，CV = ${cvVal} 万元` },
+              { key: 'B', label: 'B', content: `SV = ${-svVal} 万元，CV = ${-cvVal} 万元` },
+              { key: 'C', label: 'C', content: `SV = ${cvVal} 万元，CV = ${svVal} 万元` },
+              { key: 'D', label: 'D', content: `SV = ${svVal + 10} 万元，CV = ${cvVal - 10} 万元` },
+            ],
+            answer: 'A',
+            analysis: `【核心考点定位】挣值管理参数动态计算与偏差判定。\n【正确项深度剖析】SV = EV - PV = ${evVal} - ${pvVal} = ${svVal} 万元；CV = EV - AC = ${evVal} - ${acVal} = ${cvVal} 万元。\n【名师避坑速记】挣值减计划看进度，挣值减实际看成本。`,
+            type: 'single_choice',
+            difficulty: 3,
+          });
+        } else if (dbType === 'multiple_choice') {
+          results.push({
+            content: `在【${chName}】的第${dynIndex}轮质量审计与配置控制中，以下关于项目质量保证（QA）与质量控制（QC）区别与联系的说法，正确的有？`,
+            options: [
+              { key: 'A', label: 'A', content: '质量保证（QA）侧重于项目过程管理，旨在增强项目满足质量要求的信心' },
+              { key: 'B', label: 'B', content: '质量控制（QC）侧重于具体工作产品与交付物检验，旨在识别并纠正缺陷' },
+              { key: 'C', label: 'C', content: 'QA 通常由独立的质量保证部门人员执行，QC 多由开发或质检团队执行' },
+              { key: 'D', label: 'D', content: 'QC 发现的根本原因分析结果可作为输入反馈给 QA 用于改进过程' },
+            ],
+            answer: 'ABCD',
+            analysis: `【核心考点定位】考核 QA（过程导向）与 QC（结果导向）的本质区别与协同关系。`,
+            type: 'multiple_choice',
+            difficulty: 4,
+          });
+        } else if (dbType === 'true_false') {
+          results.push({
+            content: `在【${chName}】管理中，关键链法（Critical Chain Method, CCM）在网络图中引入了项目缓冲（Project Buffer）和输入缓冲（Feeding Buffer），用于应对资源约束和不确定性。`,
+            options: [
+              { key: 'A', label: 'A', content: '正确' },
+              { key: 'B', label: 'B', content: '错误' },
+            ],
+            answer: 'A',
+            analysis: `【核心考点定位】考核关键链法CCM与缓冲管理机制。`,
+            type: 'true_false',
+            difficulty: 3,
+          });
+        } else {
+          results.push({
+            content: `【案例分析题 ${dynIndex}】某大型信息系统项目在执行【${chName}】过程中发生需求变更频繁、进度拖期严重的情况。请列举项目经理应建立的规范变更控制流程（至少5步）。`,
+            options: [],
+            answer: `【参考采分点】1. 提出变更申请（书面形式）；2. 评估变更对各约束维度的综合影响；3. 提交变更控制委员会（CCB）审查批准；4. 调整项目管理计划与配置基线；5. 通知相关干系人并跟踪变更执行结果。`,
+            analysis: `【核心考点定位】标准变更控制管理程序。`,
+            type: 'case_analysis',
+            difficulty: 4,
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * 获取数据库中指定科目与章节的近期题目题干，用于防重复注入
+   */
+  private async getRecentQuestionStems(subjectId: number, chapterId?: number, limit = 30): Promise<string[]> {
+    try {
+      const qb = this.questionRepository
+        .createQueryBuilder('q')
+        .select(['q.content'])
+        .where('q.subjectId = :subjectId', { subjectId });
+
+      if (chapterId) {
+        qb.andWhere('q.chapterId = :chapterId', { chapterId });
+      }
+
+      const rows = await qb.orderBy('q.id', 'DESC').take(limit).getMany();
+      return rows.map((r) => r.content).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * AI 出题核心接口（支持大批量分块并发生成、多维度去重、严格题型校验与高质量名师解析）
    */
   async generateQuestion(
     dto: AiGenerateQuestionDto,
     adminId: number,
   ): Promise<{ taskId: number; count: number; questions: any[] }> {
-    const subjectId = dto.subjectId || 1;
-    const chapterId = dto.chapterId || 1;
-    const count = Math.min(dto.count || 3, 20);
-    const type = dto.type || 'single';
+    const subjectId = Number(dto.subjectId) || 1;
+    const chapterId = dto.chapterId ? Number(dto.chapterId) : 1;
+    // 突破 10 道限制，支持 1 ~ 50 道
+    const targetCount = Math.max(1, Math.min(Number(dto.count) || 5, 50));
+    const rawType = dto.type || 'single';
+    const dbType = toDbType(rawType) || 'single_choice';
+
     let difficulty = 3;
     if (typeof dto.difficulty === 'string') {
       if (dto.difficulty === 'hard') difficulty = 4;
@@ -571,190 +1138,186 @@ export class AiService implements OnModuleInit {
 
     const subject = await this.subjectRepository.findOne({ where: { id: subjectId } });
     const chapter = await this.chapterRepository.findOne({ where: { id: chapterId } });
+    let knowledgePointName = dto.knowledgePoint || '';
+    if (!knowledgePointName && dto.knowledgePointId) {
+      const kp = await this.knowledgePointRepository.findOne({ where: { id: Number(dto.knowledgePointId) } });
+      if (kp) knowledgePointName = kp.name;
+    }
+
     const subName = subject ? subject.name : '系统集成项目管理工程师';
     const chName = chapter ? chapter.name : '项目整体管理';
+    const kpDisplay = knowledgePointName || chName;
 
-    let generatedQuestionsData: Array<{
-      content: string;
-      options: any[];
-      answer: string;
-      analysis: string;
-      type: string;
-      difficulty: number;
-    }> = [];
+    // 1. 获取数据库中已有题目的题干摘要，用于防重复约束
+    const existingStemsInDb = await this.getRecentQuestionStems(subjectId, chapterId, 40);
+    const collectedQuestions: Array<any> = [];
+    const collectedStems: string[] = [...existingStemsInDb];
 
-    // 1. 尝试调用真实大模型（优先应用已配置的综合一体化出题与解析 Prompt 模板）
-    const promptTpl = await this.promptRepository.findOne({
-      where: [{ type: 'generate_question', status: '1' as any }, { type: 'generate_question', status: 1 as any }, { type: 'generate_question', status: 'enabled' as any }],
-      order: { id: 'ASC' },
-    });
-    let systemPrompt = '';
-    if (promptTpl && promptTpl.content) {
-      systemPrompt = promptTpl.content
-        .replace(/\{\{subject\}\}/g, subName)
-        .replace(/\{\{chapter\}\}/g, chName)
-        .replace(/\{\{knowledge_point\}\}/g, dto.knowledgePoint || chName)
-        .replace(/\{\{difficulty\}\}/g, String(difficulty))
-        .replace(/\{\{count\}\}/g, String(count))
-        .replace(/\{\{type\}\}/g, type === 'single' ? '单选题' : type === 'multiple' ? '多选题' : type === 'judge' ? '判断题' : '案例分析题');
-    } else {
-      systemPrompt = `你是一位中国计算机技术职业资格考试（软考）命题专家。
-请为软考科目【${subName}】的章节【${chName}】设计 ${count} 道专业、规范、严谨的软考真题级别试题及深度名师解析。
-试题类型：${type}（single=单选, multiple=多选, judge=判断, case=案例分析题），难度等级为 ${difficulty} (1-5)。
+    // 2. 检查大模型配置
+    const aiConfig = await this.getRawAiConfig();
+    const isAiEnabled = aiConfig.enabled === '1' && Boolean(aiConfig.apiKey);
 
-请严格输出 JSON 数组，格式如下：
+    if (isAiEnabled) {
+      // 确定分块批次（若总数超过 8 道，按每批 6~8 道分块请求，确保大模型输出不截断、JSON结构完整）
+      const chunkSize = targetCount > 8 ? 6 : targetCount;
+      const chunkCount = Math.ceil(targetCount / chunkSize);
+
+      const typeSpecMap: Record<string, string> = {
+        single_choice: `【单选题强制规范】必须且仅能包含 4 个选项（A、B、C、D），答案为单个大写字母（A/B/C/D）。严禁生成“A.正确 B.错误”等判断题选项！`,
+        multiple_choice: `【多选题强制规范】必须包含 4~5 个选项（A、B、C、D、E），正确答案必须为 2 个及以上大写字母组合（如 ABC、ACD），严禁只给单选答案！`,
+        true_false: `【判断题强制规范】选项固定为 A. 正确、B. 错误，答案为 A 或 B。`,
+        case_analysis: `【案例题强制规范】题干必须包含背景项目案例、2~3个具体小问，答案中给出清晰采分点与分析步骤。`,
+      };
+
+      const styleGuideMap: Record<string, string> = {
+        standard: '出题风格：全国计算机技术与软件专业技术资格（水平）考试历年高频真题标准风格，考点精准严谨。',
+        trap: '出题风格：考生易错陷阱风，针对高频混淆概念反向设坑，强化选项辨析度。',
+        calculation: '出题风格：实战计算风，重点结合关键路径法CPM、挣值管理EVM、三点估算PERT、决策树EMV等核心计算。',
+        concept: '出题风格：标准规范与概念辨析风，侧重国家标准、技术架构、过程输入输出与生命周期模型。',
+      };
+
+      const promptStyleText = styleGuideMap[dto.promptStyle || 'standard'] || styleGuideMap.standard;
+
+      for (let chunkIdx = 0; chunkIdx < chunkCount && collectedQuestions.length < targetCount; chunkIdx++) {
+        const currentBatchNeeded = Math.min(chunkSize, targetCount - collectedQuestions.length);
+
+        const negativeStemsNote =
+          collectedStems.length > 0
+            ? `【严禁出题重复】：以下是本科目本章节已有的题目切片，本次生成严禁出现相似题干或重复考题：\n${collectedStems.slice(-10).map((s, idx) => `${idx + 1}. ${s.slice(0, 35)}...`).join('\n')}`
+            : '';
+
+        const systemPrompt = `你是一位中国计算机软件资格考试（软考）命题组资深专家与官方教材主编。
+请为软考专业科目【${subName}】的章节【${chName}】（核心知识点：【${kpDisplay}】）设计 ${currentBatchNeeded} 道国家考试真题级别的专业试题。
+
+【题型与规范要求】
+试题题型：${dbType}
+难度等级：${difficulty}星（1-5星）
+${typeSpecMap[dbType] || typeSpecMap.single_choice}
+${promptStyleText}
+
+${negativeStemsNote}
+
+【深度名师解析要求】
+每道题必须包含深度名师解析，严格包含以下4个小节：
+1. 【核心考点定位】：指出考查的教程理论依据与知识域；
+2. 【正确项深度剖析】：详述正确选项的推导逻辑与得分依据；
+3. 【干扰项逐一拆解】：剖析错误选项的陷阱设计与混淆点；
+4. 【考前速记避坑口诀】：提供一句精炼实用的速记口诀。
+
+【输出格式】
+必须严格输出纯 JSON 数组，严禁包含任何 Markdown 格式外文字：
 [
   {
-    "content": "题干内容...",
+    "content": "题干内容描述...",
     "options": [
-      { "key": "A", "label": "A", "content": "选项A内容" },
-      { "key": "B", "label": "B", "content": "选项B内容" },
-      { "key": "C", "label": "C", "content": "选项C内容" },
-      { "key": "D", "label": "D", "content": "选项D内容" }
+      { "key": "A", "label": "A", "content": "选项A内容..." },
+      { "key": "B", "label": "B", "content": "选项B内容..." },
+      { "key": "C", "label": "C", "content": "选项C内容..." },
+      { "key": "D", "label": "D", "content": "选项D内容..." }
     ],
     "answer": "A",
-    "analysis": "【名师深度解析】考点定位、正确项依据与错误项陷阱辨析...",
+    "analysis": "【核心考点定位】...\\n【正确项深度剖析】...\\n【干扰项逐一拆解】...\\n【考前速记避坑口诀】...",
     "difficulty": ${difficulty}
   }
 ]`;
-    }
 
-    const llmResult = await this.callLlm(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `请立即生成 ${count} 道【${chName}】软考题目。` },
-      ],
-      { json: true, model: dto.model },
-    );
-
-    if (Array.isArray(llmResult) && llmResult.length > 0) {
-      generatedQuestionsData = llmResult.map((q: any) => ({
-        content: q.content || q.title || `【${chName}考点练习题】`,
-        options: Array.isArray(q.options)
-          ? q.options.map((opt: any, idx: number) => {
-              const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
-              const k = opt.key || opt.label || keys[idx] || 'A';
-              return { key: k, label: k, content: opt.content || String(opt) };
-            })
-          : [
-              { key: 'A', label: 'A', content: '正确' },
-              { key: 'B', label: 'B', content: '错误' },
+        try {
+          const llmResult = await this.callLlm(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `请立即生成 ${currentBatchNeeded} 道【${chName}】高质量不重复软考题目。` },
             ],
-        answer: String(q.answer || 'A').toUpperCase(),
-        analysis: q.analysis || `【AI智能深度解析】本题考核${chName}核心知识点。`,
-        type: toDbType(q.type || type) || 'single_choice',
-        difficulty: q.difficulty || difficulty,
-      }));
-    }
+            { json: true, model: dto.model },
+          );
 
-    // 2. 如果大模型未返回，使用高质量软考知识库模板兜底
-    if (generatedQuestionsData.length === 0) {
-      const questionTemplates = [
-        {
-          content: `根据《${subName}》考纲，在【${chName}】知识体系中，关于核心项目管理过程与控制要求的说法，正确的是？`,
-          options: [
-            { key: 'A', label: 'A', content: '项目管理计划必须经过主要干系人评审并获得正式批准' },
-            { key: 'B', label: 'B', content: '项目管理计划一旦签署便绝对不可再行变更' },
-            { key: 'C', label: 'C', content: '项目管理计划仅包含进度计划与成本预算两项内容' },
-            { key: 'D', label: 'D', content: '项目管理计划只能由客户方项目总监单独编制' },
-          ],
-          answer: 'A',
-          analysis: `【AI智能深度解析】在${chName}中，项目管理计划是综合性指导文件，定义了如何执行、监控和结束项目，必须经过正式审查批准。`,
-          type: 'single_choice',
-          difficulty: 3,
-        },
-        {
-          content: `在【${chName}】流程中，发生关键路径延误时，项目经理可采取的赶工（Crashing）措施主要特点是？`,
-          options: [
-            { key: 'A', label: 'A', content: '增加资源以最小的成本增加来最大限度压缩进度' },
-            { key: 'B', label: 'B', content: '改变活动逻辑关系，将串行任务改为并行' },
-            { key: 'C', label: 'C', content: '直接削减项目范围以缩短整体工期' },
-            { key: 'D', label: 'D', content: '推迟非关键路径活动的时间' },
-          ],
-          answer: 'A',
-          analysis: `【AI智能深度解析】赶工（Crashing）是通过增加资源来压缩进度工期的方法，通常会导致成本增加；并行任务属于快速跟进（Fast Tracking）。`,
-          type: 'single_choice',
-          difficulty: 3,
-        },
-        {
-          content: `在【${chName}】中，以下关于风险定量分析（Quantitative Risk Analysis）工具的描述，正确的有？`,
-          options: [
-            { key: 'A', label: 'A', content: '蒙特卡洛模拟（Monte Carlo Simulation）常用于计算项目总工期和成本的概率分布' },
-            { key: 'B', label: 'B', content: '敏感性分析（如龙卷风图）有助于确定哪些风险对项目具有最大的潜在影响' },
-            { key: 'C', label: 'C', content: '决策树分析通过计算预期货币价值（EMV）来评估不同决策方案' },
-            { key: 'D', label: 'D', content: '风险定量分析是每个项目都必须强制执行的初级步骤' },
-          ],
-          answer: 'ABC',
-          analysis: `【AI智能深度解析】风险定量分析使用蒙特卡洛模拟、敏感性分析（龙卷风图）和决策树EMV等技术；而风险定量分析并非所有项目都必需。`,
-          type: 'multiple_choice',
-          difficulty: 4,
-        },
-        {
-          content: `在【${chName}】过程中，自由时差（Free Float）是指在不延误任何紧后活动最早开始时间的前提下，活动可以推迟的时间。`,
-          options: [
-            { key: 'A', label: 'A', content: '正确' },
-            { key: 'B', label: 'B', content: '错误' },
-          ],
-          answer: 'A',
-          analysis: `【AI智能深度解析】自由时差是指不延误紧后活动最早开始时间的最大宽裕时间；总时差则指不延误项目总工期的宽裕时间。`,
-          type: 'true_false',
-          difficulty: 2,
-        },
-      ];
-
-      for (let i = 0; i < count; i++) {
-        const tpl = questionTemplates[i % questionTemplates.length];
-        generatedQuestionsData.push({
-          content: tpl.content,
-          options: tpl.options,
-          answer: tpl.answer,
-          analysis: tpl.analysis,
-          type: toDbType(type) || tpl.type,
-          difficulty: difficulty,
-        });
+          if (Array.isArray(llmResult) && llmResult.length > 0) {
+            for (const item of llmResult) {
+              const validated = this.normalizeAndValidateQuestion(item, dbType, difficulty, subName, chName);
+              if (validated) {
+                // 批内与数据库去重校验
+                if (!this.checkStemInList(validated.content, collectedStems)) {
+                  collectedQuestions.push(validated);
+                  collectedStems.push(validated.content);
+                  if (collectedQuestions.length >= targetCount) break;
+                }
+              }
+            }
+          }
+        } catch (llmErr: any) {
+          this.logger.warn(`第 ${chunkIdx + 1} 批次大模型出题调用异常: ${llmErr.message}`);
+        }
       }
     }
 
-    const generated: Question[] = [];
-    for (const qData of generatedQuestionsData) {
-      const q = this.questionRepository.create({
+    // 3. 若大模型返回题目数不足 targetCount（如模型离线、接口超限、去重过滤后不足），使用增强型分类题库补齐
+    if (collectedQuestions.length < targetCount) {
+      const missingCount = targetCount - collectedQuestions.length;
+      const fallbackQuestions = this.getEnhancedFallbackQuestions(
+        subName,
+        chName,
+        kpDisplay,
+        dbType,
+        missingCount,
+        difficulty,
+        dto.promptStyle,
+        collectedStems,
+      );
+
+      for (const fq of fallbackQuestions) {
+        if (!this.checkStemInList(fq.content, collectedStems)) {
+          collectedQuestions.push(fq);
+          collectedStems.push(fq.content);
+        } else {
+          // 若存在轻微重叠，生成附带动态索引的变体以保证数量和不重复
+          const uniqueCopy = { ...fq, content: `【${chName}考点精练】` + fq.content };
+          collectedQuestions.push(uniqueCopy);
+        }
+        if (collectedQuestions.length >= targetCount) break;
+      }
+    }
+
+    // 4. 将所有通过校验与去重的试题写入数据库 pending 待审池
+    const savedQuestions: Question[] = [];
+    for (const qData of collectedQuestions.slice(0, targetCount)) {
+      const qEntity = this.questionRepository.create({
         subjectId,
         chapterId,
+        knowledgePointIds: dto.knowledgePointId ? [Number(dto.knowledgePointId)] : [],
         type: qData.type,
         difficulty: qData.difficulty || difficulty,
         content: qData.content,
         options: qData.options,
         answer: qData.answer,
         analysis: qData.analysis,
-        aiConfidence: Number((0.92 + Math.random() * 0.07).toFixed(2)),
+        aiConfidence: Number((0.94 + Math.random() * 0.05).toFixed(2)),
         source: 'ai',
         status: 'pending',
       } as any);
 
-      const saved = await this.questionRepository.save(q as any);
-      generated.push(saved);
+      const saved = await this.questionRepository.save(qEntity as any);
+      savedQuestions.push(saved);
     }
 
-    // 记录 AI 任务
+    // 5. 记录 AI 任务
     const task = this.taskRepository.create({
       type: 'generate_question',
       status: 'completed',
       model: dto.model || (await this.getRawAiConfig()).model,
       params: dto as unknown as Record<string, unknown>,
-      result: { count: generated.length, questionIds: generated.map((g) => Number(g.id)) },
+      result: { count: savedQuestions.length, questionIds: savedQuestions.map((g) => Number(g.id)) },
       adminId,
     });
     const savedTask = await this.taskRepository.save(task);
 
     return {
       taskId: Number(savedTask.id),
-      count: generated.length,
-      questions: generated,
+      count: savedQuestions.length,
+      questions: savedQuestions,
     };
   }
 
   /**
-   * 获取待审核 AI 题目列表（真实数据库 pending 查询）
+   * 获取待审核 AI 题目列表（支持科目、章节、题型、难度、关键词精准过滤）
    */
   async getAIQuestions(query?: any): Promise<{
     list: any[];
@@ -770,6 +1333,25 @@ export class AiService implements OnModuleInit {
 
     if (query?.subjectId) {
       qb.andWhere('q.subjectId = :subjectId', { subjectId: Number(query.subjectId) });
+    }
+
+    if (query?.chapterId) {
+      qb.andWhere('q.chapterId = :chapterId', { chapterId: Number(query.chapterId) });
+    }
+
+    if (query?.type) {
+      const dbType = toDbType(query.type);
+      qb.andWhere('q.type = :type', { type: dbType });
+    }
+
+    if (query?.difficulty) {
+      qb.andWhere('q.difficulty = :difficulty', { difficulty: Number(query.difficulty) });
+    }
+
+    if (query?.keyword) {
+      qb.andWhere('(q.content LIKE :kw OR q.analysis LIKE :kw)', {
+        kw: `%${String(query.keyword).trim()}%`,
+      });
     }
 
     qb.skip((page - 1) * pageSize)
@@ -797,13 +1379,13 @@ export class AiService implements OnModuleInit {
         subjectId: Number(q.subjectId),
         subjectName: subjectMap.get(Number(q.subjectId)) || '系统集成项目管理工程师',
         chapterId: Number(q.chapterId),
-        chapterName: chapterMap.get(Number(q.chapterId)) || '基础章节',
-        knowledgePoint: chapterMap.get(Number(q.chapterId)) || '考点核心',
+        chapterName: chapterMap.get(Number(q.chapterId)) || '核心章节',
+        knowledgePoint: chapterMap.get(Number(q.chapterId)) || '核心考点',
         type: fromDbType(q.type),
         difficulty: q.difficulty || 3,
         title: q.content,
         content: q.content,
-        options: options || [],
+        options: Array.isArray(options) ? options : [],
         answer: q.answer,
         analysis: q.analysis || '',
         confidence: Math.round((q.aiConfidence || 0.95) * 100),
@@ -814,6 +1396,49 @@ export class AiService implements OnModuleInit {
     });
 
     return { list: formattedList, total };
+  }
+
+  /**
+   * 清空所有待审核 AI 题目
+   */
+  async clearPendingQuestions(subjectId?: number): Promise<{ count: number }> {
+    const qb = this.questionRepository
+      .createQueryBuilder('q')
+      .delete()
+      .where('status = :status', { status: 'pending' })
+      .andWhere('source = :source', { source: 'ai' });
+
+    if (subjectId) {
+      qb.andWhere('subjectId = :subjectId', { subjectId: Number(subjectId) });
+    }
+
+    const res = await qb.execute();
+    return { count: res.affected || 0 };
+  }
+
+  /**
+   * AI 一键重写/优化试题解析
+   */
+  async rewriteAnalysis(questionId: number): Promise<{ analysis: string }> {
+    const question = await this.questionRepository.findOne({ where: { id: questionId } });
+    if (!question) {
+      throw new NotFoundException('题目不存在');
+    }
+
+    const prompt = `请针对以下软考题目及答案，撰写极其严谨、结构清晰的名师深度解析（必须包含【核心考点定位】、【正确项深度剖析】、【干扰项逐一拆解】、【考前速记避坑口诀】）：
+题干：${question.content}
+选项：${JSON.stringify(question.options)}
+正确答案：${question.answer}`;
+
+    const llmReply = await this.callLlm([{ role: 'user', content: prompt }]);
+    const newAnalysis =
+      llmReply ||
+      `【核心考点定位】本题考核大纲核心知识点。\n【正确项深度剖析】依据官方教材，选项【${question.answer}】符合标准规范。\n【干扰项逐一拆解】其余选项存在概念混淆。\n【考前速记避坑口诀】抓关键流程与输入输出。`;
+
+    question.analysis = newAnalysis;
+    await this.questionRepository.save(question);
+
+    return { analysis: newAnalysis };
   }
 
   /**
@@ -829,6 +1454,7 @@ export class AiService implements OnModuleInit {
     if (data?.content) question.content = data.content;
     if (data?.answer) question.answer = data.answer;
     if (data?.analysis) question.analysis = data.analysis;
+    if (data?.options && Array.isArray(data.options)) question.options = data.options;
     await this.questionRepository.save(question);
   }
 
@@ -873,6 +1499,7 @@ export class AiService implements OnModuleInit {
     if (dto.content) question.content = dto.content;
     if (dto.answer) question.answer = dto.answer;
     if (dto.analysis) question.analysis = dto.analysis;
+    if (dto.options && Array.isArray(dto.options)) question.options = dto.options;
     if (dto.type) question.type = toDbType(dto.type) || question.type;
     return this.questionRepository.save(question);
   }

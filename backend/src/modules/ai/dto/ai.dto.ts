@@ -28,12 +28,22 @@ export class AiGenerateQuestionDto {
   @IsOptional()
   difficulty?: number | string;
 
-  @ApiPropertyOptional({ description: '知识点', example: '数据结构' })
+  @ApiPropertyOptional({ description: '知识点ID', example: 1 })
+  @IsOptional()
+  @IsNumber()
+  knowledgePointId?: number;
+
+  @ApiPropertyOptional({ description: '知识点名称', example: '数据结构与算法' })
   @IsOptional()
   @IsString()
   knowledgePoint?: string;
 
-  @ApiPropertyOptional({ description: '生成数量', example: 5 })
+  @ApiPropertyOptional({ description: '出题风格: standard/trap/calculation/concept', example: 'standard' })
+  @IsOptional()
+  @IsString()
+  promptStyle?: string;
+
+  @ApiPropertyOptional({ description: '生成数量 (1-50)', example: 10 })
   @IsOptional()
   @IsNumber()
   count?: number;
