@@ -68,8 +68,16 @@ export class AiService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.seedInitialPrompts();
-    await this.seedInitialPendingQuestions();
+    try {
+      await this.seedInitialPrompts();
+    } catch (e: any) {
+      this.logger.warn(`seedInitialPrompts 异常捕获: ${e.message}`);
+    }
+    try {
+      await this.seedInitialPendingQuestions();
+    } catch (e: any) {
+      this.logger.warn(`seedInitialPendingQuestions 异常捕获: ${e.message}`);
+    }
   }
 
   /**
@@ -80,18 +88,17 @@ export class AiService implements OnModuleInit {
     if (count === 0) {
       const defaultPrompts = [
         {
-          name: '软考全题型标准命题模板',
+          name: '单选题与名师深度解析生成（综合标准模板）',
           type: 'generate_question',
           content:
-            '你是一位国家软考资深命题专家。请根据指定的科目【{{subject}}】和章节【{{chapter}}】，生成{{count}}道难度为{{difficulty}}的{{type}}试题。要求题干严谨、选项具备辨析度、答案权威准确，并提供详尽的解题思路与考点分析。输出严格为JSON格式。',
+            '你是一位国家软考资深命题专家。请根据指定的科目【{{subject}}】和章节【{{chapter}}】，生成一道难度为{{difficulty}}的{{type}}试题。要求题干严谨、选项具备辨析度、答案权威准确，并提供详尽的解题思路与考点分析。输出严格为JSON格式。',
           variables: [
             { name: 'subject', description: '考试科目名称' },
             { name: 'chapter', description: '指定考点章节' },
-            { name: 'type', description: '试题题型（单选/多选/案例）' },
-            { name: 'count', description: '生成试题数量' },
+            { name: 'knowledge_point', description: '考查核心知识点' },
             { name: 'difficulty', description: '难度等级' },
           ],
-          status: 'enabled',
+          status: 1,
         },
         {
           name: 'AI 深度名师解析生成模板',
@@ -102,15 +109,18 @@ export class AiService implements OnModuleInit {
             { name: 'content', description: '试题题干' },
             { name: 'answer', description: '正确答案' },
           ],
-          status: 'enabled',
+          status: 1,
         },
         {
           name: '试卷文本/Word智能结构化提取模板',
-          type: 'import_parse',
+          type: 'import',
           content:
-            '请对以下杂乱的试卷文档内容进行结构化清洗，自动提取题干、选项ABCD、标准答案及解析，并返回标准JSON题目数组：\n{{raw_text}}',
-          variables: [{ name: 'raw_text', description: '原始试卷文本' }],
-          status: 'enabled',
+            '请对以下杂乱的试卷文档内容进行结构化清洗，自动提取题干、选项ABCD、标准答案及解析，并返回标准JSON题目数组：\n{{content}}',
+          variables: [
+            { name: 'content', description: '原始试卷文本' },
+            { name: 'subject', description: '所属科目名称' },
+          ],
+          status: 1,
         },
       ];
 
@@ -1661,47 +1671,184 @@ ${dto.content}`;
   /**
    * 获取 Prompt 模板列表
    */
-  async getPrompts(): Promise<any[]> {
-    const prompts = await this.promptRepository.find({
-      order: { id: 'ASC' },
-    });
-    return prompts.map((p) => {
-      let vars = p.variables || [];
-      if (Array.isArray(vars)) {
-        vars = vars.map((v: any) => {
-          if (typeof v === 'string') {
-            return { name: v, description: '' };
-          }
-          return { name: v.name || '', description: v.description || '' };
-        });
-      } else if (typeof vars === 'string') {
-        try {
-          const parsed = JSON.parse(vars);
-          vars = Array.isArray(parsed)
-            ? parsed.map((v: any) =>
-                typeof v === 'string' ? { name: v, description: '' } : v,
-              )
-            : [];
-        } catch {
-          vars = [];
-        }
+  async getPrompts(query?: { page?: number; pageSize?: number; type?: string }): Promise<any[]> {
+    try {
+      const where: any = {};
+      if (query?.type) {
+        where.type = this.normalizePromptType(query.type);
       }
-      return {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        content: p.content,
-        variables: vars,
-        status:
-          p.status === '1' ||
-          p.status === 'enabled' ||
-          p.status === 'active' ||
-          (p.status as any) === 1
-            ? 'enabled'
-            : 'disabled',
-        updatedAt: p.updatedAt,
-      };
-    });
+      const prompts = await this.promptRepository.find({
+        where: Object.keys(where).length > 0 ? where : undefined,
+        order: { id: 'ASC' },
+      });
+
+      if (prompts && prompts.length > 0) {
+        return prompts.map((p) => {
+          let vars = p.variables || [];
+          if (Array.isArray(vars)) {
+            vars = vars.map((v: any) => {
+              if (typeof v === 'string') {
+                return { name: v, description: '' };
+              }
+              return { name: v.name || '', description: v.description || '' };
+            });
+          } else if (typeof vars === 'string') {
+            try {
+              const parsed = JSON.parse(vars);
+              vars = Array.isArray(parsed)
+                ? parsed.map((v: any) =>
+                    typeof v === 'string' ? { name: v, description: '' } : v,
+                  )
+                : [];
+            } catch {
+              vars = [];
+            }
+          }
+          return {
+            id: Number(p.id),
+            name: p.name,
+            type: p.type,
+            content: p.content,
+            variables: vars,
+            status:
+              p.status === 1 ||
+              p.status === '1' ||
+              p.status === 'enabled' ||
+              p.status === 'active' ||
+              (p.status as any) === 1
+                ? 'enabled'
+                : 'disabled',
+            updatedAt: p.updatedAt || new Date().toISOString(),
+          };
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`获取 Prompt 模板列表异常: ${err.message}，自动返回内置模板列表`);
+    }
+
+    // 默认内置标准模板列表
+    const defaultList = this.getDefaultPromptsList();
+    if (query?.type) {
+      const targetType = this.normalizePromptType(query.type);
+      return defaultList.filter((item) => item.type === targetType);
+    }
+    return defaultList;
+  }
+
+  /**
+   * 内置标准 Prompt 模板列表
+   */
+  private getDefaultPromptsList(): any[] {
+    return [
+      {
+        id: 1,
+        name: '单选题与名师深度解析生成（综合标准模板）',
+        type: 'generate_question',
+        content: `你是一位国家软考资深命题专家与官方教材主编。请根据以下考点要求，生成一道标准单项选择题，并同步输出高水平的名师解题解析。
+
+【命题考点要求】
+考试科目: {{subject}}
+所属章节: {{chapter}}
+考查知识点: {{knowledge_point}}
+难度等级: {{difficulty}} (1-5星)
+
+【出题与解析规范】
+1. 题干严谨清晰、情境贴合实战，完全符合全国计算机技术与软件专业技术资格（水平）考试标准。
+2. 包含 A、B、C、D 四个规范互斥的选项，干扰项具有较强辨析度与迷惑性，严禁出现常识性纰漏。
+3. 明确指定唯一权威正确答案（如 A、B、C 或 D）。
+4. 深度解析必须涵盖：
+   - 【考点定位】：归纳考查的理论依据与教材核心知识域；
+   - 【答案剖析】：详述正确选项的推导逻辑与采分点；
+   - 【选项辨析】：逐一分析错误选项的陷阱与混淆点；
+   - 【名师点拨】：提供考前速记口诀或易错防坑指南。
+
+【输出格式】
+必须严格输出纯 JSON 格式：
+{
+  "content": "题干内容描述",
+  "options": [
+    {"key": "A", "label": "A", "content": "选项A具体描述"},
+    {"key": "B", "label": "B", "content": "选项B具体描述"},
+    {"key": "C", "label": "C", "content": "选项C具体描述"},
+    {"key": "D", "label": "D", "content": "选项D具体描述"}
+  ],
+  "answer": "A",
+  "analysis": "【考点定位】...\\n【答案剖析】...\\n【选项辨析】...\\n【名师点拨】..."
+}`,
+        variables: [
+          { name: 'subject', description: '考试科目名称' },
+          { name: 'chapter', description: '指定考点章节' },
+          { name: 'knowledge_point', description: '考查核心知识点' },
+          { name: 'difficulty', description: '难度等级 (1-5)' },
+        ],
+        status: 'enabled',
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: 2,
+        name: '多选题与案例分析综合出题模板',
+        type: 'generate_question',
+        content: `你是一位国家软考资深命题专家。请根据以下考点要求，生成高质量的多选题或案例简答题，并附带权威评分标准与深度解析。
+
+【考点要求】
+科目: {{subject}}
+章节: {{chapter}}
+知识点: {{knowledge_point}}
+题型: {{type}}
+
+【输出格式】
+严格输出 JSON 格式：
+{
+  "content": "题干内容",
+  "options": [
+    {"key": "A", "label": "A", "content": "选项A"},
+    {"key": "B", "label": "B", "content": "选项B"},
+    {"key": "C", "label": "C", "content": "选项C"},
+    {"key": "D", "label": "D", "content": "选项D"}
+  ],
+  "answer": "ABC",
+  "analysis": "【核心解析】..."
+}`,
+        variables: [
+          { name: 'subject', description: '考试科目' },
+          { name: 'chapter', description: '考查章节' },
+          { name: 'knowledge_point', description: '考点名称' },
+          { name: 'type', description: '多选题/案例题' },
+        ],
+        status: 'enabled',
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: 3,
+        name: 'Word/文本试卷智能结构化识别模板',
+        type: 'import',
+        content: `请对以下试卷文档内容进行结构化识别与数据清洗，自动提取题干、选项ABCD、标准答案及解析：
+{{content}}
+
+【输出格式】
+以标准 JSON 数组返回：
+[
+  {
+    "type": "single",
+    "content": "题干描述",
+    "options": [
+      {"key": "A", "label": "A", "content": "选项A"},
+      {"key": "B", "label": "B", "content": "选项B"},
+      {"key": "C", "label": "C", "content": "选项C"},
+      {"key": "D", "label": "D", "content": "选项D"}
+    ],
+    "answer": "A",
+    "analysis": "解析内容"
+  }
+]`,
+        variables: [
+          { name: 'content', description: '原始试卷文本内容' },
+          { name: 'subject', description: '所属科目名称' },
+        ],
+        status: 'enabled',
+        updatedAt: new Date().toISOString(),
+      },
+    ];
   }
 
   /**

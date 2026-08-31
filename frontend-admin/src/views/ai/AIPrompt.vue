@@ -54,8 +54,12 @@ async function fetchList() {
   loading.value = true
   try {
     const res = await getPromptList(query)
-    list.value = res.data.list
-    total.value = res.data.total
+    list.value = res.data?.list || []
+    total.value = res.data?.total !== undefined ? res.data.total : list.value.length
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取 Prompt 模板失败')
+    list.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

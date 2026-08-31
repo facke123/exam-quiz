@@ -116,6 +116,26 @@ export class CreatePromptDto {
 }
 
 /**
+ * 查询 Prompt 模板列表 DTO
+ */
+export class QueryAiPromptDto {
+  @ApiPropertyOptional({ description: '页码', default: 1 })
+  @IsOptional()
+  @IsNumber()
+  page?: number;
+
+  @ApiPropertyOptional({ description: '每页数量', default: 10 })
+  @IsOptional()
+  @IsNumber()
+  pageSize?: number;
+
+  @ApiPropertyOptional({ description: '模板类型' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+}
+
+/**
  * 查询 AI 任务 DTO
  */
 export class QueryAiTaskDto {

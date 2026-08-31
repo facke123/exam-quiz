@@ -17,6 +17,7 @@ import {
   AiGenerateAnalysisDto,
   AiImportDto,
   CreatePromptDto,
+  QueryAiPromptDto,
   QueryAiTaskDto,
   AiParseSyllabusDto,
   AiImportSyllabusDto,
@@ -162,8 +163,8 @@ export class AiController {
 
   @Get(['ai/prompts', 'admin/ai/prompts'])
   @ApiOperation({ summary: 'Prompt模板列表' })
-  async getPrompts(@Query() query?: any) {
-    const list = await this.aiService.getPrompts();
+  async getPrompts(@Query() query: QueryAiPromptDto) {
+    const list = await this.aiService.getPrompts(query);
     return {
       list,
       total: list.length,
