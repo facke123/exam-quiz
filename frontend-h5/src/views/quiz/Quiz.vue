@@ -285,12 +285,14 @@ onMounted(async () => {
         }
       }
     } else {
-      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '4'
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
       const targetChapterId = route.query.chapterId ? String(route.query.chapterId) : undefined
+      const targetKpId = route.query.knowledgePointId ? String(route.query.knowledgePointId) : undefined
       const count = route.query.count ? Number(route.query.count) : (['real', 'mock'].includes(mode.value) ? 75 : 20)
       const res = await getQuestions({
         subjectId: String(targetSubjectId),
         chapterId: targetChapterId,
+        knowledgePointId: targetKpId,
         mode: mode.value,
         count,
       })

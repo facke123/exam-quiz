@@ -85,11 +85,21 @@ CREATE TABLE IF NOT EXISTS chapters (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS knowledge_points (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  chapter_id BIGINT NOT NULL,
-  name VARCHAR(200) NOT NULL,
-  description TEXT,
+  subject_id BIGINT COMMENT '科目ID',
+  chapter_id BIGINT NOT NULL COMMENT '章节ID',
+  name VARCHAR(200) NOT NULL COMMENT '知识点名称',
+  category_tag VARCHAR(100) COMMENT '分类标签',
+  source_book VARCHAR(200) COMMENT '教材出处/章节',
+  importance VARCHAR(50) DEFAULT 'high' COMMENT '考点级别',
+  core_analysis LONGTEXT COMMENT '教材考点提炼与逻辑框架',
+  memory_tips TEXT COMMENT '记忆口诀与冲刺速记技巧',
+  description TEXT COMMENT '描述',
+  tags JSON COMMENT '标签',
+  question_count INT DEFAULT 0 COMMENT '题目数',
+  sort INT DEFAULT 0 COMMENT '排序',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_subject (subject_id),
   INDEX idx_chapter (chapter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识点表';
 

@@ -21,6 +21,25 @@ export function createRecord(data: { mode: string; subjectId: string; chapterId?
   })
 }
 
+export function createPractice(data: {
+  subjectId?: number | string
+  mode?: string
+  chapterId?: number | string
+  chapterIds?: number[]
+  knowledgePointId?: number | string
+  knowledgePointName?: string
+  questionIds?: (number | string)[]
+  paperId?: number | string
+  questionCount?: number
+  count?: number
+}) {
+  return request<{ recordId: string; record?: any }>({
+    url: '/quiz/practice',
+    method: 'post',
+    data,
+  })
+}
+
 export function saveProgress(data: { recordId: string; answers: Record<string, any> }) {
   return request({
     url: '/quiz/progress',

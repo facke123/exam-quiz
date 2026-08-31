@@ -115,8 +115,38 @@ export class ExamController {
   }
 
   @Public()
+  @Get(['exam/knowledge-base', 'knowledge-base'])
+  @ApiOperation({ summary: '知识库考点全量列表与综合过滤' })
+  async getKnowledgeBase(
+    @Query('subjectId') subjectId?: string,
+    @Query('chapterId') chapterId?: string,
+    @Query('category') category?: string,
+    @Query('keyword') keyword?: string,
+    @Query('importance') importance?: string,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+  ) {
+    return this.examService.getKnowledgeBase({
+      subjectId,
+      chapterId,
+      category,
+      keyword,
+      importance,
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 100,
+    });
+  }
+
+  @Public()
+  @Get(['exam/knowledge-points/detail/:id', 'exam/knowledge-points/:id/detail', 'knowledge-points/:id'])
+  @ApiOperation({ summary: '知识点详情与配套题目' })
+  async getKnowledgePointDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.examService.getKnowledgePointDetail(id);
+  }
+
+  @Public()
   @Get('exam/knowledge-points/:chapterId')
-  @ApiOperation({ summary: '获取知识点列表' })
+  @ApiOperation({ summary: '获取章节知识点列表' })
   async getKnowledgePoints(@Param('chapterId', ParseIntPipe) chapterId: number) {
     return this.examService.getKnowledgePoints(chapterId);
   }

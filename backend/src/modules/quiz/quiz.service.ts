@@ -120,6 +120,37 @@ export class QuizService {
         .take(dto.count || 5)
         .getMany();
       questionIds = questions.map((q) => Number(q.id));
+    } else if (dto.mode === 'knowledge' || dto.knowledgePointId) {
+      const qb = this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.status = :status', { status: 'published' });
+      if (dto.subjectId) {
+        qb.andWhere('q.subjectId = :subjectId', { subjectId: dto.subjectId });
+      }
+      if (dto.knowledgePointId) {
+        qb.andWhere('(q.knowledgePointIds LIKE :kpId OR q.chapterId = :chId OR q.tags LIKE :kpTag)', {
+          kpId: `%"${dto.knowledgePointId}"%`,
+          chId: dto.chapterId || 0,
+          kpTag: `%${dto.knowledgePointName || ''}%`,
+        });
+      } else if (dto.chapterId) {
+        qb.andWhere('q.chapterId = :chapterId', { chapterId: dto.chapterId });
+      }
+      qb.orderBy('q.id', 'ASC').take(dto.count || dto.questionCount || 20);
+      let questions = await qb.getMany();
+      if (questions.length === 0 && dto.chapterId) {
+        questions = await this.questionRepository.find({
+          where: { chapterId: dto.chapterId, status: 'published' },
+          take: dto.count || 20,
+        });
+      }
+      if (questions.length === 0) {
+        questions = await this.questionRepository.find({
+          where: { status: 'published' },
+          take: dto.count || 10,
+        });
+      }
+      questionIds = questions.map((q) => Number(q.id));
     } else {
       const questions = await this.questionRepository
         .createQueryBuilder('q')

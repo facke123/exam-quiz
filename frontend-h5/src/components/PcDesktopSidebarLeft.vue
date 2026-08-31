@@ -89,7 +89,8 @@ const currentRoutePath = computed(() => route.path)
 
 const navItems = [
   { icon: '🏠', title: '备考大盘首页', path: '/' },
-  { icon: '📚', title: '历年全真真题', path: '/real-exam' },
+  { icon: '💡', title: 'AI 考点知识库', path: '/knowledge', badge: '重点' },
+  { icon: '📚', title: '历年全真真题', path: '/real' },
   { icon: '📑', title: '章节专项刷题', path: '/chapter' },
   { icon: '⚡', title: '每日一练打卡', path: '/daily' },
   { icon: '🧠', title: '艾宾浩斯复习', path: '/review' },

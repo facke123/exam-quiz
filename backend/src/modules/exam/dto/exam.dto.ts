@@ -71,9 +71,14 @@ export class CreateChapterDto {
 }
 
 /**
- * 创建知识点 DTO
+ * 创建/更新知识点 DTO
  */
 export class CreateKnowledgePointDto {
+  @ApiPropertyOptional({ description: '科目ID' })
+  @IsOptional()
+  @IsNumber()
+  subjectId?: number;
+
   @ApiProperty({ description: '章节ID' })
   @IsNumber()
   chapterId: number;
@@ -83,10 +88,45 @@ export class CreateKnowledgePointDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiPropertyOptional({ description: '描述' })
+  @ApiPropertyOptional({ description: '考点分类标签 (如: 项目风险管理)' })
+  @IsOptional()
+  @IsString()
+  categoryTag?: string;
+
+  @ApiPropertyOptional({ description: '教材出处/章节 (如: 《教程》第12章 项目风险管理)' })
+  @IsOptional()
+  @IsString()
+  sourceBook?: string;
+
+  @ApiPropertyOptional({ description: '考点级别: 必考/高频/常考/重点' })
+  @IsOptional()
+  @IsString()
+  importance?: string;
+
+  @ApiPropertyOptional({ description: '教材考点提炼与逻辑框架 (富文本/Markdown)' })
+  @IsOptional()
+  @IsString()
+  coreAnalysis?: string;
+
+  @ApiPropertyOptional({ description: '记忆口诀与冲刺速记技巧' })
+  @IsOptional()
+  @IsString()
+  memoryTips?: string;
+
+  @ApiPropertyOptional({ description: '基础描述' })
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: '标签列表' })
+  @IsOptional()
+  @IsArray()
+  tags?: string[];
+
+  @ApiPropertyOptional({ description: '排序' })
+  @IsOptional()
+  @IsNumber()
+  sort?: number;
 }
 
 /**

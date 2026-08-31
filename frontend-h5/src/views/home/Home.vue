@@ -20,6 +20,13 @@
         <div class="top-actions">
           <div
             class="icon-btn"
+            @click="$router.push('/knowledge')"
+          >
+            <span>💡</span>
+            <span>知识库</span>
+          </div>
+          <div
+            class="icon-btn"
             @click="$router.push('/chapter')"
           >
             <span>🔍</span>
@@ -142,6 +149,18 @@
       </van-swipe>
     </div>
 
+    <!-- 💡 AI 考点知识库高亮推荐卡片 -->
+    <div class="ai-knowledge-banner" @click="$router.push('/knowledge')">
+      <div class="akb-left">
+        <div class="akb-tag">✨ AI 重点分析</div>
+        <div class="akb-title">教材核心考点知识库</div>
+        <div class="akb-desc">按章节提炼考点框架 · 冲刺速记口诀 · 配套试题专项刷题</div>
+      </div>
+      <div class="akb-right">
+        <button class="akb-btn">去背考点 ›</button>
+      </div>
+    </div>
+
     <!-- 核心功能网格 (8格现代风格) -->
     <div class="section-title">
       <h3>核心功能</h3>
@@ -151,6 +170,19 @@
       >全部题库 ›</span>
     </div>
     <div class="function-grid">
+      <div
+        class="func-item"
+        @click="$router.push('/knowledge')"
+      >
+        <div
+          class="func-icon"
+          style="background: linear-gradient(135deg, #bae6fd, #7dd3fc)"
+        >
+          💡
+        </div>
+        <span class="name">考点知识库</span>
+        <span class="ai-badge">AI提炼</span>
+      </div>
       <div
         class="func-item"
         @click="$router.push('/daily')"
@@ -816,6 +848,21 @@ onMounted(async () => {
     box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
   }
 
+  .ai-badge {
+    position: absolute;
+    top: 2px;
+    right: 50%;
+    margin-right: -28px;
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #fff;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    font-weight: 700;
+    line-height: 1.2;
+    box-shadow: 0 2px 6px rgba(14, 165, 233, 0.4);
+  }
+
   .vip-tag {
     position: absolute;
     top: 2px;
@@ -829,6 +876,70 @@ onMounted(async () => {
     font-weight: 700;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+  }
+}
+
+/* 💡 AI 考点知识库高亮推荐横幅 */
+.ai-knowledge-banner {
+  margin: 12px 14px 0;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+  transition: transform 0.2s;
+
+  &:active {
+    transform: translateY(-2px);
+  }
+
+  .akb-left {
+    flex: 1;
+
+    .akb-tag {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      color: #e0f2fe;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+    }
+
+    .akb-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    .akb-desc {
+      font-size: 11px;
+      color: #bae6fd;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+  }
+
+  .akb-right {
+    flex-shrink: 0;
+
+    .akb-btn {
+      background: #ffffff;
+      color: #0284c7;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
   }
 }
 

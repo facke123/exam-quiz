@@ -23,10 +23,13 @@ import {
   AiParseSyllabusDto,
   AiImportSyllabusDto,
   AiParseQuestionsDto,
+  AiExtractKnowledgePointsDto,
+  AiDeepAnalyzeKnowledgePointDto,
   SaveAiConfigDto,
   TestLlmConnectionDto,
 } from './dto/ai.dto';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 
 /**
  * AI 控制器
@@ -151,6 +154,20 @@ export class AiController {
   @ApiOperation({ summary: '确认导入AI归纳的章节与知识点' })
   async importSyllabus(@Body() dto: AiImportSyllabusDto) {
     return this.aiService.importSyllabus(dto);
+  }
+
+  @Public()
+  @Post(['ai/knowledge-point/extract', 'ai/extract-knowledge-points', 'exam/ai/extract-knowledge-points'])
+  @ApiOperation({ summary: 'AI自动提取每个章节的知识点并重点分析' })
+  async extractKnowledgePoints(@Body() dto: AiExtractKnowledgePointsDto) {
+    return this.aiService.extractKnowledgePointsFromChapter(dto);
+  }
+
+  @Public()
+  @Post(['ai/knowledge-point/deep-analyze', 'ai/deep-analyze-knowledge-point', 'exam/ai/deep-analyze-knowledge-point'])
+  @ApiOperation({ summary: 'AI针对单个考点进行深度重点分析与速记口诀生成' })
+  async deepAnalyzeKnowledgePoint(@Body() dto: AiDeepAnalyzeKnowledgePointDto) {
+    return this.aiService.deepAnalyzeKnowledgePoint(dto);
   }
 
   @Get(['ai/quota', 'admin/ai/quota'])

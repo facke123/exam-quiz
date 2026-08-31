@@ -40,6 +40,7 @@ export function getChapterList(subjectId: string) {
 export function getQuestions(params: {
   subjectId?: string
   chapterId?: string
+  knowledgePointId?: string | number
   type?: QuestionType
   mode?: string
   count?: number

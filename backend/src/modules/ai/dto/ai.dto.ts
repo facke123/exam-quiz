@@ -355,3 +355,59 @@ export class AiParseQuestionsDto {
   @IsString()
   model?: string;
 }
+
+/**
+ * AI 自动提取章节考点 DTO
+ */
+export class AiExtractKnowledgePointsDto {
+  @ApiPropertyOptional({ description: '科目ID', example: 1 })
+  @IsOptional()
+  @IsNumber()
+  subjectId?: number;
+
+  @ApiPropertyOptional({ description: '章节ID', example: 9 })
+  @IsOptional()
+  @IsNumber()
+  chapterId?: number;
+
+  @ApiPropertyOptional({ description: '章节名称', example: '第9章 项目成本管理' })
+  @IsOptional()
+  @IsString()
+  chapterName?: string;
+
+  @ApiPropertyOptional({ description: '章节大纲或文本参考资料' })
+  @IsOptional()
+  @IsString()
+  syllabusText?: string;
+
+  @ApiPropertyOptional({ description: '需要提取的考点数量', default: 5 })
+  @IsOptional()
+  @IsNumber()
+  count?: number;
+}
+
+/**
+ * AI 考点深度解析与速记口诀 DTO
+ */
+export class AiDeepAnalyzeKnowledgePointDto {
+  @ApiPropertyOptional({ description: '知识点ID' })
+  @IsOptional()
+  @IsNumber()
+  knowledgePointId?: number;
+
+  @ApiProperty({ description: '知识点考点标题', example: '净值管理(EVM)关键公式与绩效指标分析' })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiPropertyOptional({ description: '所属章节名称', example: '第9章 项目成本管理' })
+  @IsOptional()
+  @IsString()
+  chapterName?: string;
+
+  @ApiPropertyOptional({ description: '所属科目名称', example: '系统集成项目管理工程师' })
+  @IsOptional()
+  @IsString()
+  subjectName?: string;
+}
+

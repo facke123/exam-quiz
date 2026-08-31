@@ -105,6 +105,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '案例分析', requiresAuth: true }
   },
   {
+    path: '/knowledge',
+    name: 'KnowledgeBase',
+    component: () => import('@/views/knowledge/KnowledgeBase.vue'),
+    meta: { title: '考点知识库', requiresAuth: true }
+  },
+  {
     path: '/notes',
     name: 'Notes',
     component: () => import('@/views/user/Notes.vue'),
