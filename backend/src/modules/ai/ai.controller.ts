@@ -9,8 +9,11 @@ import {
   Post,
   Put,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { AiService } from './ai.service';
 import {
   AiGenerateQuestionDto,
@@ -28,6 +31,10 @@ import {
   SaveAiConfigDto,
   TestLlmConnectionDto,
 } from './dto/ai.dto';
+import {
+  AiParseDocxKnowledgeDto,
+  AiSaveKnowledgeBatchDto,
+} from './dto/knowledge-import.dto';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 
@@ -251,5 +258,30 @@ export class AiController {
   async testLlmConnection(@Body() dto: TestLlmConnectionDto) {
     return this.aiService.testLlmConnection(dto);
   }
+
+  // ==================== Word / 讲义文档 AI 提取考点与批量入库 ====================
+
+  @Public()
+  @Post(['admin/ai/knowledge/parse-word', 'ai/knowledge/parse-word'])
+  @ApiOperation({ summary: 'AI解析Word文档或大纲提炼章节考点与例题' })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @UseInterceptors(FileInterceptor('file'))
+  async parseWordOrTextKnowledge(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ) {
+    const subjectId = Number(body.subjectId || 1);
+    const content = body.content || '';
+    const model = body.model;
+    return this.aiService.parseWordOrTextKnowledge(file, content, subjectId, model);
+  }
+
+  @Public()
+  @Post(['admin/ai/knowledge/batch-import', 'ai/knowledge/batch-import'])
+  @ApiOperation({ summary: '批量保存确认后的章节、考点与配套试题入库' })
+  async saveKnowledgeBatch(@Body() dto: AiSaveKnowledgeBatchDto) {
+    return this.aiService.saveKnowledgeBatch(dto);
+  }
 }
+
 

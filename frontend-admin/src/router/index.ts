@@ -74,6 +74,12 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: '科目章节', icon: 'Files', keepAlive: true },
       },
       {
+        path: 'knowledge',
+        name: 'KnowledgeManage',
+        component: () => import('@/views/exam/KnowledgeManage.vue'),
+        meta: { title: '考点知识库', icon: 'Collection', keepAlive: true },
+      },
+      {
         path: 'paper',
         name: 'PaperManage',
         component: () => import('@/views/exam/PaperManage.vue'),

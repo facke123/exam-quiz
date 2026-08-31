@@ -237,3 +237,63 @@ export function pickQuestionsToPaper(paperId: number, questionIds: number[]) {
     data: { questionIds },
   })
 }
+
+// ==================== 考点知识库与 AI Word 导入 ====================
+
+export function getKnowledgeBase(params?: {
+  subjectId?: number | string
+  chapterId?: number | string
+  category?: string
+  keyword?: string
+  importance?: string
+  page?: number
+  pageSize?: number
+}) {
+  return request<{ list: any[]; categories: string[]; total: number }>({
+    url: '/exam/knowledge-base',
+    method: 'get',
+    params,
+  })
+}
+
+export function getKnowledgePointDetail(id: number | string) {
+  return request<any>({
+    url: `/exam/knowledge-points/${id}/detail`,
+    method: 'get',
+  })
+}
+
+export function parseWordKnowledge(formData: FormData) {
+  return request<{
+    success: boolean
+    subjectId: number
+    subjectName: string
+    rawTextLength: number
+    chapters: Array<any>
+  }>({
+    url: '/admin/ai/knowledge/parse-word',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+}
+
+export function batchImportKnowledge(data: {
+  subjectId: number
+  chapters: Array<any>
+}) {
+  return request<{
+    success: boolean
+    message: string
+    chapterCount: number
+    kpCount: number
+    questionCount: number
+  }>({
+    url: '/admin/ai/knowledge/batch-import',
+    method: 'post',
+    data,
+  })
+}
+

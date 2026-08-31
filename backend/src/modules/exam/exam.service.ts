@@ -667,16 +667,78 @@ export class ExamService implements OnModuleInit {
       .take(10)
       .getMany();
 
+    let mappedQuestions = questions.map((q) => ({
+      id: Number(q.id),
+      type: q.type,
+      content: q.content,
+      options: q.options || [],
+      answer: q.answer || 'A',
+      analysis: q.analysis || '',
+      difficulty: q.difficulty || 3,
+      score: (q as any).score || 1,
+    }));
+
+    // 若暂无关联题目，提供高质量精选典型例题
+    if (mappedQuestions.length === 0) {
+      let sampleQ: any = null;
+      if (kp.name.includes('风险应对')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '项目经理为了应对技术难度极高的核心模块开发风险，决定将该模块以固定总价合同形式外包给一家经验丰富专业公司。这种风险应对策略属于（ ）。',
+          options: [
+            { key: 'A', content: '风险规避' },
+            { key: 'B', content: '风险转移' },
+            { key: 'C', content: '风险减轻' },
+            { key: 'D', content: '风险开拓' },
+          ],
+          answer: 'B',
+          analysis: '【解析】将风险的后果连同应对的权力转移给第三方（如购买保险、签订固定总价合同外包），属于典型的风险转移策略。规避是通过修改计划消除威胁；减轻是降低概率或影响；开拓属于积极风险策略。故选B。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('净值') || kp.name.includes('EVM')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '某项目进行到第6个月末，计划成本PV=100万元，实际支出AC=110万元，完成工作预算EV=90万元。则该项目的成本偏差(CV)和进度偏差(SV)分别为（ ）。',
+          options: [
+            { key: 'A', content: '-20万元，-10万元' },
+            { key: 'B', content: '-20万元，10万元' },
+            { key: 'C', content: '20万元，-10万元' },
+            { key: 'D', content: '-10万元，-20万元' },
+          ],
+          answer: 'A',
+          analysis: '【解析】成本偏差 CV = EV - AC = 90 - 110 = -20万元（成本超支）；进度偏差 SV = EV - PV = 90 - 100 = -10万元（进度延误）。故正确答案为A。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: `在项目管理与软考实践中，关于【${kp.name}】的核心原则与要点，下列说法中正确的是（ ）。`,
+          options: [
+            { key: 'A', content: '必须严格遵循标准规范与核心逻辑框架' },
+            { key: 'B', content: '可以随意跳过变更控制与审批流程' },
+            { key: 'C', content: '无需制定任何风险应对与预防策略' },
+            { key: 'D', content: '仅在项目收尾阶段才进行质量与进度把控' },
+          ],
+          answer: 'A',
+          analysis: `【解析】${kp.name} 是软考重点考核要点。项目管理活动必须严格遵循标准规范，建立清晰的逻辑框架和控制机制。`,
+          difficulty: 3,
+          score: 1,
+        };
+      }
+      mappedQuestions = [sampleQ];
+    }
+
     return {
       ...kp,
       id: Number(kp.id),
       chapterId: Number(kp.chapterId),
-      questionCount: questions.length || kp.questionCount || 1,
-      questions: questions.map((q) => ({
-        id: Number(q.id),
-        type: q.type,
-        content: q.content,
-      })),
+      questionCount: mappedQuestions.length,
+      questions: mappedQuestions,
     };
   }
 

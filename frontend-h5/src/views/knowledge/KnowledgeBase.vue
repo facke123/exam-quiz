@@ -7,14 +7,11 @@
         <span class="nav-title">考点知识库</span>
       </div>
       <div class="nav-right">
-        <button class="ai-extract-btn" @click="openAiExtractModal">
-          <span class="icon">✨</span>
-          <span>AI 提取考点</span>
-        </button>
+        <span class="subject-badge">{{ currentSubjectName }}</span>
       </div>
     </div>
 
-    <!-- 顶部搜索框 (还原原型) -->
+    <!-- 顶部搜索框 (还原设计) -->
     <div class="search-section">
       <div class="search-box">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -32,7 +29,7 @@
       </div>
     </div>
 
-    <!-- 章节与分类横向过滤标签 (还原原型) -->
+    <!-- 章节与分类横向过滤标签 -->
     <div class="categories-bar">
       <div class="category-scroll">
         <div
@@ -59,7 +56,6 @@
         <div v-else-if="filteredList.length === 0" class="empty-box">
           <div class="empty-icon">📂</div>
           <div class="empty-text">未找到相关知识点</div>
-          <button class="empty-ai-btn" @click="openAiExtractModal">🤖 呼叫 AI 提炼本章考点</button>
         </div>
 
         <div v-else class="kp-cards-list">
@@ -124,17 +120,79 @@
             </div>
           </div>
 
-          <!-- 底部固定/操作栏 (针对此知识点一键专项刷题) -->
+          <!-- 模块三：一键专项刷题操作栏 -->
           <div class="detail-footer-bar">
             <div class="footer-left">
               <span class="quiz-info-label">包含配套精选试题：</span>
-              <span class="quiz-count">{{ selectedKp.questionCount || 1 }}</span>
+              <span class="quiz-count">{{ questionsList.length || selectedKp.questionCount || 1 }}</span>
               <span class="quiz-unit">道</span>
             </div>
             <button class="quiz-action-btn" @click="startTargetedQuiz(selectedKp)">
               <span class="btn-icon">⚡</span>
               <span>针对此知识点一键专项刷题</span>
             </button>
+          </div>
+
+          <!-- 模块四：🔮 配套精选试题与答案深度解析 (对齐原型) -->
+          <div class="section-card questions-section">
+            <div class="sec-title purple-title">
+              <span class="sec-icon">🔮</span>
+              <span>配套精选试题与答案深度解析</span>
+            </div>
+
+            <div v-if="questionsList.length > 0" class="exam-questions-list">
+              <div
+                v-for="(q, qIdx) in questionsList"
+                :key="q.id || qIdx"
+                class="example-question-box"
+              >
+                <!-- 题目标签行 -->
+                <div class="eq-badge-row" @click="toggleQuestionExpand(qIdx)">
+                  <div class="eq-badges">
+                    <span class="eq-num-tag">例题 {{ qIdx + 1 }}</span>
+                    <span class="eq-type-tag">{{ getQuestionTypeName(q.type) }}</span>
+                  </div>
+                  <span class="eq-toggle-arrow">{{ expandedQuestions[qIdx] ? '▲' : '▼' }}</span>
+                </div>
+
+                <!-- 题干 -->
+                <div class="eq-stem">{{ q.content }}</div>
+
+                <!-- 选项列表 -->
+                <div v-if="q.options && q.options.length" class="eq-options-grid">
+                  <div
+                    v-for="opt in q.options"
+                    :key="opt.key"
+                    class="eq-option-btn"
+                    :class="{
+                      selected: userAnswers[qIdx] === opt.key,
+                      correct: userAnswers[qIdx] && opt.key === q.answer,
+                      wrong: userAnswers[qIdx] === opt.key && opt.key !== q.answer,
+                    }"
+                    @click="handleSelectOption(qIdx, opt.key)"
+                  >
+                    <span class="opt-key">{{ opt.key }}.</span>
+                    <span class="opt-content">{{ opt.content }}</span>
+                  </div>
+                </div>
+
+                <!-- 答案与名师深度解析面板 (可展开或作答后查看) -->
+                <div v-if="expandedQuestions[qIdx] || userAnswers[qIdx]" class="eq-analysis-box">
+                  <div class="ans-row">
+                    <span class="ans-label">正确答案：</span>
+                    <span class="ans-text">{{ q.answer }}</span>
+                  </div>
+                  <div class="analysis-body">
+                    <div class="analysis-label">深度解析：</div>
+                    <div class="analysis-text">{{ q.analysis || '本题考核核心知识点定义的精准理解与实操应用。' }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="no-questions-tip">
+              暂无匹配试题，点击上方按钮即可通过 AI 专项抽题。
+            </div>
           </div>
         </div>
 
@@ -185,12 +243,66 @@
               {{ selectedKp.memoryTips }}
             </div>
           </div>
+
+          <!-- 🔮 配套精选试题与答案深度解析 -->
+          <div class="section-card questions-section">
+            <div class="sec-title purple-title">
+              <span class="sec-icon">🔮</span>
+              <span>配套精选试题与答案深度解析</span>
+            </div>
+
+            <div v-if="questionsList.length > 0" class="exam-questions-list">
+              <div
+                v-for="(q, qIdx) in questionsList"
+                :key="q.id || qIdx"
+                class="example-question-box"
+              >
+                <div class="eq-badge-row" @click="toggleQuestionExpand(qIdx)">
+                  <div class="eq-badges">
+                    <span class="eq-num-tag">例题 {{ qIdx + 1 }}</span>
+                    <span class="eq-type-tag">{{ getQuestionTypeName(q.type) }}</span>
+                  </div>
+                  <span class="eq-toggle-arrow">{{ expandedQuestions[qIdx] ? '▲' : '▼' }}</span>
+                </div>
+
+                <div class="eq-stem">{{ q.content }}</div>
+
+                <div v-if="q.options && q.options.length" class="eq-options-grid">
+                  <div
+                    v-for="opt in q.options"
+                    :key="opt.key"
+                    class="eq-option-btn"
+                    :class="{
+                      selected: userAnswers[qIdx] === opt.key,
+                      correct: userAnswers[qIdx] && opt.key === q.answer,
+                      wrong: userAnswers[qIdx] === opt.key && opt.key !== q.answer,
+                    }"
+                    @click="handleSelectOption(qIdx, opt.key)"
+                  >
+                    <span class="opt-key">{{ opt.key }}.</span>
+                    <span class="opt-content">{{ opt.content }}</span>
+                  </div>
+                </div>
+
+                <div v-if="expandedQuestions[qIdx] || userAnswers[qIdx]" class="eq-analysis-box">
+                  <div class="ans-row">
+                    <span class="ans-label">正确答案：</span>
+                    <span class="ans-text">{{ q.answer }}</span>
+                  </div>
+                  <div class="analysis-body">
+                    <div class="analysis-label">深度解析：</div>
+                    <div class="analysis-text">{{ q.analysis || '详见教材对应知识点逻辑框架。' }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 移动端底部吸底刷题按钮 -->
         <div class="mobile-footer-bar">
           <div class="m-footer-info">
-            <span>配套精选试题: <strong>{{ selectedKp.questionCount || 1 }}</strong> 道</span>
+            <span>配套精选题: <strong>{{ questionsList.length || selectedKp.questionCount || 1 }}</strong> 道</span>
           </div>
           <button class="quiz-action-btn mobile-btn" @click="startTargetedQuiz(selectedKp)">
             <span class="btn-icon">⚡</span>
@@ -199,55 +311,28 @@
         </div>
       </div>
     </van-popup>
-
-    <!-- AI 自动提取章节考点弹窗 -->
-    <van-dialog
-      v-model:show="aiModalVisible"
-      title="🤖 AI 自动提炼章节考点"
-      show-cancel-button
-      :confirm-button-text="aiExtracting ? 'AI 正在提炼中...' : '开始提炼'"
-      :confirm-button-disabled="aiExtracting"
-      @confirm="handleAiExtract"
-    >
-      <div class="ai-modal-content">
-        <p class="ai-hint">输入或选择需要提炼考点的教材章节，AI 将自动分析核心逻辑框架并生成冲刺速记口诀：</p>
-        <div class="ai-form-group">
-          <label>章节名称 / 考点范围：</label>
-          <input
-            v-model="aiChapterName"
-            type="text"
-            placeholder="例如：第9章 项目成本管理 (或输入具体知识点)"
-            class="ai-input"
-          />
-        </div>
-        <div class="ai-form-group">
-          <label>大纲或补充资料（可选）：</label>
-          <textarea
-            v-model="aiSyllabusText"
-            placeholder="可粘贴大纲文本或考点笔记，留空则由 AI 自动根据官方软考大纲推导..."
-            rows="3"
-            class="ai-textarea"
-          ></textarea>
-        </div>
-      </div>
-    </van-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
 import {
   getKnowledgeBase,
-  extractKnowledgePoints,
+  getKnowledgePointDetail,
   type KnowledgePointItem,
 } from '@/api/knowledge'
 import { createPractice } from '@/api/quiz'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+
+const currentSubjectName = computed(() => {
+  const cur = subjectStore.currentSubject
+  return cur ? cur.name.replace(/系统集成项目管理工程师/, '集成').replace(/信息系统项目管理师/, '高项') : '软考'
+})
 
 const loading = ref(false)
 const knowledgeList = ref<KnowledgePointItem[]>([])
@@ -257,11 +342,10 @@ const searchKeyword = ref<string>('')
 const selectedKp = ref<KnowledgePointItem | null>(null)
 const mobileDetailVisible = ref(false)
 
-// AI 提取弹窗
-const aiModalVisible = ref(false)
-const aiExtracting = ref(false)
-const aiChapterName = ref('')
-const aiSyllabusText = ref('')
+// 配套例题列表与交互状态
+const questionsList = ref<any[]>([])
+const expandedQuestions = reactive<Record<number, boolean>>({})
+const userAnswers = reactive<Record<number, string>>({})
 
 // 过滤计算
 const filteredList = computed(() => {
@@ -299,178 +383,169 @@ function getImportanceClass(level?: string) {
   return 'level-normal'
 }
 
+function getQuestionTypeName(type?: string) {
+  if (type === 'multiple_choice' || type === 'multiple') return '多选题'
+  if (type === 'case_analysis' || type === 'case') return '案例分析'
+  return '单选题'
+}
+
 function selectCategory(cat: string) {
   selectedCategory.value = cat
-  // 若当前选中的卡片不在筛选列表中，自动选中首个
-  setTimeout(() => {
-    if (filteredList.value.length > 0) {
-      if (!selectedKp.value || !filteredList.value.find((i) => i.id === selectedKp.value?.id)) {
-        selectedKp.value = filteredList.value[0]
-      }
-    }
-  }, 50)
 }
 
 function handleSearchInput() {
-  if (filteredList.value.length > 0 && !filteredList.value.find((i) => i.id === selectedKp.value?.id)) {
-    selectedKp.value = filteredList.value[0]
-  }
+  // input reactive
 }
 
 function clearSearch() {
   searchKeyword.value = ''
 }
 
-function handleSelectKp(item: KnowledgePointItem) {
+function toggleQuestionExpand(idx: number) {
+  expandedQuestions[idx] = !expandedQuestions[idx]
+}
+
+function handleSelectOption(qIdx: number, optKey: string) {
+  userAnswers[qIdx] = optKey
+  // 点击作答后自动展开解析
+  expandedQuestions[qIdx] = true
+}
+
+async function handleSelectKp(item: KnowledgePointItem) {
   selectedKp.value = item
-  // 如果在移动端视图（屏幕宽度 < 768px），弹出浮层展示详情
-  if (window.innerWidth < 768) {
-    mobileDetailVisible.value = true
+  mobileDetailVisible.value = true
+  // 重置作答与展开状态
+  Object.keys(userAnswers).forEach((k) => delete userAnswers[Number(k)])
+  Object.keys(expandedQuestions).forEach((k) => delete expandedQuestions[Number(k)])
+  expandedQuestions[0] = true // 默认展开第一道例题
+
+  try {
+    const res = await getKnowledgePointDetail(item.id)
+    if (res?.data) {
+      selectedKp.value = {
+        ...item,
+        ...res.data,
+      }
+      questionsList.value = res.data.questions || []
+    }
+  } catch {
+    questionsList.value = []
   }
 }
 
+// 格式化 markdown 内容
 function formatContent(text?: string) {
-  if (!text) return '<p class="empty-tip">暂无教材考点提炼内容</p>'
-  
-  // 简单安全且美观的 Markdown 解析为 HTML
-  let html = text
+  if (!text) return '<p class="empty-tip">暂无教材考点逻辑分析</p>'
+
+  let formatted = text
     .replace(/^### (.*$)/gim, '<h4 class="md-h4">$1</h4>')
     .replace(/^## (.*$)/gim, '<h3 class="md-h3">$1</h3>')
     .replace(/^# (.*$)/gim, '<h2 class="md-h2">$1</h2>')
-    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-    .replace(/`([^`]+)`/gim, '<code class="inline-code">$1</code>')
-    .replace(/^\s*-\s+(.*$)/gim, '<li class="md-li">$1</li>')
-    .replace(/^\s*\d+\.\s+(.*$)/gim, '<li class="md-ol-li">$1</li>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+    .replace(/^[*-] (.*$)/gim, '<li class="md-li">$1</li>')
+    .replace(/\n\n/g, '<div class="md-gap"></div>')
+    .replace(/\n/g, '<br/>')
 
-  // 将连续的换行转换为段落
-  html = html.replace(/\n\n/g, '<br/>')
-  html = html.replace(/\n/g, '<br/>')
-
-  return html
+  return formatted
 }
 
-async function fetchKnowledgeBase() {
+// 针对此知识点一键专项刷题
+async function startTargetedQuiz(kp: KnowledgePointItem) {
+  showLoadingToast({
+    message: '正在针对考点精准组卷...',
+    forbidClick: true,
+    duration: 0,
+  })
+
+  try {
+    const subId = subjectStore.currentSubjectId || 1
+    const res = await createPractice({
+      subjectId: Number(subId),
+      mode: 'chapter',
+      chapterId: kp.chapterId,
+      knowledgePointId: kp.id,
+      knowledgePointName: kp.name,
+      questionCount: 15,
+    })
+
+    closeToast()
+
+    router.push({
+      path: '/quiz/chapter',
+      query: {
+        chapterId: String(kp.chapterId || ''),
+        knowledgePointId: String(kp.id),
+        title: `${kp.name}·专项刷题`,
+        recordId: res?.data?.recordId || undefined,
+      },
+    })
+  } catch (err: any) {
+    closeToast()
+    router.push({
+      path: '/quiz/chapter',
+      query: {
+        chapterId: String(kp.chapterId || ''),
+        knowledgePointId: String(kp.id),
+        title: `${kp.name}·专项刷题`,
+      },
+    })
+  }
+}
+
+// 加载知识库数据
+async function loadKnowledgeData() {
   loading.value = true
   try {
-    const subId = subjectStore.currentSubjectId || undefined
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : '1'
     const res = await getKnowledgeBase({ subjectId: subId })
+
     if (res?.data) {
       knowledgeList.value = res.data.list || []
-      if (res.data.categories && res.data.categories.length > 0) {
+      if (res.data.categories && Array.isArray(res.data.categories)) {
         categories.value = res.data.categories
       }
+
       if (knowledgeList.value.length > 0) {
-        selectedKp.value = knowledgeList.value[0]
+        handleSelectKp(knowledgeList.value[0])
       }
     }
   } catch (err: any) {
-    showToast(err?.message || '获取知识库数据失败')
+    showToast(err?.message || '加载考点知识库失败')
   } finally {
     loading.value = false
   }
 }
 
-// 专项刷题启动
-async function startTargetedQuiz(kp: KnowledgePointItem) {
-  const toast = showLoadingToast({
-    message: '正在生成专项试卷...',
-    forbidClick: true,
-    duration: 0,
-  })
-
-  try {
-    const subId = subjectStore.currentSubjectId ? Number(subjectStore.currentSubjectId) : 1
-    const res = await createPractice({
-      subjectId: subId,
-      mode: 'chapter',
-      chapterId: kp.chapterId,
-      knowledgePointId: kp.id,
-      knowledgePointName: kp.name,
-      questionCount: kp.questionCount || 10,
-    })
-
-    closeToast()
-    const recordId = res.data?.recordId || res.data?.record?.id
-    if (recordId) {
-      router.push({
-        path: '/quiz/practice',
-        query: { recordId, title: `${kp.name}·专项刷题` },
-      })
-    } else {
-      showToast('试卷准备失败，请稍后重试')
-    }
-  } catch (err: any) {
-    closeToast()
-    showToast(err?.message || '专项练习启动失败')
+onMounted(async () => {
+  if (subjectStore.subjectList.length === 0) {
+    await subjectStore.fetchSubjects()
   }
-}
-
-function openAiExtractModal() {
-  aiChapterName.value = selectedCategory.value !== '全部' ? selectedCategory.value : '项目风险管理'
-  aiSyllabusText.value = ''
-  aiModalVisible.value = true
-}
-
-async function handleAiExtract() {
-  if (!aiChapterName.value.trim()) {
-    showToast('请输入章节名称')
-    return
-  }
-
-  aiExtracting.value = true
-  const toast = showLoadingToast({
-    message: 'AI 正在深度解析大纲并提炼考点...',
-    forbidClick: true,
-    duration: 0,
-  })
-
-  try {
-    const subId = subjectStore.currentSubjectId ? Number(subjectStore.currentSubjectId) : 1
-    const res = await extractKnowledgePoints({
-      subjectId: subId,
-      chapterName: aiChapterName.value.trim(),
-      syllabusText: aiSyllabusText.value.trim(),
-      count: 4,
-    })
-
-    closeToast()
-    aiModalVisible.value = false
-    showToast('AI 考点提炼完成！')
-    await fetchKnowledgeBase()
-  } catch (err: any) {
-    closeToast()
-    showToast(err?.message || 'AI 提炼异常，请检查配置')
-  } finally {
-    aiExtracting.value = false
-  }
-}
-
-onMounted(() => {
-  fetchKnowledgeBase()
+  await loadKnowledgeData()
 })
 </script>
 
 <style scoped lang="scss">
 .knowledge-page {
   min-height: 100vh;
-  background: #f8fafc;
+  background-color: #f8fafc;
   display: flex;
   flex-direction: column;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* 顶部导航栏 */
+/* 顶部导航 */
 .kb-navbar {
-  height: 52px;
-  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 50;
 
   .nav-left {
     display: flex;
@@ -481,63 +556,52 @@ onMounted(() => {
     .back-icon {
       font-size: 24px;
       line-height: 1;
-      color: #334155;
+      color: #64748b;
     }
 
     .nav-title {
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 700;
-      color: #1e293b;
+      color: #0f172a;
     }
   }
 
-  .ai-extract-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: linear-gradient(135deg, #0ea5e9, #0284c7);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 20px;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);
-    transition: all 0.2s;
-
-    &:active {
-      transform: scale(0.96);
+  .nav-right {
+    .subject-badge {
+      background: #e0f2fe;
+      color: #0284c7;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
     }
   }
 }
 
-/* 顶部搜索框 (还原原型) */
+/* 搜索栏 */
 .search-section {
-  padding: 14px 16px 8px;
+  padding: 12px 16px 8px;
   background: #ffffff;
 
   .search-box {
-    width: 100%;
-    height: 44px;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 22px;
     display: flex;
     align-items: center;
-    padding: 0 14px;
+    background: #f1f5f9;
+    border-radius: 20px;
+    padding: 8px 14px;
     gap: 8px;
-    transition: border-color 0.2s;
+    border: 1px solid transparent;
+    transition: all 0.2s;
 
     &:focus-within {
-      border-color: #0ea5e9;
       background: #ffffff;
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+      border-color: #0284c7;
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
     }
 
     .search-icon {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       color: #94a3b8;
       flex-shrink: 0;
     }
@@ -552,290 +616,324 @@ onMounted(() => {
 
       &::placeholder {
         color: #94a3b8;
-        font-size: 13px;
       }
     }
 
     .clear-btn {
       background: #cbd5e1;
       border: none;
-      color: #fff;
-      font-size: 10px;
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
+      color: #ffffff;
+      font-size: 10px;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
     }
   }
 }
 
-/* 章节横向分类过滤 (还原原型胶囊设计) */
+/* 章节横向分类标签 */
 .categories-bar {
   background: #ffffff;
-  padding: 6px 16px 14px;
+  padding: 6px 16px 12px;
   border-bottom: 1px solid #f1f5f9;
 
   .category-scroll {
     display: flex;
-    align-items: center;
     gap: 8px;
     overflow-x: auto;
     scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-
     &::-webkit-scrollbar {
       display: none;
     }
+
+    .category-chip {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      border-radius: 16px;
+      font-size: 12px;
+      color: #475569;
+      background: #f1f5f9;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+
+      &:hover {
+        background: #e2e8f0;
+      }
+
+      &.active {
+        background: #0284c7;
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+      }
+    }
+  }
+}
+
+/* 主体容器 */
+.kb-content-container {
+  flex: 1;
+  display: flex;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px;
+  gap: 18px;
+}
+
+/* 左侧考点卡片列表 */
+.kb-list-pane {
+  flex: 1;
+  min-width: 0;
+
+  .kp-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .category-chip {
-    flex-shrink: 0;
-    padding: 6px 14px;
-    border-radius: 20px;
+  .kp-card {
     background: #ffffff;
+    border-radius: 12px;
+    padding: 14px 16px;
     border: 1px solid #e2e8f0;
-    color: #475569;
-    font-size: 12px;
-    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     cursor: pointer;
     transition: all 0.2s;
 
     &:hover {
-      border-color: #cbd5e1;
+      border-color: #93c5fd;
+      transform: translateY(-1px);
     }
 
     &.active {
-      background: #0284c7;
-      color: #ffffff;
       border-color: #0284c7;
-      font-weight: 600;
-      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
-    }
-  }
-}
-
-/* 主内容容器 */
-.kb-content-container {
-  flex: 1;
-  display: flex;
-  padding: 16px;
-  gap: 16px;
-  max-width: 1400px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-/* 左侧列表 */
-.kb-list-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.kp-cards-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* 考点卡片 (还原原型高保真卡片) */
-.kp-card {
-  background: #ffffff;
-  border-radius: 14px;
-  border: 1.5px solid #e2e8f0;
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-
-  &:hover {
-    border-color: #38bdf8;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.1);
-  }
-
-  &.active {
-    border-color: #0ea5e9;
-    background: #f0f9ff;
-    box-shadow: 0 0 0 1px #0ea5e9, 0 4px 16px rgba(14, 165, 233, 0.15);
-  }
-
-  .card-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-
-  .cat-tag {
-    font-size: 11px;
-    font-weight: 600;
-    color: #0369a1;
-    background: #e0f2fe;
-    padding: 2px 8px;
-    border-radius: 6px;
-  }
-
-  .importance-badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-
-    .badge-icon {
-      font-size: 9px;
+      background: #f0f9ff;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
     }
 
-    &.level-must {
-      color: #e11d48;
-      background: #ffe4e6;
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+
+      .cat-tag {
+        font-size: 12px;
+        color: #0284c7;
+        background: #e0f2fe;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+
+      .importance-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+
+        &.level-must {
+          background: #fee2e2;
+          color: #ef4444;
+        }
+
+        &.level-high {
+          background: #ffedd5;
+          color: #f97316;
+        }
+
+        &.level-normal {
+          background: #e0e7ff;
+          color: #6366f1;
+        }
+      }
     }
 
-    &.level-high {
-      color: #ea580c;
-      background: #ffedd5;
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.4;
+      margin: 0 0 6px;
     }
 
-    &.level-normal {
-      color: #0284c7;
-      background: #e0f2fe;
+    .card-source {
+      font-size: 11px;
+      color: #64748b;
     }
   }
 
-  .card-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #0f172a;
-    line-height: 1.45;
-    margin: 0 0 6px;
-  }
-
-  .card-source {
-    font-size: 11px;
+  .loading-box,
+  .empty-box {
+    text-align: center;
+    padding: 40px 20px;
+    background: #ffffff;
+    border-radius: 12px;
     color: #64748b;
   }
+
+  .empty-box {
+    .empty-icon {
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+    .empty-text {
+      font-size: 14px;
+    }
+  }
 }
 
-/* 右侧详情面板 (PC 端) */
+/* 右侧详情面板 */
 .kb-detail-pane {
-  flex: 1.35;
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-}
+  flex: 1.4;
+  min-width: 0;
 
-.detail-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.detail-header {
-  margin-bottom: 18px;
-
-  .detail-tags-row {
+  .detail-wrapper {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
+    flex-direction: column;
+    gap: 18px;
+  }
 
-    .dt-tag {
-      font-size: 11px;
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-weight: 600;
+  .detail-header {
+    .detail-tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+
+      .dt-tag {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 6px;
+
+        &.cat-pill {
+          background: #e0f2fe;
+          color: #0284c7;
+        }
+
+        &.source-pill {
+          background: #f1f5f9;
+          color: #475569;
+        }
+
+        &.level-pill {
+          &.level-must {
+            background: #fee2e2;
+            color: #ef4444;
+          }
+          &.level-high {
+            background: #ffedd5;
+            color: #f97316;
+          }
+          &.level-normal {
+            background: #e0e7ff;
+            color: #6366f1;
+          }
+        }
+      }
     }
 
-    .cat-pill {
-      background: #e0f2fe;
-      color: #0284c7;
-    }
-
-    .source-pill {
-      background: #f1f5f9;
-      color: #475569;
-    }
-
-    .level-pill {
-      &.level-must {
-        background: #ffe4e6;
-        color: #e11d48;
-      }
-      &.level-high {
-        background: #ffedd5;
-        color: #ea580c;
-      }
-      &.level-normal {
-        background: #e0f2fe;
-        color: #0284c7;
-      }
+    .detail-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0;
+      line-height: 1.3;
     }
   }
 
-  .detail-title {
-    font-size: 20px;
-    font-weight: 800;
-    color: #0f172a;
-    line-height: 1.35;
-    margin: 0;
+  .no-selection-placeholder {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 60px 20px;
+    text-align: center;
+    border: 1px dashed #cbd5e1;
+    color: #64748b;
+
+    .ph-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .ph-text {
+      font-size: 14px;
+    }
   }
 }
 
-/* 核心内容卡片 */
+/* 核心通用卡片 */
 .section-card {
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 16px 18px;
-  margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
 
   .sec-title {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    color: #1e293b;
     margin-bottom: 12px;
+    color: #0f172a;
 
     .sec-icon {
-      font-size: 16px;
+      font-size: 18px;
+    }
+
+    &.purple-title {
+      color: #6366f1;
     }
   }
 }
 
-/* 框架卡片 (还原原型灰色质感) */
+/* 模块一：教材考点提炼与逻辑框架 */
 .framework-card {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-left: 4px solid #0284c7;
 
   .sec-body {
-    font-size: 13px;
-    color: #334155;
+    font-size: 13.5px;
     line-height: 1.7;
+    color: #334155;
 
+    :deep(.md-h2),
     :deep(.md-h3),
     :deep(.md-h4) {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
       color: #0f172a;
       margin: 12px 0 6px;
     }
 
-    :deep(.md-li),
-    :deep(.md-ol-li) {
-      margin-bottom: 6px;
-      padding-left: 4px;
+    :deep(.md-li) {
+      margin-left: 18px;
+      list-style-type: disc;
+      margin-bottom: 4px;
+    }
+
+    :deep(.inline-code) {
+      background: #e2e8f0;
+      color: #0369a1;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
     }
 
     :deep(strong) {
@@ -843,215 +941,298 @@ onMounted(() => {
       font-weight: 700;
     }
 
-    :deep(.inline-code) {
-      background: #e2e8f0;
-      color: #0284c7;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 12px;
+    :deep(.md-gap) {
+      height: 8px;
     }
   }
 }
 
-/* 记忆口诀卡片 (还原原型暖黄卡片) */
+/* 模块二：记忆口诀与冲刺速记技巧 (暖黄高亮) */
 .memory-card {
   background: #fffbeb;
   border: 1px solid #fef3c7;
+  border-left: 4px solid #f59e0b;
 
   .sec-title {
     color: #b45309;
   }
 
   .memory-content {
-    font-size: 13px;
-    font-weight: 600;
-    color: #92400e;
+    font-size: 13.5px;
     line-height: 1.6;
+    color: #92400e;
+    font-weight: 600;
   }
 }
 
-/* 底部操作栏 (还原原型绿色发光按钮) */
+/* 模块三：专项刷题操作栏 */
 .detail-footer-bar {
-  margin-top: auto;
-  padding-top: 18px;
-  border-top: 1px solid #f1f5f9;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 12px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 
   .footer-left {
-    font-size: 12px;
-    color: #64748b;
+    font-size: 13px;
+    color: #166534;
+    font-weight: 500;
 
     .quiz-count {
-      font-size: 14px;
+      color: #15803d;
+      font-size: 18px;
       font-weight: 800;
-      color: #0284c7;
       margin: 0 2px;
+    }
+
+    .quiz-unit {
+      color: #166534;
     }
   }
 
   .quiz-action-btn {
-    background: #059669;
-    color: #ffffff;
+    background: linear-gradient(135deg, #10b981, #059669);
     border: none;
-    border-radius: 24px;
-    padding: 10px 22px;
-    font-size: 14px;
+    color: #ffffff;
+    padding: 9px 18px;
+    border-radius: 20px;
+    font-size: 13px;
     font-weight: 700;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 6px;
-    cursor: pointer;
-    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.35);
     transition: all 0.2s;
 
-    &:hover {
-      background: #047857;
-      box-shadow: 0 6px 18px rgba(5, 150, 105, 0.45);
-    }
-
     &:active {
-      transform: scale(0.98);
-    }
-
-    .btn-icon {
-      font-size: 16px;
+      transform: translateY(1px);
     }
   }
 }
 
-/* 移动端详情浮层 */
-.mobile-detail-popup {
-  background: #f8fafc;
-}
-
-.mobile-detail-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.mobile-detail-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px 16px 16px;
-}
-
-.mobile-detail-title {
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.4;
-  margin: 10px 0 16px;
-}
-
-.mobile-footer-bar {
+/* 模块四：配套精选试题与答案深度解析 */
+.questions-section {
   background: #ffffff;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  border: 1px solid #e0e7ff;
 
-  .m-footer-info {
-    font-size: 12px;
-    color: #64748b;
+  .exam-questions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
 
-    strong {
-      color: #0284c7;
+  .example-question-box {
+    border: 1px solid #f1f5f9;
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: #fafafa;
+
+    .eq-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      cursor: pointer;
+
+      .eq-badges {
+        display: flex;
+        gap: 6px;
+
+        .eq-num-tag {
+          background: #e0e7ff;
+          color: #4338ca;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 4px;
+        }
+
+        .eq-type-tag {
+          background: #f1f5f9;
+          color: #64748b;
+          font-size: 11px;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+      }
+
+      .eq-toggle-arrow {
+        color: #94a3b8;
+        font-size: 11px;
+      }
+    }
+
+    .eq-stem {
       font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .eq-options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+
+      @media (max-width: 768px) {
+        grid-template-columns: 1fr;
+      }
+
+      .eq-option-btn {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 12.5px;
+        display: flex;
+        gap: 6px;
+        cursor: pointer;
+        transition: all 0.15s;
+
+        &:hover {
+          border-color: #93c5fd;
+          background: #f8fafc;
+        }
+
+        &.selected {
+          border-color: #0284c7;
+          background: #f0f9ff;
+          font-weight: 600;
+        }
+
+        &.correct {
+          border-color: #10b981;
+          background: #ecfdf5;
+          color: #065f46;
+          font-weight: 700;
+        }
+
+        &.wrong {
+          border-color: #ef4444;
+          background: #fef2f2;
+          color: #991b1b;
+          font-weight: 600;
+        }
+
+        .opt-key {
+          font-weight: 700;
+        }
+      }
+    }
+
+    .eq-analysis-box {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      border-left: 3px solid #6366f1;
+      font-size: 12.5px;
+      line-height: 1.5;
+
+      .ans-row {
+        margin-bottom: 6px;
+        .ans-label {
+          color: #64748b;
+          font-weight: 600;
+        }
+        .ans-text {
+          color: #10b981;
+          font-weight: 800;
+          font-size: 14px;
+        }
+      }
+
+      .analysis-body {
+        color: #334155;
+        .analysis-label {
+          font-weight: 700;
+          color: #475569;
+          margin-bottom: 2px;
+        }
+      }
     }
   }
 
-  .mobile-btn {
-    padding: 9px 18px;
-    font-size: 13px;
+  .no-questions-tip {
+    font-size: 12px;
+    color: #94a3b8;
+    text-align: center;
+    padding: 16px;
   }
 }
 
-/* AI 弹窗内容 */
-.ai-modal-content {
-  padding: 12px 16px;
+/* 移动端详情抽屉 */
+.mobile-detail-popup {
+  .mobile-detail-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #ffffff;
 
-  .ai-hint {
-    font-size: 12px;
-    color: #64748b;
-    line-height: 1.5;
-    margin-bottom: 12px;
-  }
+    .mobile-detail-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
 
-  .ai-form-group {
-    margin-bottom: 12px;
-
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: #334155;
-      margin-bottom: 6px;
+      .mobile-detail-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+        line-height: 1.35;
+      }
     }
 
-    .ai-input,
-    .ai-textarea {
-      width: 100%;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 8px 10px;
-      font-size: 13px;
-      color: #1e293b;
-      outline: none;
+    .mobile-footer-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      padding: 10px 16px;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 
-      &:focus {
-        border-color: #0284c7;
+      .m-footer-info {
+        font-size: 12px;
+        color: #64748b;
+        strong {
+          color: #10b981;
+          font-size: 15px;
+        }
+      }
+
+      .mobile-btn {
+        padding: 8px 16px;
+        font-size: 13px;
       }
     }
   }
 }
 
-/* 空状态与加载状态 */
-.loading-box,
-.empty-box,
-.no-selection-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: #94a3b8;
-  gap: 12px;
-
-  .empty-icon,
-  .ph-icon {
-    font-size: 36px;
-  }
-
-  .empty-text,
-  .ph-text {
-    font-size: 13px;
-  }
-
-  .empty-ai-btn {
-    background: #0284c7;
-    color: #fff;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
+/* 响应式控制 */
+.pc-only {
+  display: block;
 }
 
-/* 响应式媒体查询 */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .pc-only {
-    display: none !important;
+    display: none;
   }
 
   .kb-content-container {
-    padding: 10px 12px;
+    padding: 12px;
   }
 }
 </style>
