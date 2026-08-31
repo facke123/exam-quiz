@@ -284,7 +284,7 @@ export class AiController {
   @Public()
   @Post(['admin/ai/knowledge/batch-import', 'ai/knowledge/batch-import'])
   @ApiOperation({ summary: '批量保存确认后的章节、考点与配套试题入库' })
-  async saveKnowledgeBatch(@Body() dto: AiSaveKnowledgeBatchDto) {
+  async saveKnowledgeBatch(@Body() dto: any) {
     return this.aiService.saveKnowledgeBatch(dto);
   }
 }
