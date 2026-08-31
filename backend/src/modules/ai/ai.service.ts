@@ -1458,15 +1458,16 @@ export class AiService implements OnModuleInit {
     const isAiEnabled = aiConfig.enabled === '1' && Boolean(aiConfig.apiKey);
 
     if (isAiEnabled) {
-      // 确定分块批次（若总数超过 8 道，按每批 6~8 道分块请求，确保大模型输出不截断、JSON结构完整）
-      const chunkSize = targetCount > 8 ? 6 : targetCount;
+      const isCaseQuestion = dbType === 'case_analysis';
+      // 案例分析大题按每批1道生成（保证4096 tokens充足生成表格/小问/采分点），客观选择题按每批6道
+      const chunkSize = isCaseQuestion ? 1 : targetCount > 8 ? 6 : targetCount;
       const chunkCount = Math.ceil(targetCount / chunkSize);
 
       const typeSpecMap: Record<string, string> = {
         single_choice: `【单选题强制规范】必须且仅能包含 4 个选项（A、B、C、D），答案为单个大写字母（A/B/C/D）。严禁生成“A.正确 B.错误”等判断题选项！`,
         multiple_choice: `【多选题强制规范】必须包含 4~5 个选项（A、B、C、D、E），正确答案必须为 2 个及以上大写字母组合（如 ABC、ACD），严禁只给单选答案！`,
         true_false: `【判断题强制规范】选项固定为 A. 正确、B. 错误，答案为 A 或 B。`,
-        case_analysis: `【案例题强制规范】题干必须包含背景项目案例、2~3个具体小问，答案中给出清晰采分点与分析步骤。`,
+        case_analysis: `【案例题强制规范】题干必须包含真实项目背景（500~800字）、专业数据表格（Markdown表格）或SVG图表、2~3个具体小问（标明分值），options 必须严格为空数组 []，答案中给出清晰参考采分点与公式推导步骤。`,
       };
 
       const styleGuideMap: Record<string, string> = {
@@ -1476,33 +1477,43 @@ export class AiService implements OnModuleInit {
         concept: '出题风格：标准规范与概念辨析风，侧重国家标准、技术架构、过程输入输出与生命周期模型。',
       };
 
+      const caseDomainTopics = [
+        { domain: '进度管理与关键路径CPM网络图计算及工期优化赶工', scenario: '智慧医疗物联网平台研发项目' },
+        { domain: '成本管理与 EVM 挣值分析动态曲线及绩效预测', scenario: '银行分布式核心交易清算系统升级' },
+        { domain: '企业网络DMZ架构设计、安全纵深防御与等保合规', scenario: '跨境电商混合云多数据中心建设' },
+        { domain: '范围蔓延、配置基线管理与 CCB 变更控制闭环', scenario: '智能网联新能源汽车车载操作系统项目' },
+        { domain: '质量管理因果鱼骨图/帕累托图与全面质量审计', scenario: '智能制造工厂MES数字化车间管控系统' },
+        { domain: '风险管理定性/定量分析与决策树EMV预期货币价值', scenario: '智慧城市低空无人机调度指挥中台' },
+        { domain: '采购招投标全流程、合同索赔与供应商评估', scenario: '省政务大数据共享与交换基础设施工程' },
+      ];
+
       const promptStyleText = styleGuideMap[dto.promptStyle || 'standard'] || styleGuideMap.standard;
 
       for (let chunkIdx = 0; chunkIdx < chunkCount && collectedQuestions.length < targetCount; chunkIdx++) {
         const currentBatchNeeded = Math.min(chunkSize, targetCount - collectedQuestions.length);
+        const domainTopic = caseDomainTopics[chunkIdx % caseDomainTopics.length];
 
         const negativeStemsNote =
           collectedStems.length > 0
-            ? `【严禁出题重复】：以下是本科目本章节已有的题目切片，本次生成严禁出现相似题干或重复考题：\n${collectedStems.slice(-10).map((s, idx) => `${idx + 1}. ${s.slice(0, 35)}...`).join('\n')}`
+            ? `【严禁出题重复】：以下是本科目本章节已有的题目切片，本次生成严禁出现相似题干或重复考题：\n${collectedStems.slice(-8).map((s, idx) => `${idx + 1}. ${s.slice(0, 40)}...`).join('\n')}`
             : '';
 
-        const isCaseQuestion = dbType === 'case_analysis';
         const systemPrompt = isCaseQuestion
-          ? `你是一位中国计算机软件资格考试（软考）命题组资深专家与官方教材主编。
-请为软考专业科目【${subName}】的章节【${chName}】（核心知识点：【${kpDisplay}】）设计 ${currentBatchNeeded} 道国家考试真题级别的【案例分析主观问答题】（绝不可出单选题/多选题/选择题，options 必须严格为空数组 []）。
+          ? `你是一位国家软考高级命题专家（${subName}专家组成员）。
+现在请为【${subName}】的【${chName}】结合真实工程项目【${domainTopic.scenario}】（考点重点：【${domainTopic.domain}】），命制 1 道国家级考试标准的【案例分析主观问答大题】（绝不可出单选题/多选题/选择题，options 必须严格为空数组 []）。
 
-【案例分析大题规范要求】
-1. 背景材料（500~800字）：包含真实工程或IT项目场景，必须包含专业数据表格（Markdown 表格格式）或内联 SVG 图表。
-2. 小问设置：必须拆解为 2~3 个具体小问（如【问题1】（5分）、【问题2】（8分）、【问题3】（7分））。
-3. 标准答案：提供规范的【参考采分点】，针对每个小问给出详细推导过程、计算公式与评分要点。
-4. 名师解析：提供详尽的考点定位与答题技巧。
+【试题硬性规范】
+1. 背景材料（500~800字）：包含真实完整的项目情境，必须包含专业数据表格（Markdown 表格格式）或自适应矢量 SVG 图表代码。
+2. 小问设置：拆解为 2~3 个具体小问（如【问题1】（5分）、【问题2】（8分）、【问题3】（7分））。
+3. 标准答案：必须提供规范的【参考采分点】，针对每个小问逐一给出计算推导过程、得分要点与分值分配。
+4. 名师解析：提供详尽的考点定位与答题避坑技巧。
 
 ${negativeStemsNote}
 
-【输出格式】必须严格输出纯 JSON 数组：
+【输出格式】必须严格输出单个标准 JSON 对象或单个对象的 JSON 数组：
 [
   {
-    "content": "【案例背景】某工程项目部分信息如下表所示：\\n\\n| 活动 | 紧前活动 | 正常工作时间(天) | 正常费用(元) | 赶工时间(天) | 赶工费用(元) |\\n| :--- | :--- | :--- | :--- | :--- | :--- |\\n| A | / | 10 | 40 | 6 | 75 |\\n| B | / | 8 | 40 | 8 | 40 |\\n\\n【问题1】（5分）\\n结合案例：(1)请写出关键路径并计算工期。(2)说明时差影响。\\n\\n【问题2】（8分）\\n计算项目成本与进度绩效指标并评价当前状态。\\n\\n【问题3】（7分）\\n写出赶工方案与增加的总费用。",
+    "content": "【案例背景】某项目部分信息如下表所示：\\n\\n| 活动 | 紧前活动 | 正常工作时间(天) | 正常费用(元) | 赶工时间(天) | 赶工费用(元) |\\n| :--- | :--- | :--- | :--- | :--- | :--- |\\n| A | / | 10 | 40 | 6 | 75 |\\n| B | / | 8 | 40 | 8 | 40 |\\n\\n【问题1】（5分）\\n结合案例：(1)请写出关键路径并计算工期。(2)说明时差影响。\\n\\n【问题2】（8分）\\n计算项目成本与进度绩效指标并评价当前状态。\\n\\n【问题3】（7分）\\n写出赶工方案与增加的总费用。",
     "options": [],
     "answer": "【参考采分点】\\n【问题1 解答】（5分）\\n(1) 关键路径为：...，工期为 XX 天。（3分）\\n(2) 活动拖延对总工期无影响。（2分）\\n\\n【问题2 解答】（8分）\\nPV=...，EV=...，AC=...，CV=...，SV=...。（6分）\\n状态评价：...。（2分）\\n\\n【问题3 解答】（7分）\\n...",
     "analysis": "【案例核心考点】考核关键路径法、EVM挣值分析与工期成本优化。",
@@ -1548,13 +1559,23 @@ ${negativeStemsNote}
           const llmResult = await this.callLlm(
             [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: `请立即生成 ${currentBatchNeeded} 道【${chName}】高质量不重复软考题目。` },
+              { role: 'user', content: isCaseQuestion
+                ? `请立即为【${domainTopic.scenario}】生成 1 道高质量国家级原创案例分析大题，严禁与已有题目重复。`
+                : `请立即生成 ${currentBatchNeeded} 道【${chName}】高质量不重复软考题目。`
+              },
             ],
-            { json: true, model: dto.model },
+            { json: true, model: dto.model, temperature: 0.7 },
           );
 
-          if (Array.isArray(llmResult) && llmResult.length > 0) {
-            for (const item of llmResult) {
+          let itemsToProcess: any[] = [];
+          if (Array.isArray(llmResult)) {
+            itemsToProcess = llmResult;
+          } else if (llmResult && (llmResult.content || llmResult.title)) {
+            itemsToProcess = [llmResult];
+          }
+
+          if (itemsToProcess.length > 0) {
+            for (const item of itemsToProcess) {
               const validated = this.normalizeAndValidateQuestion(item, dbType, difficulty, subName, chName);
               if (validated) {
                 // 批内与数据库去重校验

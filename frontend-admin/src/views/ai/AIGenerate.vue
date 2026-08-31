@@ -449,45 +449,77 @@
         <el-table-column label="题干与选项 / 深度名师解析" min-width="460">
           <template #default="{ row }">
             <div class="stem-content">
-              <!-- 题干 (支持富文本/SVG图表/Markdown配图) -->
-              <div class="stem-title">
-                <span class="q-id-tag">#{{ row.id }}</span>
-                <div class="stem-html-box" v-html="formatQuestionContent(row.content || row.title)" />
-              </div>
+              <!-- 案例分析大题紧凑摘要卡片 (不再将长篇表格全部平铺撑爆行高) -->
+              <div v-if="isCaseType(row.type)" class="case-card-compact">
+                <div class="case-compact-header">
+                  <span class="q-id-tag">#{{ row.id }}</span>
+                  <el-tag type="danger" size="small" effect="dark" class="case-badge">📑 案例分析大题</el-tag>
+                  <span class="case-brief-topic">{{ getCaseBriefTitle(row.content || row.title) }}</span>
+                  <span class="case-subq-count">（含 {{ getCaseSubQuestionCount(row.content) }} 个分问）</span>
+                </div>
 
-              <!-- 选项卡片 (单选/多选/判断) -->
-              <div v-if="row.options && row.options.length" class="options-grid">
-                <div
-                  v-for="opt in row.options"
-                  :key="opt.key || opt.label"
-                  class="opt-item"
-                  :class="{ 'is-correct': isOptionCorrect(row, opt.key || opt.label) }"
-                >
-                  <span class="opt-badge">{{ opt.key || opt.label }}</span>
-                  <span class="opt-text">{{ opt.content }}</span>
+                <div class="case-compact-excerpt">
+                  {{ getCaseTextExcerpt(row.content || row.title, 140) }}
+                </div>
+
+                <div class="case-compact-actions">
+                  <el-button type="primary" size="small" plain icon="View" @click="openQuestionPreview(row)">
+                    🔍 预览完整案例大题与图表 / 解析
+                  </el-button>
+                  <el-button type="success" size="small" plain icon="Check" @click="handlePublishSingle(row)">
+                    ✓ 审核入库
+                  </el-button>
+                  <el-button type="info" size="small" plain icon="Edit" @click="handleEdit(row)">
+                    ✏️ 编辑题目
+                  </el-button>
                 </div>
               </div>
 
-              <!-- 正确答案与解析 -->
-              <div class="stem-footer">
-                <div class="stem-ans-row">
-                  <span class="ans-label">正确答案：</span>
-                  <span class="ans-badge">{{ row.answer }}</span>
-                  <span class="ans-sep">｜</span>
-                  <span class="analysis-toggle-btn" @click="toggleAnalysis(row.id)">
-                    {{ expandedAnalysisIds.has(row.id) ? '▲ 收起深度解析' : '▼ 查看名师深度解析' }}
-                  </span>
+              <!-- 单选/多选/判断题 (普通客观题) -->
+              <div v-else class="objective-q-box">
+                <!-- 题干 -->
+                <div class="stem-title">
+                  <span class="q-id-tag">#{{ row.id }}</span>
+                  <div class="stem-html-box" v-html="formatQuestionContent(row.content || row.title)" />
                 </div>
 
-                <!-- 展开的名师解析 -->
-                <div v-show="expandedAnalysisIds.has(row.id)" class="analysis-box">
-                  <div class="analysis-header">
-                    <span>💡 名师深度解析与避坑指南</span>
-                    <el-button link type="primary" size="small" :loading="rewritingId === row.id" @click="handleRewriteAnalysis(row)">
-                      ✨ AI一键优化解析
+                <!-- 选项卡片 (单选/多选/判断) -->
+                <div v-if="row.options && row.options.length" class="options-grid">
+                  <div
+                    v-for="opt in row.options"
+                    :key="opt.key || opt.label"
+                    class="opt-item"
+                    :class="{ 'is-correct': isOptionCorrect(row, opt.key || opt.label) }"
+                  >
+                    <span class="opt-badge">{{ opt.key || opt.label }}</span>
+                    <span class="opt-text">{{ opt.content }}</span>
+                  </div>
+                </div>
+
+                <!-- 正确答案与解析 -->
+                <div class="stem-footer">
+                  <div class="stem-ans-row">
+                    <span class="ans-label">正确答案：</span>
+                    <span class="ans-badge">{{ row.answer }}</span>
+                    <span class="ans-sep">｜</span>
+                    <span class="analysis-toggle-btn" @click="toggleAnalysis(row.id)">
+                      {{ expandedAnalysisIds.has(row.id) ? '▲ 收起深度解析' : '▼ 查看名师深度解析' }}
+                    </span>
+                    <el-button link type="primary" size="small" icon="View" style="margin-left: 12px" @click="openQuestionPreview(row)">
+                      🔍 全屏预览
                     </el-button>
                   </div>
-                  <div class="analysis-body" v-html="formatAnalysisHtml(row.analysis)" />
+
+                  <!-- 展开的名师解析 -->
+                  <div v-show="expandedAnalysisIds.has(row.id)" class="analysis-box">
+                    <div class="analysis-header">
+                      <span>💡 名师深度解析与避坑指南</span>
+                      <el-button link type="primary" size="small" :loading="rewritingId === row.id" @click="handleRewriteAnalysis(row)">
+                        ✨ AI一键优化解析
+                      </el-button>
+                    </div>
+                    <div class="analysis-body" v-html="formatAnalysisHtml(row.analysis)" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -658,6 +690,71 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 试题全景预览抽屉 (支持案例题大图表、表格、子问题、采分点) -->
+    <el-drawer
+      v-model="previewDrawerVisible"
+      :title="`📋 试题全景详情预览 (#${previewQuestion?.id || ''})`"
+      size="760px"
+      destroy-on-close
+    >
+      <div v-if="previewQuestion" class="q-preview-drawer-body">
+        <!-- 题目头部元信息 -->
+        <div class="qp-meta-bar">
+          <el-tag :type="getTypeTagType(previewQuestion.type)" size="default" effect="dark">
+            {{ typeMap[previewQuestion.type] || previewQuestion.type }}
+          </el-tag>
+          <span class="qp-diff-stars">难度：{{ '★'.repeat(previewQuestion.difficulty || 3) }}</span>
+          <span class="qp-sub-badge">{{ previewQuestion.subjectName || '系统集成项目管理' }}</span>
+          <span class="qp-ch-badge">{{ previewQuestion.chapterName || previewQuestion.knowledgePoint || '核心考点' }}</span>
+        </div>
+
+        <!-- 题干主体 (完整渲染背景/表格/SVG图表/分小问) -->
+        <div class="qp-section-card">
+          <div class="qp-sec-title">📝 试题题干与背景材料</div>
+          <div class="qp-stem-content" v-html="formatQuestionContent(previewQuestion.content || previewQuestion.title)" />
+        </div>
+
+        <!-- 客观题选项 (如有) -->
+        <div v-if="previewQuestion.options && previewQuestion.options.length" class="qp-section-card">
+          <div class="qp-sec-title">🎯 试题选项</div>
+          <div class="qp-options-list">
+            <div
+              v-for="opt in previewQuestion.options"
+              :key="opt.key || opt.label"
+              class="qp-opt-row"
+              :class="{ 'is-correct': isOptionCorrect(previewQuestion, opt.key || opt.label) }"
+            >
+              <span class="qp-opt-key">{{ opt.key || opt.label }}.</span>
+              <span class="qp-opt-val">{{ opt.content }}</span>
+              <span v-if="isOptionCorrect(previewQuestion, opt.key || opt.label)" class="qp-opt-badge">✓ 正确答案</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 标准答案与参考采分点 -->
+        <div class="qp-section-card ans-card">
+          <div class="qp-sec-title">🎯 标准答案与参考采分点</div>
+          <div class="qp-ans-body" v-html="formatAnalysisHtml(previewQuestion.answer || '详见解析')" />
+        </div>
+
+        <!-- 名师深度解析 -->
+        <div class="qp-section-card ana-card">
+          <div class="qp-sec-title">💡 名师深度解析与避坑指南</div>
+          <div class="qp-ana-body" v-html="formatAnalysisHtml(previewQuestion.analysis)" />
+        </div>
+      </div>
+
+      <template #footer>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <el-button @click="previewDrawerVisible = false">关闭</el-button>
+          <div style="display: flex; gap: 8px">
+            <el-button type="info" plain icon="Edit" @click="handleEditFromPreview">✏️ 编辑修改</el-button>
+            <el-button type="success" icon="Check" @click="handlePublishFromPreview">✓ 审核通过入库</el-button>
+          </div>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -769,6 +866,79 @@ function formatTime(t: string | Date | undefined) {
   if (isNaN(d.getTime())) return String(t)
   const pad = (n: number) => (n < 10 ? '0' + n : n)
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const previewDrawerVisible = ref(false)
+const previewQuestion = ref<any>(null)
+
+function isCaseType(type: string) {
+  if (!type) return false
+  const t = String(type).toLowerCase()
+  return t === 'case' || t === 'case_analysis' || t === 'subjective' || t === 'essay'
+}
+
+function getTypeTagType(type: string) {
+  if (!type) return ''
+  const t = String(type).toLowerCase()
+  if (t === 'single' || t === 'single_choice') return 'primary'
+  if (t === 'multiple' || t === 'multiple_choice') return 'warning'
+  if (t === 'judge' || t === 'true_false') return 'info'
+  if (isCaseType(t)) return 'danger'
+  return ''
+}
+
+function getCaseBriefTitle(content: string) {
+  if (!content) return '综合案例分析与计算'
+  const match = String(content).match(/(?:【案例背景】|【说明】|试题[一二三四五六1-6][（(][^）)]*[）)]|试题[一二三四五六1-6])([^\n\r]+)/)
+  if (match && match[1]) {
+    const clean = match[1].replace(/^[：:\s]+/, '').trim()
+    if (clean.length > 0) return clean.slice(0, 30)
+  }
+  return '综合案例分析与计算大题'
+}
+
+function getCaseSubQuestionCount(content: string) {
+  if (!content) return 3
+  const matches = String(content).match(/(?:【问题\s*\d+】|问题\s*\d+[：:（(]|\(\d+\))/g)
+  return matches ? Math.min(Math.max(matches.length, 2), 5) : 3
+}
+
+function getCaseTextExcerpt(content: string, maxLen = 140) {
+  if (!content) return ''
+  const clean = String(content)
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' [包含专业图表] ')
+    .replace(/\|[^\n\r]+\|/g, '')
+    .replace(/(?:【案例背景】|【说明】)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return clean.length > maxLen ? clean.slice(0, maxLen) + '...' : clean
+}
+
+function openQuestionPreview(row: any) {
+  previewQuestion.value = { ...row }
+  previewDrawerVisible.value = true
+}
+
+function handleEdit(row: any) {
+  openEditDialog(row)
+}
+
+function handlePublishSingle(row: any) {
+  handlePass(row)
+}
+
+function handlePublishFromPreview() {
+  if (previewQuestion.value) {
+    handlePass(previewQuestion.value)
+    previewDrawerVisible.value = false
+  }
+}
+
+function handleEditFromPreview() {
+  if (previewQuestion.value) {
+    openEditDialog(previewQuestion.value)
+    previewDrawerVisible.value = false
+  }
 }
 
 function isOptionCorrect(row: any, key: string) {
@@ -1814,6 +1984,186 @@ onMounted(() => {
 
     tr:hover {
       background: #f0fdf4;
+    }
+  }
+}
+
+/* 案例分析题紧凑卡片样式 */
+.case-card-compact {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .case-compact-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .case-badge {
+      font-weight: 600;
+    }
+
+    .case-brief-topic {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .case-subq-count {
+      font-size: 12px;
+      color: #b45309;
+      background: #fef3c7;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+  }
+
+  .case-compact-excerpt {
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border-left: 3px solid #64748b;
+  }
+
+  .case-compact-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+}
+
+/* 试题全景预览抽屉样式 */
+.q-preview-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 8px 24px 8px;
+
+  .qp-meta-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+
+    .qp-diff-stars {
+      color: #eab308;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .qp-sub-badge,
+    .qp-ch-badge {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #475569;
+    }
+  }
+
+  .qp-section-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+
+    .qp-sec-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .qp-stem-content {
+      font-size: 14px;
+      color: #334155;
+      line-height: 1.8;
+    }
+
+    &.ans-card {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+
+      .qp-sec-title {
+        color: #166534;
+      }
+
+      .qp-ans-body {
+        font-size: 13px;
+        color: #14532d;
+        line-height: 1.7;
+      }
+    }
+
+    &.ana-card {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+
+      .qp-sec-title {
+        color: #1e40af;
+      }
+
+      .qp-ana-body {
+        font-size: 13px;
+        color: #1e3a8a;
+        line-height: 1.7;
+      }
+    }
+  }
+
+  .qp-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .qp-opt-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+
+      &.is-correct {
+        background: #f0fdf4;
+        border-color: #86efac;
+        color: #166534;
+        font-weight: 600;
+      }
+
+      .qp-opt-key {
+        font-weight: 700;
+      }
+
+      .qp-opt-val {
+        flex: 1;
+      }
+
+      .qp-opt-badge {
+        font-size: 12px;
+        color: #16a34a;
+        font-weight: 700;
+      }
     }
   }
 }
