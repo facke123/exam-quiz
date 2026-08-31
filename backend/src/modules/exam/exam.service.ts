@@ -62,6 +62,12 @@ export class ExamService implements OnModuleInit {
         'ALTER TABLE `knowledge_points` ADD COLUMN `core_analysis` LONGTEXT NULL',
         'ALTER TABLE `knowledge_points` ADD COLUMN `memory_tips` TEXT NULL',
         'ALTER TABLE `knowledge_points` ADD COLUMN `question_count` INT NULL DEFAULT 0',
+        'ALTER TABLE `chapters` ADD COLUMN `question_count` INT NULL DEFAULT 0',
+        'ALTER TABLE `questions` ADD COLUMN `chapter_id` BIGINT NULL',
+        'ALTER TABLE `questions` ADD COLUMN `knowledge_point_ids` JSON NULL',
+        'ALTER TABLE `questions` ADD COLUMN `tags` JSON NULL',
+        'ALTER TABLE `questions` MODIFY COLUMN `knowledge_point_ids` JSON NULL',
+        'ALTER TABLE `questions` MODIFY COLUMN `tags` JSON NULL',
       ];
 
       for (const q of alterQueries) {

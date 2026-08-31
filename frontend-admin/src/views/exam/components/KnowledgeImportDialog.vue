@@ -376,14 +376,14 @@ async function confirmBatchImport() {
   saving.value = true
   try {
     const res = await batchImportKnowledge({
-      subjectId: selectedSubjectId.value,
+      subjectId: Number(selectedSubjectId.value || 1),
       chapters: parsedChapters.value,
     })
     ElMessage.success(res?.data?.message || '考点批量入库成功！')
     emit('imported')
     visible.value = false
   } catch (err: any) {
-    ElMessage.error(err.message || '入库失败')
+    ElMessage.error(err.response?.data?.message || err.message || '入库失败，请重试')
   } finally {
     saving.value = false
   }

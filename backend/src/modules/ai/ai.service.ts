@@ -4002,109 +4002,185 @@ ${cleanText.slice(0, 15000)}`;
     kpCount: number;
     questionCount: number;
   }> {
+    // 确保数据库字段结构完整
+    try {
+      await this.knowledgePointRepository.query(
+        'ALTER TABLE `knowledge_points` ADD COLUMN `category_tag` VARCHAR(100) NULL',
+      );
+    } catch {}
+    try {
+      await this.knowledgePointRepository.query(
+        'ALTER TABLE `knowledge_points` ADD COLUMN `source_book` VARCHAR(200) NULL',
+      );
+    } catch {}
+    try {
+      await this.knowledgePointRepository.query(
+        'ALTER TABLE `knowledge_points` ADD COLUMN `importance` VARCHAR(50) NULL DEFAULT "必考"',
+      );
+    } catch {}
+    try {
+      await this.knowledgePointRepository.query(
+        'ALTER TABLE `knowledge_points` ADD COLUMN `core_analysis` LONGTEXT NULL',
+      );
+    } catch {}
+    try {
+      await this.knowledgePointRepository.query(
+        'ALTER TABLE `knowledge_points` ADD COLUMN `memory_tips` TEXT NULL',
+      );
+    } catch {}
+    try {
+      await this.chapterRepository.query(
+        'ALTER TABLE `chapters` ADD COLUMN `question_count` INT NULL DEFAULT 0',
+      );
+    } catch {}
+
+    const targetSubjectId = Number(dto.subjectId || 1);
     let chapterCount = 0;
     let kpCount = 0;
     let questionCount = 0;
 
-    for (let i = 0; i < dto.chapters.length; i++) {
-      const chData = dto.chapters[i];
-      if (!chData.name) continue;
+    const chapters = Array.isArray(dto.chapters) ? dto.chapters : [];
 
-      // 查找或创建章节
-      let chapter = await this.chapterRepository.findOne({
-        where: { subjectId: dto.subjectId, name: chData.name },
-      });
-      if (!chapter) {
-        chapter = this.chapterRepository.create({
-          subjectId: dto.subjectId,
-          name: chData.name,
-          sort: chData.sort || i + 1,
-          questionCount: 0,
+    for (let i = 0; i < chapters.length; i++) {
+      const chData = chapters[i];
+      if (!chData || !chData.name) continue;
+
+      try {
+        // 查找或创建章节
+        let chapter = await this.chapterRepository.findOne({
+          where: { subjectId: targetSubjectId, name: chData.name },
         });
-        chapter = await this.chapterRepository.save(chapter);
-        chapterCount++;
-      }
-
-      if (chData.knowledgePoints && Array.isArray(chData.knowledgePoints)) {
-        for (let j = 0; j < chData.knowledgePoints.length; j++) {
-          const kpItem = chData.knowledgePoints[j];
-          if (!kpItem.name) continue;
-
-          let kp = await this.knowledgePointRepository.findOne({
-            where: { chapterId: Number(chapter.id), name: kpItem.name },
+        if (!chapter) {
+          chapter = this.chapterRepository.create({
+            subjectId: targetSubjectId,
+            name: chData.name,
+            sort: Number(chData.sort) || i + 1,
+            questionCount: 0,
           });
+          chapter = await this.chapterRepository.save(chapter);
+          chapterCount++;
+        }
 
-          const kpPayload = {
-            subjectId: dto.subjectId,
-            chapterId: Number(chapter.id),
-            name: kpItem.name,
-            categoryTag: kpItem.categoryTag || chData.name.replace(/^第\d+章\s*/, ''),
-            sourceBook: kpItem.sourceBook || `《教程》${chData.name}`,
-            importance: kpItem.importance || '必考',
-            coreAnalysis: kpItem.coreAnalysis || '',
-            memoryTips: kpItem.memoryTips || '',
-            tags: kpItem.tags || [],
-            sort: kpItem.sort || j + 1,
-            questionCount: kpItem.questions?.length || 0,
-          };
+        if (chData.knowledgePoints && Array.isArray(chData.knowledgePoints)) {
+          for (let j = 0; j < chData.knowledgePoints.length; j++) {
+            const kpItem = chData.knowledgePoints[j];
+            if (!kpItem || !kpItem.name) continue;
 
-          if (kp) {
-            Object.assign(kp, kpPayload);
-            kp = await this.knowledgePointRepository.save(kp);
-          } else {
-            const newKp = this.knowledgePointRepository.create(kpPayload as any);
-            kp = (await this.knowledgePointRepository.save(newKp)) as unknown as KnowledgePoint;
-            kpCount++;
-          }
-
-          // 保存/关联配套例题
-          if (kpItem.questions && Array.isArray(kpItem.questions) && kpItem.questions.length > 0) {
-            for (const qItem of kpItem.questions) {
-              if (!qItem.content) continue;
-              let q = await this.questionRepository.findOne({
-                where: { subjectId: dto.subjectId, content: qItem.content },
-              });
-              const qData = {
-                subjectId: dto.subjectId,
-                chapterId: Number(chapter.id),
-                knowledgePointIds: [Number(kp.id)],
-                type: qItem.type || 'single_choice',
-                difficulty: qItem.difficulty || 3,
-                content: qItem.content,
-                options: qItem.options || [],
-                answer: qItem.answer || 'A',
-                analysis: qItem.analysis || '',
-                tags: [kp.name],
-                source: 'ai',
-                status: 'published',
-              };
-              if (!q) {
-                await this.questionRepository.save(this.questionRepository.create(qData as any));
-                questionCount++;
-              } else {
-                const currentKpIds = Array.isArray(q.knowledgePointIds) ? q.knowledgePointIds : [];
-                q.knowledgePointIds = Array.from(new Set([...currentKpIds, Number(kp.id)]));
-                if (qItem.options && (!q.options || q.options.length === 0)) q.options = qItem.options;
-                if (qItem.analysis && !q.analysis) q.analysis = qItem.analysis;
-                await this.questionRepository.save(q);
+            try {
+              let kp: KnowledgePoint | null = null;
+              try {
+                kp = await this.knowledgePointRepository.findOne({
+                  where: { chapterId: Number(chapter.id), name: kpItem.name },
+                });
+              } catch (e: any) {
+                this.logger.warn(`查询知识点提示: ${e.message}`);
               }
+
+              const kpPayload = {
+                subjectId: targetSubjectId,
+                chapterId: Number(chapter.id),
+                name: String(kpItem.name).trim(),
+                categoryTag: String(kpItem.categoryTag || chData.name.replace(/^第\d+章\s*/, '')).trim(),
+                sourceBook: String(kpItem.sourceBook || `《系统集成项目管理工程师教程》${chData.name}`).trim(),
+                importance: String(kpItem.importance || '必考'),
+                coreAnalysis: String(kpItem.coreAnalysis || ''),
+                memoryTips: String(kpItem.memoryTips || ''),
+                tags: Array.isArray(kpItem.tags) ? kpItem.tags : [],
+                sort: Number(kpItem.sort) || j + 1,
+                questionCount: Array.isArray(kpItem.questions) ? kpItem.questions.length : 0,
+              };
+
+              if (kp) {
+                Object.assign(kp, kpPayload);
+                kp = await this.knowledgePointRepository.save(kp);
+              } else {
+                const newKp = this.knowledgePointRepository.create(kpPayload as any);
+                kp = (await this.knowledgePointRepository.save(newKp)) as unknown as KnowledgePoint;
+                kpCount++;
+              }
+
+              // 保存/关联配套例题（全容错）
+              if (kp && kpItem.questions && Array.isArray(kpItem.questions) && kpItem.questions.length > 0) {
+                for (const qItem of kpItem.questions) {
+                  if (!qItem || !qItem.content) continue;
+                  try {
+                    let existingQuestion: Question | null = null;
+                    try {
+                      existingQuestion = await this.questionRepository.findOne({
+                        where: {
+                          subjectId: targetSubjectId,
+                          chapterId: Number(chapter.id),
+                          content: qItem.content,
+                        },
+                      });
+                    } catch {}
+
+                    const qPayload = {
+                      subjectId: targetSubjectId,
+                      chapterId: Number(chapter.id),
+                      knowledgePointIds: [Number(kp.id)],
+                      type: qItem.type || 'single_choice',
+                      difficulty: Number(qItem.difficulty) || 3,
+                      content: qItem.content,
+                      options: Array.isArray(qItem.options) ? qItem.options : [],
+                      answer: String(qItem.answer || 'A').trim(),
+                      analysis: String(qItem.analysis || ''),
+                      tags: [kp.name],
+                      source: 'ai',
+                      status: 'published',
+                    };
+
+                    if (!existingQuestion) {
+                      await this.questionRepository.save(
+                        this.questionRepository.create(qPayload as any),
+                      );
+                      questionCount++;
+                    } else {
+                      const currentKpIds = Array.isArray(existingQuestion.knowledgePointIds)
+                        ? existingQuestion.knowledgePointIds
+                        : [];
+                      existingQuestion.knowledgePointIds = Array.from(
+                        new Set([...currentKpIds, Number(kp.id)]),
+                      );
+                      if (
+                        qPayload.options.length > 0 &&
+                        (!existingQuestion.options || existingQuestion.options.length === 0)
+                      ) {
+                        existingQuestion.options = qPayload.options;
+                      }
+                      if (qPayload.analysis && !existingQuestion.analysis) {
+                        existingQuestion.analysis = qPayload.analysis;
+                      }
+                      await this.questionRepository.save(existingQuestion);
+                    }
+                  } catch (qErr: any) {
+                    this.logger.warn(`保存试题异常（已跳过单题）: ${qErr.message}`);
+                  }
+                }
+              }
+            } catch (kpErr: any) {
+              this.logger.error(`保存知识点【${kpItem.name}】失败: ${kpErr.message}`);
             }
           }
         }
-      }
 
-      // 更新章节题目统计
-      const chapterQCount = await this.questionRepository.count({
-        where: { chapterId: Number(chapter.id) },
-      });
-      chapter.questionCount = chapterQCount;
-      await this.chapterRepository.save(chapter);
+        // 更新章节题目统计
+        try {
+          const chapterQCount = await this.questionRepository.count({
+            where: { chapterId: Number(chapter.id) },
+          });
+          chapter.questionCount = chapterQCount;
+          await this.chapterRepository.save(chapter);
+        } catch {}
+      } catch (cErr: any) {
+        this.logger.error(`保存章节【${chData.name}】失败: ${cErr.message}`);
+      }
     }
 
     return {
       success: true,
-      message: `成功入库：${dto.chapters.length} 个章节，${kpCount} 个新考点，${questionCount} 道精选题`,
-      chapterCount: dto.chapters.length,
+      message: `成功入库：${chapters.length} 个章节，${kpCount} 个新考点，${questionCount} 道精选题`,
+      chapterCount: chapters.length,
       kpCount,
       questionCount,
     };
