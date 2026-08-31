@@ -100,7 +100,12 @@
         <div class="sum-item">📚 识别章节：<strong>{{ parsedChapters.length }}</strong> 个</div>
         <div class="sum-item">💡 提炼考点：<strong>{{ totalKpCount }}</strong> 个</div>
         <div class="sum-item">🎯 配套例题：<strong>{{ totalQuestionCount }}</strong> 道</div>
-        <el-button size="small" @click="currentStep = 1">‹ 重新解析</el-button>
+        <div class="summary-actions">
+          <el-button size="small" @click="toggleAllChapters">
+            {{ isAllExpanded ? '📁 全部折叠' : '📂 全部展开' }}
+          </el-button>
+          <el-button size="small" @click="currentStep = 1">‹ 重新解析</el-button>
+        </div>
       </div>
 
       <div class="chapter-accordion">
@@ -109,17 +114,25 @@
           :key="cIdx"
           class="chapter-card"
         >
-          <div class="chap-header">
+          <div class="chap-header" @click="toggleChapter(cIdx)">
             <div class="chap-title">
               <span class="chap-badge">第 {{ cIdx + 1 }} 章</span>
-              <el-input v-model="chap.name" size="small" style="width: 320px;" />
+              <el-input
+                v-model="chap.name"
+                size="small"
+                style="width: 320px;"
+                @click.stop
+              />
             </div>
-            <div class="chap-count">
-              包含 {{ chap.knowledgePoints ? chap.knowledgePoints.length : 0 }} 个考点
+            <div class="chap-right-ctrl">
+              <span class="chap-count">
+                共 <strong>{{ chap.knowledgePoints ? chap.knowledgePoints.length : 0 }}</strong> 个考点
+              </span>
+              <span class="expand-arrow">{{ expandedChapters[cIdx] ? '▲ 收起' : '▼ 展开' }}</span>
             </div>
           </div>
 
-          <div class="kp-list">
+          <div v-if="expandedChapters[cIdx]" class="kp-list">
             <div
               v-for="(kp, kIdx) in chap.knowledgePoints"
               :key="kIdx"
@@ -224,6 +237,23 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const parsingPercent = ref(20)
 const saving = ref(false)
 const parsedChapters = ref<any[]>([])
+const expandedChapters = reactive<Record<number, boolean>>({})
+
+const isAllExpanded = computed(() => {
+  if (parsedChapters.value.length === 0) return false
+  return parsedChapters.value.every((_, idx) => expandedChapters[idx])
+})
+
+function toggleChapter(idx: number) {
+  expandedChapters[idx] = !expandedChapters[idx]
+}
+
+function toggleAllChapters() {
+  const target = !isAllExpanded.value
+  parsedChapters.value.forEach((_, idx) => {
+    expandedChapters[idx] = target
+  })
+}
 
 watch(
   () => props.subjectId,
@@ -316,6 +346,10 @@ async function startAiParse() {
     parsingPercent.value = 100
     if (res?.data?.chapters && Array.isArray(res.data.chapters) && res.data.chapters.length > 0) {
       parsedChapters.value = res.data.chapters
+      Object.keys(expandedChapters).forEach((k) => delete expandedChapters[Number(k)])
+      // 默认展开前 2 章
+      expandedChapters[0] = true
+      if (res.data.chapters.length > 1) expandedChapters[1] = true
       currentStep.value = 3
       ElMessage.success(`AI 提炼成功！已识别 ${res.data.chapters.length} 个章节，共 ${totalKpCount.value} 个考点`)
     } else {
@@ -530,7 +564,14 @@ async function confirmBatchImport() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 12px;
+          padding: 6px 10px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background-color 0.2s;
+
+          &:hover {
+            background-color: var(--el-fill-color-light);
+          }
 
           .chap-title {
             display: flex;
@@ -547,9 +588,25 @@ async function confirmBatchImport() {
             }
           }
 
-          .chap-count {
-            font-size: 12px;
-            color: var(--el-text-color-secondary);
+          .chap-right-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+
+            .chap-count {
+              font-size: 12px;
+              color: var(--el-text-color-secondary);
+
+              strong {
+                color: var(--el-color-primary);
+              }
+            }
+
+            .expand-arrow {
+              font-size: 12px;
+              color: var(--el-color-primary);
+              font-weight: 600;
+            }
           }
         }
 
