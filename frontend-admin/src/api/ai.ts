@@ -70,6 +70,7 @@ export function generateQuestions(data: AIGenerateParams) {
   return request<{ taskId: number; count: number; questions: any[] }>({
     url: '/admin/ai/generate',
     method: 'post',
+    timeout: 120000,
     data,
   })
 }
@@ -84,6 +85,7 @@ export function generateEntirePaper(data: AIGeneratePaperParams) {
   }>({
     url: '/admin/ai/generate-paper',
     method: 'post',
+    timeout: 180000,
     data,
   })
 }
@@ -189,6 +191,7 @@ export function aiImport(data: { subjectId: number; content: string; model?: str
   return request<{ questions: AIQuestion[] }>({
     url: '/admin/ai/import',
     method: 'post',
+    timeout: 120000,
     data,
   })
 }
@@ -253,6 +256,7 @@ export function parseSyllabus(data: { subjectId: number; content: string; model?
   }>({
     url: '/admin/ai/parse-syllabus',
     method: 'post',
+    timeout: 120000,
     data,
   })
 }
@@ -354,6 +358,7 @@ export function parseQuestions(data: { subjectId: number; content: string; model
   }>({
     url: '/admin/ai/parse-questions',
     method: 'post',
+    timeout: 120000,
     data,
   })
 }

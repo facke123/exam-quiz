@@ -274,6 +274,7 @@ export function parseWordKnowledge(formData: FormData) {
     url: '/admin/ai/knowledge/parse-word',
     method: 'post',
     data: formData,
+    timeout: 180000, // 3分钟超时，支持大篇幅讲义及大模型深度解析
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -293,6 +294,7 @@ export function batchImportKnowledge(data: {
   }>({
     url: '/admin/ai/knowledge/batch-import',
     method: 'post',
+    timeout: 120000,
     data,
   })
 }

@@ -537,7 +537,7 @@ export class AiService implements OnModuleInit {
           path: `${parsedUrl.pathname}${parsedUrl.search}`,
           method: 'POST',
           headers,
-          timeout: 35000, // 35s 超时
+          timeout: 120000, // 120s 超时
         },
         (res) => {
           let responseData = '';
@@ -581,7 +581,7 @@ export class AiService implements OnModuleInit {
       req.on('error', (err) => reject(err));
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('请求大模型 API 超时（35秒）'));
+        reject(new Error('请求大模型 API 超时（120秒）'));
       });
 
       req.write(postData);

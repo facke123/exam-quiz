@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <el-dialog
     v-model="visible"
     title="📥 Word 文档 / 讲义大纲 AI 智能考点提炼与导入"
@@ -89,9 +89,9 @@
       <div class="ai-loader-spinner" />
       <div class="ai-loader-title">🤖 大模型正在深度提炼教材考点与逻辑框架...</div>
       <div class="ai-loader-desc">
-        正在解析文档结构、归纳章节、提取核心知识点、编写押韵速记口诀及生成配套例题，通常需要 5~15 秒，请稍候。
+        正在解析文档结构、归纳章节、提取核心知识点、编写押韵速记口诀及生成配套例题，通常需要 10~30 秒，请稍候。
       </div>
-      <el-progress :percentage="parsingPercent" :indeterminate="true" style="width: 60%; margin-top: 20px;" />
+      <el-progress :percentage="parsingPercent" style="width: 60%; margin-top: 20px;" />
     </div>
 
     <!-- 步骤 3: 预览与微调 -->
@@ -284,6 +284,8 @@ D. 风险开拓
 解析：将风险后果转移给第三方（如签固定总价合同外包），属于风险转移策略。`
 }
 
+let progressInterval: any = null
+
 async function startAiParse() {
   if (!selectedSubjectId.value) {
     ElMessage.warning('请先选择目标科目')
@@ -291,7 +293,15 @@ async function startAiParse() {
   }
 
   currentStep.value = 2
-  parsingPercent.value = 35
+  parsingPercent.value = 15
+
+  // 进度平滑递增
+  if (progressInterval) clearInterval(progressInterval)
+  progressInterval = setInterval(() => {
+    if (parsingPercent.value < 90) {
+      parsingPercent.value += Math.floor(Math.random() * 5) + 3
+    }
+  }, 1000)
 
   try {
     const formData = new FormData()
@@ -303,17 +313,23 @@ async function startAiParse() {
     }
 
     const res = await parseWordKnowledge(formData)
+    parsingPercent.value = 100
     if (res?.data?.chapters && Array.isArray(res.data.chapters) && res.data.chapters.length > 0) {
       parsedChapters.value = res.data.chapters
       currentStep.value = 3
-      ElMessage.success(`AI 提炼成功！已识别 ${res.data.chapters.length} 个章节`)
+      ElMessage.success(`AI 提炼成功！已识别 ${res.data.chapters.length} 个章节，共 ${totalKpCount.value} 个考点`)
     } else {
       ElMessage.error('AI 解析未识别出有效考点，请检查文档内容')
       currentStep.value = 1
     }
   } catch (err: any) {
-    ElMessage.error(err.message || 'AI 提炼解析失败')
+    ElMessage.error(err.message || 'AI 提炼解析失败，请检查文件格式或网络')
     currentStep.value = 1
+  } finally {
+    if (progressInterval) {
+      clearInterval(progressInterval)
+      progressInterval = null
+    }
   }
 }
 

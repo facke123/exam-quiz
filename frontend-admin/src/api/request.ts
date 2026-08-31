@@ -5,7 +5,7 @@ import type { ApiResponse } from '@/types/api'
 
 const service: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 15000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -49,6 +49,8 @@ service.interceptors.response.use(
       ElMessage.error('没有权限访问该资源')
     } else if (status === 500) {
       ElMessage.error('服务器内部错误')
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      ElMessage.error('请求超时：AI 深度运算或文档解析耗时较长，请稍后重试或检查文件大小')
     } else {
       ElMessage.error(error.message || '网络异常')
     }
