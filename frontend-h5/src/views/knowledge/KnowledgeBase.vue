@@ -2,17 +2,31 @@
   <div class="knowledge-page">
     <!-- 顶部导航栏 -->
     <div class="kb-navbar">
-      <div class="nav-left" @click="$router.back()">
+      <!-- 移动端详情模式下的返回按钮 -->
+      <div v-if="isMobile && mobileView === 'detail'" class="nav-left" @click="backToList">
+        <span class="back-icon">‹</span>
+        <span class="nav-title">返回列表</span>
+      </div>
+      <!-- 默认返回上一页 -->
+      <div v-else class="nav-left" @click="$router.back()">
         <span class="back-icon">‹</span>
         <span class="nav-title">考点知识库</span>
       </div>
+
       <div class="nav-right">
-        <span class="subject-badge">{{ currentSubjectName }}</span>
+        <span
+          v-if="isMobile && mobileView === 'detail'"
+          class="quick-quiz-tag"
+          @click="selectedKp && startTargetedQuiz(selectedKp)"
+        >
+          ⚡ 专项刷题
+        </span>
+        <span v-else class="subject-badge">{{ currentSubjectName }}</span>
       </div>
     </div>
 
-    <!-- 顶部搜索框 (还原设计) -->
-    <div class="search-section">
+    <!-- 顶部搜索框 (仅在列表视图或PC展示) -->
+    <div v-if="!isMobile || mobileView === 'list'" class="search-section">
       <div class="search-box">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="11" cy="11" r="8"></circle>
@@ -29,8 +43,8 @@
       </div>
     </div>
 
-    <!-- 章节与分类横向过滤标签 -->
-    <div class="categories-bar">
+    <!-- 章节与分类横向过滤标签 (仅在列表视图或PC展示) -->
+    <div v-if="!isMobile || mobileView === 'list'" class="categories-bar">
       <div class="category-scroll">
         <div
           v-for="cat in categories"
@@ -44,10 +58,10 @@
       </div>
     </div>
 
-    <!-- 主体内容区 (PC 两栏布局 / 移动端流式列表) -->
-    <div class="kb-content-container">
-      <!-- 左侧：考点列表 -->
-      <div class="kb-list-pane">
+    <!-- 主体内容区 (PC 宽屏两栏 / 移动端流式单栏切换) -->
+    <div class="kb-main-wrapper" :class="{ 'mobile-mode': isMobile }">
+      <!-- 考点卡片列表 (PC端固定左侧，手机端列表模式时100%全宽展示) -->
+      <div v-if="!isMobile || mobileView === 'list'" class="kb-list-pane">
         <!-- 列表状态 -->
         <div v-if="loading && knowledgeList.length === 0" class="loading-box">
           <van-loading type="spinner" color="#0284c7">加载知识点中...</van-loading>
@@ -77,13 +91,16 @@
               </span>
             </div>
             <h4 class="card-title">{{ item.name }}</h4>
-            <div class="card-source">{{ item.sourceBook || '《教程》重点考点' }}</div>
+            <div class="card-footer-row">
+              <span class="card-source">{{ item.sourceBook || '《教程》重点考点' }}</span>
+              <span class="card-arrow-btn">查看解析 ›</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 右侧：考点重点分析详情区 (PC 桌面展示) -->
-      <div class="kb-detail-pane pc-only">
+      <!-- 考点深度分析详情区 (PC端固定右侧，手机端详情模式时100%全宽展示) -->
+      <div v-if="!isMobile || mobileView === 'detail'" class="kb-detail-pane">
         <div v-if="selectedKp" class="detail-wrapper">
           <!-- 头部标签与大标题 -->
           <div class="detail-header">
@@ -194,6 +211,19 @@
               暂无匹配试题，点击上方按钮即可通过 AI 专项抽题。
             </div>
           </div>
+
+          <!-- 移动端底部的上一考点/下一考点快捷翻页栏 -->
+          <div v-if="isMobile" class="mobile-pagination-bar">
+            <button class="page-nav-btn" :disabled="!hasPrevKp" @click="goToPrevKp">
+              ‹ 上一考点
+            </button>
+            <button class="page-quiz-btn" @click="selectedKp && startTargetedQuiz(selectedKp)">
+              ⚡ 立即刷题
+            </button>
+            <button class="page-nav-btn" :disabled="!hasNextKp" @click="goToNextKp">
+              下一考点 ›
+            </button>
+          </div>
         </div>
 
         <div v-else class="no-selection-placeholder">
@@ -202,120 +232,11 @@
         </div>
       </div>
     </div>
-
-    <!-- 移动端考点详情弹出抽屉 (手机端显示) -->
-    <van-popup
-      v-model:show="mobileDetailVisible"
-      position="bottom"
-      round
-      closeable
-      :style="{ height: '90%', display: 'flex', flexDirection: 'column' }"
-      class="mobile-detail-popup"
-    >
-      <div v-if="selectedKp" class="mobile-detail-container">
-        <div class="mobile-detail-scroll">
-          <div class="detail-tags-row">
-            <span class="dt-tag cat-pill">{{ selectedKp.categoryTag || '核心考点' }}</span>
-            <span class="dt-tag source-pill">{{ selectedKp.sourceBook || '《教程》重点考点' }}</span>
-            <span class="dt-tag level-pill" :class="getImportanceClass(selectedKp.importance)">
-              考点级别: {{ selectedKp.importance || '必考' }}
-            </span>
-          </div>
-
-          <h2 class="mobile-detail-title">{{ selectedKp.name }}</h2>
-
-          <!-- 📖 教材考点提炼与逻辑框架 -->
-          <div class="section-card framework-card">
-            <div class="sec-title">
-              <span class="sec-icon">📖</span>
-              <span>教材考点提炼与逻辑框架</span>
-            </div>
-            <div class="sec-body" v-html="formatContent(selectedKp.coreAnalysis, selectedKp)"></div>
-          </div>
-
-          <!-- 💡 记忆口诀与冲刺速记技巧 -->
-          <div class="section-card memory-card">
-            <div class="sec-title">
-              <span class="sec-icon">💡</span>
-              <span>记忆口诀与冲刺速记技巧</span>
-            </div>
-            <div class="memory-content">
-              {{ getEffectiveMemoryTips(selectedKp) }}
-            </div>
-          </div>
-
-          <!-- 🔮 配套精选试题与答案深度解析 -->
-          <div class="section-card questions-section">
-            <div class="sec-title purple-title">
-              <span class="sec-icon">🔮</span>
-              <span>配套精选试题与答案深度解析</span>
-            </div>
-
-            <div v-if="questionsList.length > 0" class="exam-questions-list">
-              <div
-                v-for="(q, qIdx) in questionsList"
-                :key="q.id || qIdx"
-                class="example-question-box"
-              >
-                <div class="eq-badge-row" @click="toggleQuestionExpand(qIdx)">
-                  <div class="eq-badges">
-                    <span class="eq-num-tag">例题 {{ qIdx + 1 }}</span>
-                    <span class="eq-type-tag">{{ getQuestionTypeName(q.type) }}</span>
-                  </div>
-                  <span class="eq-toggle-arrow">{{ expandedQuestions[qIdx] ? '▲' : '▼' }}</span>
-                </div>
-
-                <div class="eq-stem">{{ q.content }}</div>
-
-                <div v-if="q.options && q.options.length" class="eq-options-grid">
-                  <div
-                    v-for="opt in q.options"
-                    :key="opt.key"
-                    class="eq-option-btn"
-                    :class="{
-                      selected: userAnswers[qIdx] === opt.key,
-                      correct: userAnswers[qIdx] && opt.key === q.answer,
-                      wrong: userAnswers[qIdx] === opt.key && opt.key !== q.answer,
-                    }"
-                    @click="handleSelectOption(qIdx, opt.key)"
-                  >
-                    <span class="opt-key">{{ opt.key }}</span>
-                    <span class="opt-content">{{ opt.content }}</span>
-                  </div>
-                </div>
-
-                <div v-if="expandedQuestions[qIdx] || userAnswers[qIdx]" class="eq-analysis-box">
-                  <div class="ans-row">
-                    <span class="ans-label">正确答案：</span>
-                    <span class="ans-text">{{ q.answer }}</span>
-                  </div>
-                  <div class="analysis-body">
-                    <div class="analysis-label">深度解析：</div>
-                    <div class="analysis-text">{{ q.analysis || '详见教材对应知识点逻辑框架。' }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 移动端底部吸底刷题按钮 -->
-        <div class="mobile-footer-bar">
-          <div class="m-footer-info">
-            <span>配套精选题: <strong>{{ questionsList.length || selectedKp.questionCount || 1 }}</strong> 道</span>
-          </div>
-          <button class="quiz-action-btn mobile-btn" @click="startTargetedQuiz(selectedKp)">
-            <span class="btn-icon">⚡</span>
-            <span>一键专项刷题</span>
-          </button>
-        </div>
-      </div>
-    </van-popup>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
@@ -334,13 +255,28 @@ const currentSubjectName = computed(() => {
   return cur ? cur.name.replace(/系统集成项目管理工程师/, '集成').replace(/信息系统项目管理师/, '高项') : '软考'
 })
 
+// 屏幕宽度自适应与移动端视图模式
+const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const isMobile = computed(() => windowWidth.value < 900)
+const mobileView = ref<'list' | 'detail'>('list')
+
+function handleResize() {
+  if (typeof window !== 'undefined') {
+    windowWidth.value = window.innerWidth
+  }
+}
+
+function backToList() {
+  mobileView.value = 'list'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 const loading = ref(false)
 const knowledgeList = ref<KnowledgePointItem[]>([])
 const categories = ref<string[]>(['全部'])
 const selectedCategory = ref<string>('全部')
 const searchKeyword = ref<string>('')
 const selectedKp = ref<KnowledgePointItem | null>(null)
-const mobileDetailVisible = ref(false)
 
 // 配套例题列表与交互状态
 const questionsList = ref<any[]>([])
@@ -375,6 +311,29 @@ const filteredList = computed(() => {
 
   return list
 })
+
+// 当前选中考点在列表中的序号与翻页计算
+const currentKpIndex = computed(() => {
+  if (!selectedKp.value) return -1
+  return filteredList.value.findIndex((item) => item.id === selectedKp.value?.id)
+})
+
+const hasPrevKp = computed(() => currentKpIndex.value > 0)
+const hasNextKp = computed(() => currentKpIndex.value >= 0 && currentKpIndex.value < filteredList.value.length - 1)
+
+function goToPrevKp() {
+  if (hasPrevKp.value) {
+    handleSelectKp(filteredList.value[currentKpIndex.value - 1])
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
+function goToNextKp() {
+  if (hasNextKp.value) {
+    handleSelectKp(filteredList.value[currentKpIndex.value + 1])
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
 
 function getImportanceClass(level?: string) {
   if (!level) return 'level-must'
@@ -413,9 +372,11 @@ function handleSelectOption(qIdx: number, optKey: string) {
 
 async function handleSelectKp(item: KnowledgePointItem) {
   selectedKp.value = item
-  if (typeof window !== 'undefined' && window.innerWidth < 960) {
-    mobileDetailVisible.value = true
+  if (isMobile.value) {
+    mobileView.value = 'detail'
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
   // 重置作答与展开状态
   Object.keys(userAnswers).forEach((k) => delete userAnswers[Number(k)])
   Object.keys(expandedQuestions).forEach((k) => delete expandedQuestions[Number(k)])
@@ -563,7 +524,10 @@ async function loadKnowledgeData() {
       }
 
       if (knowledgeList.value.length > 0) {
-        handleSelectKp(knowledgeList.value[0])
+        selectedKp.value = knowledgeList.value[0]
+        if (!isMobile.value) {
+          handleSelectKp(knowledgeList.value[0])
+        }
       }
     }
   } catch (err: any) {
@@ -574,10 +538,20 @@ async function loadKnowledgeData() {
 }
 
 onMounted(async () => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', handleResize)
+    windowWidth.value = window.innerWidth
+  }
   if (subjectStore.subjectList.length === 0) {
     await subjectStore.fetchSubjects()
   }
   await loadKnowledgeData()
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleResize)
+  }
 })
 </script>
 
@@ -616,7 +590,7 @@ onMounted(async () => {
     }
 
     .nav-title {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 700;
       color: #0f172a;
     }
@@ -630,6 +604,17 @@ onMounted(async () => {
       font-weight: 700;
       padding: 3px 8px;
       border-radius: 6px;
+    }
+
+    .quick-quiz-tag {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
     }
   }
 }
@@ -731,8 +716,8 @@ onMounted(async () => {
   }
 }
 
-/* 主体容器 */
-.kb-content-container {
+/* 主体容器 (PC 宽屏两栏 / 移动端流式单栏) */
+.kb-main-wrapper {
   flex: 1;
   display: flex;
   max-width: 1360px;
@@ -741,6 +726,12 @@ onMounted(async () => {
   padding: 20px 24px;
   gap: 24px;
   align-items: flex-start;
+  box-sizing: border-box;
+
+  &.mobile-mode {
+    padding: 12px 14px 40px;
+    display: block;
+  }
 }
 
 /* 左侧考点卡片列表 */
@@ -753,6 +744,15 @@ onMounted(async () => {
   overflow-y: auto;
   scrollbar-width: thin;
   padding-right: 4px;
+  box-sizing: border-box;
+
+  .mobile-mode & {
+    width: 100%;
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
 
   .kp-cards-list {
     display: flex;
@@ -762,22 +762,23 @@ onMounted(async () => {
 
   .kp-card {
     background: #ffffff;
-    border-radius: 12px;
-    padding: 14px 16px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    border-radius: 14px;
+    padding: 16px;
+    border: 1.5px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease-in-out;
 
     &:hover {
       border-color: #93c5fd;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08);
     }
 
     &.active {
       border-color: #0284c7;
       background: #f0f9ff;
-      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.25);
     }
 
     .card-header-row {
@@ -791,15 +792,15 @@ onMounted(async () => {
         color: #0284c7;
         background: #e0f2fe;
         padding: 2px 8px;
-        border-radius: 4px;
-        font-weight: 600;
+        border-radius: 6px;
+        font-weight: 700;
       }
 
       .importance-badge {
         font-size: 11px;
         font-weight: 700;
         padding: 2px 8px;
-        border-radius: 4px;
+        border-radius: 6px;
         display: flex;
         align-items: center;
         gap: 3px;
@@ -823,15 +824,27 @@ onMounted(async () => {
 
     .card-title {
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 800;
       color: #0f172a;
-      line-height: 1.4;
-      margin: 0 0 6px;
+      line-height: 1.45;
+      margin: 0 0 8px;
     }
 
-    .card-source {
-      font-size: 11px;
-      color: #64748b;
+    .card-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      .card-source {
+        font-size: 11.5px;
+        color: #64748b;
+      }
+
+      .card-arrow-btn {
+        font-size: 12px;
+        color: #0284c7;
+        font-weight: 700;
+      }
     }
   }
 
@@ -840,7 +853,7 @@ onMounted(async () => {
     text-align: center;
     padding: 40px 20px;
     background: #ffffff;
-    border-radius: 12px;
+    border-radius: 14px;
     color: #64748b;
   }
 
@@ -855,17 +868,19 @@ onMounted(async () => {
   }
 }
 
-/* 右侧详情面板 */
+/* 详情面板 */
 .kb-detail-pane {
-  flex: 1.4;
+  flex: 1;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 
   .detail-wrapper {
     background: #ffffff;
-    border-radius: 14px;
-    padding: 22px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1.5px solid #e2e8f0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
     display: flex;
     flex-direction: column;
     gap: 18px;
@@ -877,12 +892,12 @@ onMounted(async () => {
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
 
       .dt-tag {
-        font-size: 11px;
-        font-weight: 600;
-        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
         border-radius: 6px;
 
         &.cat-pill {
@@ -917,7 +932,7 @@ onMounted(async () => {
       font-weight: 800;
       color: #0f172a;
       margin: 0;
-      line-height: 1.3;
+      line-height: 1.35;
     }
   }
 
@@ -1302,89 +1317,56 @@ onMounted(async () => {
   }
 
   .no-questions-tip {
-    font-size: 12px;
+    font-size: 13px;
     color: #94a3b8;
     text-align: center;
-    padding: 16px;
+    padding: 20px;
   }
 }
 
-/* 移动端详情抽屉 */
-.mobile-detail-popup {
-  .mobile-detail-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: #ffffff;
+/* 移动端底部分页切换工具栏 */
+.mobile-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e8f0;
 
-    .mobile-detail-scroll {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px 16px 80px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+  .page-nav-btn {
+    flex: 1;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
 
-      .mobile-detail-title {
-        font-size: 18px;
-        font-weight: 800;
-        color: #0f172a;
-        margin: 0;
-        line-height: 1.35;
-      }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
 
-    .mobile-footer-bar {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #ffffff;
-      padding: 10px 16px;
-      border-top: 1px solid #f1f5f9;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-
-      .m-footer-info {
-        font-size: 12px;
-        color: #64748b;
-        strong {
-          color: #10b981;
-          font-size: 15px;
-        }
-      }
-
-      .mobile-btn {
-        padding: 8px 16px;
-        font-size: 13px;
-      }
+    &:active:not(:disabled) {
+      background: #e2e8f0;
     }
   }
-}
 
-/* 响应式控制 */
-.pc-only {
-  display: block;
-}
-
-@media (max-width: 960px) {
-  .pc-only {
-    display: none !important;
-  }
-
-  .kb-content-container {
-    padding: 12px;
-    display: block;
-  }
-
-  .kb-list-pane {
-    width: 100%;
-    position: static;
-    max-height: none;
-    overflow-y: visible;
-    padding-right: 0;
+  .page-quiz-btn {
+    flex: 1.2;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: #ffffff;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
   }
 }
 </style>
