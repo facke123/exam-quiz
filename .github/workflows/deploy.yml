@@ -69,11 +69,13 @@ jobs:
             cd "$TARGET_DIR/docker"
             echo ">>> 重新构建并启动服务容器..."
             if [ -f "docker-compose.gcp.yml" ]; then
-              docker compose -f docker-compose.gcp.yml up -d --build
+              docker compose -f docker-compose.gcp.yml up -d --build --force-recreate
+              docker compose -f docker-compose.gcp.yml restart gateway
             elif [ -f "docker-compose.prod.yml" ]; then
-              docker compose -f docker-compose.prod.yml up -d --build
+              docker compose -f docker-compose.prod.yml up -d --build --force-recreate
+              docker compose -f docker-compose.prod.yml restart gateway
             else
-              docker compose up -d --build
+              docker compose up -d --build --force-recreate
             fi
             
             # 4. 清理旧构建缓存与无用悬空镜像
