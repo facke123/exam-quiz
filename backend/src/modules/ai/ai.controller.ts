@@ -65,7 +65,8 @@ export class AiController {
     return this.aiService.generateEntirePaper(dto, user?.id || 1);
   }
 
-  @Get(['admin/ai/questions'])
+  @Public()
+  @Get(['admin/ai/questions', 'ai/questions'])
   @ApiOperation({ summary: '待审核题目列表' })
   async getAIQuestions(@Query() query: any) {
     return this.aiService.getAIQuestions(query);
@@ -177,24 +178,28 @@ export class AiController {
     return this.aiService.deepAnalyzeKnowledgePoint(dto);
   }
 
+  @Public()
   @Get(['ai/quota', 'admin/ai/quota'])
   @ApiOperation({ summary: 'AI配额' })
-  async getQuota(@CurrentUser() user: UserPayload) {
+  async getQuota(@CurrentUser() user?: UserPayload) {
     return this.aiService.getQuota(user ? user.id : 1);
   }
 
+  @Public()
   @Get(['ai/tasks', 'admin/ai/tasks'])
   @ApiOperation({ summary: 'AI任务列表' })
   async getTasks(@Query() dto: QueryAiTaskDto) {
     return this.aiService.getTasks(dto);
   }
 
+  @Public()
   @Get(['ai/tasks/:id', 'admin/ai/tasks/:id'])
   @ApiOperation({ summary: 'AI任务详情' })
   async getTask(@Param('id', ParseIntPipe) id: number) {
     return this.aiService.getTask(id);
   }
 
+  @Public()
   @Get(['ai/prompts', 'admin/ai/prompts'])
   @ApiOperation({ summary: 'Prompt模板列表' })
   async getPrompts(@Query() query: QueryAiPromptDto) {

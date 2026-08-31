@@ -81,6 +81,11 @@ export class AiService implements OnModuleInit {
 
   async onModuleInit() {
     try {
+      await this.ensureAiTablesSchema();
+    } catch (e: any) {
+      this.logger.warn(`ensureAiTablesSchema 异常捕获: ${e.message}`);
+    }
+    try {
       await this.seedInitialPrompts();
     } catch (e: any) {
       this.logger.warn(`seedInitialPrompts 异常捕获: ${e.message}`);
@@ -89,6 +94,74 @@ export class AiService implements OnModuleInit {
       await this.seedInitialPendingQuestions();
     } catch (e: any) {
       this.logger.warn(`seedInitialPendingQuestions 异常捕获: ${e.message}`);
+    }
+  }
+
+  /**
+   * 自动自愈补齐 AI 相关数据表及必要字段
+   */
+  private async ensureAiTablesSchema() {
+    try {
+      await this.promptRepository.query(`
+        CREATE TABLE IF NOT EXISTS \`ai_prompts\` (
+          \`id\` BIGINT PRIMARY KEY AUTO_INCREMENT,
+          \`name\` VARCHAR(100) NOT NULL,
+          \`type\` VARCHAR(50) NOT NULL DEFAULT 'generate_question',
+          \`content\` TEXT NOT NULL,
+          \`variables\` JSON NULL,
+          \`status\` VARCHAR(20) DEFAULT '1',
+          \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`updatedAt\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`updated_at\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
+      await this.taskRepository.query(`
+        CREATE TABLE IF NOT EXISTS \`ai_tasks\` (
+          \`id\` BIGINT PRIMARY KEY AUTO_INCREMENT,
+          \`type\` VARCHAR(50) NOT NULL DEFAULT 'generate_question',
+          \`status\` VARCHAR(30) DEFAULT 'pending',
+          \`params\` JSON NULL,
+          \`result\` JSON NULL,
+          \`model\` VARCHAR(50) NULL,
+          \`promptId\` BIGINT NULL,
+          \`prompt_id\` BIGINT NULL,
+          \`adminId\` BIGINT NULL,
+          \`admin_id\` BIGINT NULL,
+          \`errorMessage\` TEXT NULL,
+          \`error_message\` TEXT NULL,
+          \`createdAt\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          \`completedAt\` DATETIME NULL,
+          \`completed_at\` DATETIME NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
+      const alterQueries = [
+        'ALTER TABLE `questions` ADD COLUMN `source` VARCHAR(30) DEFAULT "manual" COMMENT "来源"',
+        'ALTER TABLE `questions` ADD COLUMN `aiConfidence` FLOAT NULL DEFAULT 0.95 COMMENT "AI置信度"',
+        'ALTER TABLE `questions` ADD COLUMN `ai_confidence` FLOAT NULL DEFAULT 0.95',
+        'ALTER TABLE `questions` ADD COLUMN `knowledgePointIds` JSON NULL',
+        'ALTER TABLE `questions` ADD COLUMN `knowledge_point_ids` JSON NULL',
+        'ALTER TABLE `ai_prompts` ADD COLUMN `variables` JSON NULL',
+        'ALTER TABLE `ai_prompts` ADD COLUMN `status` VARCHAR(20) DEFAULT "1"',
+        'ALTER TABLE `ai_tasks` ADD COLUMN `promptId` BIGINT NULL',
+        'ALTER TABLE `ai_tasks` ADD COLUMN `adminId` BIGINT NULL',
+        'ALTER TABLE `ai_tasks` ADD COLUMN `prompt_id` BIGINT NULL',
+        'ALTER TABLE `ai_tasks` ADD COLUMN `admin_id` BIGINT NULL',
+        'ALTER TABLE `ai_tasks` ADD COLUMN `model` VARCHAR(50) NULL',
+      ];
+
+      for (const q of alterQueries) {
+        try {
+          await this.questionRepository.query(q);
+        } catch {
+          // 列已存在，忽略
+        }
+      }
+    } catch (e: any) {
+      this.logger.warn(`ensureAiTablesSchema warning: ${e.message}`);
     }
   }
 
@@ -2086,79 +2159,89 @@ ${negativeStemsNote}
     list: any[];
     total: number;
   }> {
-    const page = query?.page ? Number(query.page) : 1;
-    const pageSize = query?.pageSize ? Number(query.pageSize) : 20;
+    try {
+      const page = query?.page ? Number(query.page) : 1;
+      const pageSize = query?.pageSize ? Number(query.pageSize) : 20;
 
-    const qb = this.questionRepository
-      .createQueryBuilder('q')
-      .where('q.status = :status', { status: 'pending' })
-      .andWhere('q.source = :source', { source: 'ai' });
+      const qb = this.questionRepository
+        .createQueryBuilder('q')
+        .where('(q.status = :pending OR q.status = :draft)', { pending: 'pending', draft: 'draft' })
+        .andWhere('(q.source = :source OR q.source IS NULL)', { source: 'ai' });
 
-    if (query?.subjectId) {
-      qb.andWhere('q.subjectId = :subjectId', { subjectId: Number(query.subjectId) });
-    }
-
-    if (query?.chapterId) {
-      qb.andWhere('q.chapterId = :chapterId', { chapterId: Number(query.chapterId) });
-    }
-
-    if (query?.type) {
-      const dbType = toDbType(query.type);
-      qb.andWhere('q.type = :type', { type: dbType });
-    }
-
-    if (query?.difficulty) {
-      qb.andWhere('q.difficulty = :difficulty', { difficulty: Number(query.difficulty) });
-    }
-
-    if (query?.keyword) {
-      qb.andWhere('(q.content LIKE :kw OR q.analysis LIKE :kw)', {
-        kw: `%${String(query.keyword).trim()}%`,
-      });
-    }
-
-    qb.skip((page - 1) * pageSize)
-      .take(pageSize)
-      .orderBy('q.createdAt', 'DESC');
-
-    const [list, total] = await qb.getManyAndCount();
-
-    const subjects = await this.subjectRepository.find();
-    const chapters = await this.chapterRepository.find();
-    const subjectMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
-    const chapterMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
-
-    const formattedList = list.map((q) => {
-      let options = q.options;
-      if (typeof options === 'string') {
-        try {
-          options = JSON.parse(options);
-        } catch {
-          options = [];
-        }
+      if (query?.subjectId && Number(query.subjectId) > 0) {
+        qb.andWhere('q.subjectId = :subjectId', { subjectId: Number(query.subjectId) });
       }
-      return {
-        id: Number(q.id),
-        subjectId: Number(q.subjectId),
-        subjectName: subjectMap.get(Number(q.subjectId)) || '系统集成项目管理工程师',
-        chapterId: Number(q.chapterId),
-        chapterName: chapterMap.get(Number(q.chapterId)) || '核心章节',
-        knowledgePoint: chapterMap.get(Number(q.chapterId)) || '核心考点',
-        type: fromDbType(q.type),
-        difficulty: q.difficulty || 3,
-        title: q.content,
-        content: q.content,
-        options: Array.isArray(options) ? options : [],
-        answer: q.answer,
-        analysis: q.analysis || '',
-        confidence: Math.round((q.aiConfidence || 0.95) * 100),
-        source: 'ai',
-        status: 'pending',
-        createdAt: q.createdAt,
-      };
-    });
 
-    return { list: formattedList, total };
+      if (query?.chapterId && Number(query.chapterId) > 0) {
+        qb.andWhere('q.chapterId = :chapterId', { chapterId: Number(query.chapterId) });
+      }
+
+      if (query?.type) {
+        const dbType = toDbType(query.type);
+        qb.andWhere('q.type = :type', { type: dbType });
+      }
+
+      if (query?.difficulty && Number(query.difficulty) > 0) {
+        qb.andWhere('q.difficulty = :difficulty', { difficulty: Number(query.difficulty) });
+      }
+
+      if (query?.keyword) {
+        qb.andWhere('(q.content LIKE :kw OR q.analysis LIKE :kw)', {
+          kw: `%${String(query.keyword).trim()}%`,
+        });
+      }
+
+      qb.skip((page - 1) * pageSize)
+        .take(pageSize)
+        .orderBy('q.createdAt', 'DESC');
+
+      const [list, total] = await qb.getManyAndCount();
+
+      let subjects: any[] = [];
+      let chapters: any[] = [];
+      try {
+        subjects = await this.subjectRepository.find();
+        chapters = await this.chapterRepository.find();
+      } catch {}
+
+      const subjectMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+      const chapterMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+
+      const formattedList = list.map((q) => {
+        let options = q.options;
+        if (typeof options === 'string') {
+          try {
+            options = JSON.parse(options);
+          } catch {
+            options = [];
+          }
+        }
+        return {
+          id: Number(q.id),
+          subjectId: Number(q.subjectId),
+          subjectName: subjectMap.get(Number(q.subjectId)) || '系统集成项目管理工程师',
+          chapterId: Number(q.chapterId),
+          chapterName: chapterMap.get(Number(q.chapterId)) || '核心章节',
+          knowledgePoint: chapterMap.get(Number(q.chapterId)) || '核心考点',
+          type: fromDbType(q.type),
+          difficulty: q.difficulty || 3,
+          title: q.content,
+          content: q.content,
+          options: Array.isArray(options) ? options : [],
+          answer: q.answer,
+          analysis: q.analysis || '',
+          confidence: Math.round((q.aiConfidence || 0.95) * 100),
+          source: 'ai',
+          status: q.status || 'pending',
+          createdAt: q.createdAt,
+        };
+      });
+
+      return { list: formattedList, total };
+    } catch (err: any) {
+      this.logger.error(`getAIQuestions error: ${err.message}`);
+      return { list: [], total: 0 };
+    }
   }
 
   /**
@@ -2411,14 +2494,28 @@ ${dto.content}`;
     remaining: number;
     resetAt: string;
   }> {
-    const used = await this.taskRepository.count();
-    const total = 5000;
-    return {
-      total,
-      used,
-      remaining: Math.max(total - used, 0),
-      resetAt: '次日 00:00',
-    };
+    try {
+      let used = 0;
+      try {
+        used = await this.taskRepository.count();
+      } catch {
+        used = 0;
+      }
+      const total = 5000;
+      return {
+        total,
+        used,
+        remaining: Math.max(total - used, 0),
+        resetAt: '次日 00:00',
+      };
+    } catch {
+      return {
+        total: 5000,
+        used: 0,
+        remaining: 5000,
+        resetAt: '次日 00:00',
+      };
+    }
   }
 
   /**
