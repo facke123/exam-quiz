@@ -527,12 +527,10 @@
                     </div>
                   </div>
 
-                  <!-- 题干 -->
-                  <div class="pqc-stem">
-                    {{ q.title || q.content }}
-                  </div>
+                  <!-- 题干 (支持富文本/SVG图表/Markdown配图) -->
+                  <div class="pqc-stem" v-html="formatQuestionContent(q.title || q.content)" />
 
-                  <!-- 选项列表 -->
+                  <!-- 选项列表 (单选/多选/判断) -->
                   <div v-if="q.options && q.options.length" class="pqc-options-list">
                     <div
                       v-for="opt in q.options"
@@ -555,11 +553,11 @@
                   <div v-if="previewExpandAnalysis" class="pqc-answer-box">
                     <div class="pqc-ans-line">
                       <span class="ans-label">【标准答案】</span>
-                      <span class="ans-val">{{ q.answer || '详见解析' }}</span>
+                      <div class="ans-val" v-html="formatAnalysisHtml(q.answer || '详见解析')" />
                     </div>
                     <div v-if="q.analysis" class="pqc-ana-line">
-                      <span class="ana-label">【考点解析】</span>
-                      <div class="ana-content">{{ q.analysis }}</div>
+                      <span class="ana-label">【名师解析】</span>
+                      <div class="ana-content" v-html="formatAnalysisHtml(q.analysis)" />
                     </div>
                   </div>
                 </div>
@@ -775,16 +773,34 @@
     <el-dialog
       v-model="aiPaperDialogVisible"
       title="🤖 AI 大模型一键生成整套试卷并入库"
-      width="780px"
+      width="820px"
       :close-on-click-modal="false"
     >
-      <el-form label-width="100px">
+      <el-form label-width="110px">
+        <el-form-item label="试卷架构" required>
+          <el-radio-group v-model="aiPaperForm.questionTypeCategory" @change="onPaperCategoryChange">
+            <el-radio-button label="case">📑 案例分析大题整卷 (国考下午科目二·推荐)</el-radio-button>
+            <el-radio-button label="single">🎯 客观单选综合卷 (国考上午科目一)</el-radio-button>
+            <el-radio-button label="mixed">🌟 全景综合全套卷 (客观单选 + 案例大题)</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="考点配图支持">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <el-switch
+              v-model="aiPaperForm.includeImages"
+              active-text="包含考点专业图表配图 (双代号时标网络图/EVM曲线/网络拓扑/架构图)"
+            />
+            <el-tag v-if="aiPaperForm.includeImages" type="success" size="small">矢量高清 SVG / 自适应缩放</el-tag>
+          </div>
+        </el-form-item>
+
         <el-form-item label="基座模型">
           <el-select v-model="aiPaperForm.model" style="width: 100%">
-            <el-option label="Gemini 3.7 Flash (推荐/秒级)" value="gemini-3.7-flash" />
-            <el-option label="Gemini 3.1 Pro (高阶深度推理)" value="gemini-3.1-pro" />
+            <el-option label="Gemini 3.7 Flash (推荐/秒级高清出图)" value="gemini-3.7-flash" />
+            <el-option label="Gemini 3.1 Pro (高阶深度推理与计算)" value="gemini-3.1-pro" />
             <el-option label="DeepSeek-Chat (深度求索)" value="deepseek-chat" />
-            <el-option label="DeepSeek-Reasoner (R1推理)" value="deepseek-reasoner" />
+            <el-option label="DeepSeek-Reasoner (R1深度思考)" value="deepseek-reasoner" />
             <el-option label="Qwen-Plus (阿里通义千问)" value="qwen-plus" />
           </el-select>
         </el-form-item>
@@ -802,7 +818,7 @@
 
         <el-form-item label="试卷名称" required>
           <div style="display: flex; gap: 8px; width: 100%">
-            <el-input v-model="aiPaperForm.paperName" placeholder="如：2026年系统集成【考前冲刺全真模拟卷·第1套】" style="flex: 1" />
+            <el-input v-model="aiPaperForm.paperName" placeholder="如：2026年系统集成【全国统考下午案例分析全真模拟卷·第1套】" style="flex: 1" />
             <el-button type="info" plain :icon="'MagicStick'" @click="generateAiRandomName">🎲 随机名称</el-button>
           </div>
         </el-form-item>
@@ -827,7 +843,17 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="整卷题量">
-              <el-select v-model="aiPaperForm.questionCount" style="width: 100%">
+              <el-select v-if="aiPaperForm.questionTypeCategory === 'case'" v-model="aiPaperForm.questionCount" style="width: 100%">
+                <el-option label="3 道大题 (核心案例模考 · 75分)" :value="3" />
+                <el-option label="4 道大题 (软考官方下午标准大卷·推荐 · 75分)" :value="4" />
+                <el-option label="5 道大题 (攻坚冲刺套卷 · 100分)" :value="5" />
+              </el-select>
+              <el-select v-else-if="aiPaperForm.questionTypeCategory === 'mixed'" v-model="aiPaperForm.questionCount" style="width: 100%">
+                <el-option label="32 题 (30单选 + 2案例大题)" :value="32" />
+                <el-option label="53 题 (50单选 + 3案例大题)" :value="53" />
+                <el-option label="78 题 (75单选 + 3案例大题·推荐)" :value="78" />
+              </el-select>
+              <el-select v-else v-model="aiPaperForm.questionCount" style="width: 100%">
                 <el-option label="10 题 (考前速测)" :value="10" />
                 <el-option label="25 题 (章节单元冲刺)" :value="25" />
                 <el-option label="50 题 (精选题量)" :value="50" />
@@ -849,16 +875,16 @@
 
         <el-form-item label="出题风格">
           <el-select v-model="aiPaperForm.promptStyle" style="width: 100%">
-            <el-option label="🎯 历年真题风 (标准)" value="standard" />
-            <el-option label="⚠️ 易错陷阱风 (避坑)" value="trap" />
-            <el-option label="🧮 实战计算风 (攻坚)" value="calculation" />
-            <el-option label="📖 概念辨析风 (规范)" value="concept" />
+            <el-option label="🎯 历年真题风 (标准规范)" value="standard" />
+            <el-option label="⚠️ 易错陷阱风 (避坑精练)" value="trap" />
+            <el-option label="🧮 实战计算风 (网络图与EVM攻坚)" value="calculation" />
+            <el-option label="📖 概念辨析风 (流程与规范)" value="concept" />
           </el-select>
         </el-form-item>
       </el-form>
 
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #1e40af; line-height: 1.5; margin-top: 10px">
-        ℹ️ 点击「开始生成」后，AI 将自动覆盖本科目全部章节并发命题并完成试卷组装，生成完成后本列表将自动刷新并展示最新试卷！
+        ℹ️ 点击「开始生成」后，AI 将自动针对所选科目核心考点并发命题（涵盖背景案例材料、专业图表、分问拆解与采分标准），生成完成后试卷将直接上架并在列表中刷新呈现！
       </div>
 
       <template #footer>
@@ -1275,6 +1301,32 @@ async function submitAutoPaper() {
   }
 }
 
+function formatQuestionContent(content: string) {
+  if (!content) return ''
+  let html = content
+
+  // 1. Markdown 图片语法 ![alt](url) 转为响应式图片
+  html = html.replace(
+    /!\[(.*?)\]\((.*?)\)/g,
+    '<div class="q-img-wrap"><img src="$2" alt="$1" class="q-diagram-img" /><span class="q-img-caption">$1</span></div>'
+  )
+
+  // 2. 案例分节与小问加粗排版
+  html = html
+    .replace(/(【案例背景】|【案例说明】|【说明】)/g, '<div class="case-section-title">$1</div>')
+    .replace(/(【问题\s*\d+】[（(][^）)]*[）)]|【问题\s*\d+】)/g, '<div class="case-question-title">$1</div>')
+    .replace(/\n/g, '<br/>')
+
+  return html
+}
+
+function formatAnalysisHtml(analysis: string) {
+  if (!analysis) return '<span style="color: var(--text-muted)">暂无详细解析</span>'
+  return String(analysis)
+    .replace(/【(.*?)】/g, '<strong style="color: var(--primary); display: inline-block; margin-top: 6px;">【$1】</strong>')
+    .replace(/\n/g, '<br/>')
+}
+
 // ==================== AI 一键整卷生成 ====================
 const aiPaperDialogVisible = ref(false)
 const aiPaperLoading = ref(false)
@@ -1282,9 +1334,11 @@ const aiPaperForm = reactive({
   model: 'gemini-3.7-flash',
   subjectId: 1,
   paperName: '',
+  questionTypeCategory: 'case',
+  includeImages: true,
   paperType: 'mock',
   duration: 150,
-  questionCount: 75,
+  questionCount: 4,
   difficulty: 3,
   promptStyle: 'standard',
 })
@@ -1293,17 +1347,51 @@ function generateAiRandomName() {
   const sub = subjects.value.find((s) => s.value === aiPaperForm.subjectId)
   const subName = sub ? sub.label : '系统集成项目管理'
   const year = new Date().getFullYear()
-  const names = [
-    `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
-    `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
-    `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
-    `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
-  ]
+  let names: string[] = []
+
+  if (aiPaperForm.questionTypeCategory === 'case') {
+    names = [
+      `${year}年${subName}【全国统考下午案例分析全真模拟卷·第1套】`,
+      `${year}年${subName}【名师密押案例分析专项突破套卷·A卷】`,
+      `${year}年${subName}【案例计算与网络拓扑综合攻坚卷·标准卷】`,
+      `${year}年${subName}【高频案例必考考点仿真大卷·强化卷】`,
+    ]
+  } else if (aiPaperForm.questionTypeCategory === 'mixed') {
+    names = [
+      `${year}年${subName}【综合知识+案例分析全真全景模考卷】`,
+      `${year}年${subName}【考前两周全科仿真终极密押卷·A卷】`,
+      `${year}年${subName}【国家统考全真考场全要素综合试卷】`,
+    ]
+  } else {
+    names = [
+      `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
+      `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
+      `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
+      `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
+    ]
+  }
   aiPaperForm.paperName = names[Math.floor(Math.random() * names.length)]
+}
+
+function onPaperCategoryChange(val: string) {
+  if (val === 'case') {
+    aiPaperForm.questionCount = 4
+    aiPaperForm.duration = 150
+  } else if (val === 'mixed') {
+    aiPaperForm.questionCount = 78
+    aiPaperForm.duration = 180
+  } else {
+    aiPaperForm.questionCount = 75
+    aiPaperForm.duration = 150
+  }
+  generateAiRandomName()
 }
 
 function openAiPaperDialog() {
   aiPaperForm.subjectId = query.subjectId || (subjects.value[0]?.value || 1)
+  if (!aiPaperForm.questionTypeCategory) {
+    aiPaperForm.questionTypeCategory = 'case'
+  }
   generateAiRandomName()
   aiPaperDialogVisible.value = true
 }
@@ -1322,6 +1410,8 @@ async function submitAiPaper() {
       model: aiPaperForm.model,
       subjectId: aiPaperForm.subjectId,
       paperName: aiPaperForm.paperName,
+      questionTypeCategory: aiPaperForm.questionTypeCategory,
+      includeImages: aiPaperForm.includeImages,
       paperType: aiPaperForm.paperType,
       questionCount: aiPaperForm.questionCount,
       duration: aiPaperForm.duration,
@@ -2229,5 +2319,62 @@ onMounted(() => {
       }
     }
   }
+}
+
+/* 案例分析题与图表配图深度定制样式 */
+:deep(.case-section-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e40af;
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding: 4px 10px;
+  border-radius: 0 4px 4px 0;
+  margin: 12px 0 6px 0;
+  display: block;
+}
+
+:deep(.case-question-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 4px 10px;
+  border-radius: 0 4px 4px 0;
+  margin: 12px 0 6px 0;
+  display: block;
+}
+
+:deep(.q-img-wrap) {
+  margin: 10px 0;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+
+  .q-diagram-img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    display: inline-block;
+  }
+
+  .q-img-caption {
+    display: block;
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+}
+
+:deep(svg) {
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  display: block;
 }
 </style>

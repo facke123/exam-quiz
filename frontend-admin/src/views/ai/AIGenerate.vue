@@ -162,6 +162,25 @@
       <!-- 模式 2：AI 智能整卷命题控制台 -->
       <div v-show="activeMode === 'paper'" class="paper-generate-container">
         <div class="paper-form-box">
+          <div class="form-row category-row">
+            <div class="form-item flex-1">
+              <span class="label">试卷架构：</span>
+              <el-radio-group v-model="paperForm.questionTypeCategory" @change="onPaperCategoryChange">
+                <el-radio-button label="case">📑 案例分析大题整卷 (国考下午科目二·推荐)</el-radio-button>
+                <el-radio-button label="single">🎯 客观单选综合卷 (国考上午科目一)</el-radio-button>
+                <el-radio-button label="mixed">🌟 全景综合全套卷 (单选+案例大题)</el-radio-button>
+              </el-radio-group>
+            </div>
+
+            <div class="form-item">
+              <span class="label">考点配图：</span>
+              <el-switch
+                v-model="paperForm.includeImages"
+                active-text="包含考点专业图表配图 (网络图/EVM曲线/拓扑图)"
+              />
+            </div>
+          </div>
+
           <div class="form-row">
             <div class="form-item">
               <span class="label">基座大模型：</span>
@@ -207,7 +226,7 @@
               <span class="label">试卷名称：</span>
               <el-input
                 v-model="paperForm.paperName"
-                placeholder="如：2026年系统集成项目管理工程师【考前冲刺全真模拟卷·第1套】"
+                placeholder="如：2026年系统集成【全国统考下午案例分析全真模拟卷·第1套】"
                 clearable
                 style="flex: 1"
               />
@@ -222,36 +241,68 @@
               <span class="label">整卷题量：</span>
               <el-input-number
                 v-model="paperForm.questionCount"
-                :min="5"
+                :min="2"
                 :max="100"
-                :step="5"
-                style="width: 130px"
+                :step="paperForm.questionTypeCategory === 'case' ? 1 : 5"
+                style="width: 120px"
               />
               <div class="quick-count-tags">
-                <span
-                  v-for="item in [
-                    { label: '10题 (速测)', val: 10 },
-                    { label: '25题 (单元冲刺)', val: 25 },
-                    { label: '50题 (精选模考)', val: 50 },
-                    { label: '75题 (国考标准卷)', val: 75 },
-                  ]"
-                  :key="item.val"
-                  class="count-tag"
-                  :class="{ active: paperForm.questionCount === item.val }"
-                  @click="paperForm.questionCount = item.val"
-                >
-                  {{ item.label }}
-                </span>
+                <template v-if="paperForm.questionTypeCategory === 'case'">
+                  <span
+                    v-for="item in [
+                      { label: '3道大题 (75分)', val: 3 },
+                      { label: '4道大题 (标准卷·推荐)', val: 4 },
+                      { label: '5道大题 (强化卷)', val: 5 },
+                    ]"
+                    :key="item.val"
+                    class="count-tag"
+                    :class="{ active: paperForm.questionCount === item.val }"
+                    @click="paperForm.questionCount = item.val"
+                  >
+                    {{ item.label }}
+                  </span>
+                </template>
+                <template v-else-if="paperForm.questionTypeCategory === 'mixed'">
+                  <span
+                    v-for="item in [
+                      { label: '32题 (30单选+2案例)', val: 32 },
+                      { label: '53题 (50单选+3案例)', val: 53 },
+                      { label: '78题 (75单选+3案例)', val: 78 },
+                    ]"
+                    :key="item.val"
+                    class="count-tag"
+                    :class="{ active: paperForm.questionCount === item.val }"
+                    @click="paperForm.questionCount = item.val"
+                  >
+                    {{ item.label }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span
+                    v-for="item in [
+                      { label: '10题 (速测)', val: 10 },
+                      { label: '25题 (单元冲刺)', val: 25 },
+                      { label: '50题 (精选模考)', val: 50 },
+                      { label: '75题 (国考标准卷)', val: 75 },
+                    ]"
+                    :key="item.val"
+                    class="count-tag"
+                    :class="{ active: paperForm.questionCount === item.val }"
+                    @click="paperForm.questionCount = item.val"
+                  >
+                    {{ item.label }}
+                  </span>
+                </template>
               </div>
             </div>
 
             <div class="form-item">
               <span class="label">出题风格：</span>
               <el-select v-model="paperForm.promptStyle" style="width: 170px">
-                <el-option label="🎯 历年真题风 (标准)" value="standard" />
-                <el-option label="⚠️ 易错陷阱风 (避坑)" value="trap" />
-                <el-option label="🧮 实战计算风 (攻坚)" value="calculation" />
-                <el-option label="📖 概念辨析风 (规范)" value="concept" />
+                <el-option label="🎯 历年真题风 (标准规范)" value="standard" />
+                <el-option label="⚠️ 易错陷阱风 (避坑精练)" value="trap" />
+                <el-option label="🧮 实战计算风 (网络图与EVM攻坚)" value="calculation" />
+                <el-option label="📖 概念辨析风 (流程与规范)" value="concept" />
               </el-select>
             </div>
 
@@ -398,10 +449,10 @@
         <el-table-column label="题干与选项 / 深度名师解析" min-width="460">
           <template #default="{ row }">
             <div class="stem-content">
-              <!-- 题干 -->
+              <!-- 题干 (支持富文本/SVG图表/Markdown配图) -->
               <div class="stem-title">
                 <span class="q-id-tag">#{{ row.id }}</span>
-                {{ row.title || row.content }}
+                <div class="stem-html-box" v-html="formatQuestionContent(row.content || row.title)" />
               </div>
 
               <!-- 选项卡片 (单选/多选/判断) -->
@@ -682,8 +733,10 @@ const paperForm = reactive<any>({
   model: 'gemini-3.7-flash',
   subjectId: 1,
   paperName: '',
+  questionTypeCategory: 'case',
+  includeImages: true,
   paperType: 'mock',
-  questionCount: 75,
+  questionCount: 4,
   duration: 150,
   difficulty: 3,
   promptStyle: 'standard',
@@ -733,9 +786,28 @@ function toggleAnalysis(id: number) {
   }
 }
 
+function formatQuestionContent(content: string) {
+  if (!content) return ''
+  let html = content
+
+  // 1. Markdown 图片语法 ![alt](url) 转为响应式图片
+  html = html.replace(
+    /!\[(.*?)\]\((.*?)\)/g,
+    '<div class="q-img-wrap"><img src="$2" alt="$1" class="q-diagram-img" /><span class="q-img-caption">$1</span></div>'
+  )
+
+  // 2. 案例分节与小问加粗排版
+  html = html
+    .replace(/(【案例背景】|【案例说明】|【说明】)/g, '<div class="case-section-title">$1</div>')
+    .replace(/(【问题\s*\d+】[（(][^）)]*[）)]|【问题\s*\d+】)/g, '<div class="case-question-title">$1</div>')
+    .replace(/\n/g, '<br/>')
+
+  return html
+}
+
 function formatAnalysisHtml(analysis: string) {
   if (!analysis) return '<span style="color: var(--el-text-color-secondary)">暂无详细解析</span>'
-  return analysis
+  return String(analysis)
     .replace(/【(.*?)】/g, '<strong style="color: var(--el-color-primary); display: inline-block; margin-top: 4px;">【$1】</strong>')
     .replace(/\n/g, '<br/>')
 }
@@ -744,13 +816,44 @@ function generateRandomPaperName() {
   const sub = subjects.value.find((s) => s.value === paperForm.subjectId)
   const subName = sub ? sub.label : '系统集成项目管理工程师'
   const year = new Date().getFullYear()
-  const templates = [
-    `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
-    `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
-    `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
-    `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
-  ]
+  let templates: string[] = []
+
+  if (paperForm.questionTypeCategory === 'case') {
+    templates = [
+      `${year}年${subName}【全国统考下午案例分析全真模拟卷·第1套】`,
+      `${year}年${subName}【名师密押案例分析专项突破套卷·A卷】`,
+      `${year}年${subName}【案例计算与网络拓扑综合攻坚卷·标准卷】`,
+      `${year}年${subName}【高频案例必考考点仿真大卷·强化卷】`,
+    ]
+  } else if (paperForm.questionTypeCategory === 'mixed') {
+    templates = [
+      `${year}年${subName}【综合知识+案例分析全真全景模考卷】`,
+      `${year}年${subName}【考前两周全科仿真终极密押卷·A卷】`,
+      `${year}年${subName}【国家统考全真考场全要素综合试卷】`,
+    ]
+  } else {
+    templates = [
+      `${year}年${subName}【考前冲刺全真模拟押题卷·第1套】`,
+      `${year}年${subName}【名师密押高频考点仿真套卷·A卷】`,
+      `${year}年${subName}【国家软考全真考场模拟试卷·标准卷】`,
+      `${year}年${subName}【易错陷阱与核心计算专项模考卷】`,
+    ]
+  }
   paperForm.paperName = templates[Math.floor(Math.random() * templates.length)]
+}
+
+function onPaperCategoryChange(val: string) {
+  if (val === 'case') {
+    paperForm.questionCount = 4
+    paperForm.duration = 150
+  } else if (val === 'mixed') {
+    paperForm.questionCount = 78
+    paperForm.duration = 180
+  } else {
+    paperForm.questionCount = 75
+    paperForm.duration = 150
+  }
+  generateRandomPaperName()
 }
 
 async function loadSubjects() {
@@ -794,6 +897,8 @@ async function handleGenerateEntirePaper() {
       model: paperForm.model,
       subjectId: paperForm.subjectId,
       paperName: paperForm.paperName,
+      questionTypeCategory: paperForm.questionTypeCategory,
+      includeImages: paperForm.includeImages,
       paperType: paperForm.paperType,
       questionCount: paperForm.questionCount,
       duration: paperForm.duration,
@@ -1577,5 +1682,62 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 案例分析题与图表配图深度定制样式 */
+:deep(.case-section-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e40af;
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding: 4px 10px;
+  border-radius: 0 4px 4px 0;
+  margin: 12px 0 6px 0;
+  display: block;
+}
+
+:deep(.case-question-title) {
+  font-size: 14px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 4px 10px;
+  border-radius: 0 4px 4px 0;
+  margin: 12px 0 6px 0;
+  display: block;
+}
+
+:deep(.q-img-wrap) {
+  margin: 10px 0;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+
+  .q-diagram-img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    display: inline-block;
+  }
+
+  .q-img-caption {
+    display: block;
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+}
+
+:deep(svg) {
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  display: block;
 }
 </style>

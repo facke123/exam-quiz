@@ -54,6 +54,8 @@ export interface PromptTemplate {
 export interface AIGeneratePaperParams {
   subjectId: number
   paperName?: string
+  questionTypeCategory?: 'single' | 'case' | 'mixed' | string
+  includeImages?: boolean
   paperType?: string
   questionCount?: number
   duration?: number

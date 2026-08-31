@@ -47,6 +47,10 @@ export class AiGenerateQuestionDto {
   @IsOptional()
   @IsNumber()
   count?: number;
+
+  @ApiPropertyOptional({ description: '是否包含图表配图/网络拓扑图', default: true })
+  @IsOptional()
+  includeImages?: boolean;
 }
 
 /**
@@ -61,6 +65,15 @@ export class AiGeneratePaperDto {
   @IsOptional()
   @IsString()
   paperName?: string;
+
+  @ApiPropertyOptional({ description: '试卷题型架构: single(单选客观卷)/case(案例分析大题卷)/mixed(综合全景卷)', default: 'single' })
+  @IsOptional()
+  @IsString()
+  questionTypeCategory?: string;
+
+  @ApiPropertyOptional({ description: '是否包含图表与配图(双代号网络图/挣值图表/网络拓扑/架构图)', default: true })
+  @IsOptional()
+  includeImages?: boolean;
 
   @ApiPropertyOptional({ description: '试卷类型: mock/real/practice', default: 'mock' })
   @IsOptional()

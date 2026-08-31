@@ -993,32 +993,239 @@ export class AiService implements OnModuleInit {
       },
     ];
 
-    // 案例题专属题库池 (Case Analysis Question Pool)
+    // 案例题专属题库池 (Case Analysis Question Pool - 涵盖双代号网络图、EVM挣值图、拓扑架构图、变更流程图)
     const casePool = [
       {
-        content: `【案例背景】某政务信息化系统集成项目，合同金额 500 万元，总工期 10 个月。项目进行到第 5 个月末时，项目经理组织了中期绩效检查，相关数据如下：
-- 计划价值 PV = 250 万元；
-- 实际成本 AC = 280 万元；
-- 挣值 EV = 200 万元。
-【问题1】计算该项目在第5月末的进度偏差 SV、成本偏差 CV、进度绩效指数 SPI 与成本绩效指数 CPI，并评价项目当前的执行状态。
-【问题2】针对当前项目的进度与成本问题，项目经理可采取哪些有效的纠偏措施？`,
+        content: `【案例背景】某市智慧城市政务云平台系统集成项目，包含 A、B、C、D、E、F、G 七项核心活动，各项活动之间的紧前紧后逻辑关系与持续时间如下图所示：
+<svg viewBox="0 0 680 180" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; margin:12px 0; display:block;">
+  <defs>
+    <marker id="arrow1" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0284c7" />
+    </marker>
+    <marker id="arrowG" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#16a34a" />
+    </marker>
+  </defs>
+  <g font-family="sans-serif" font-size="12" text-anchor="middle">
+    <circle cx="50" cy="90" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="50" y="94" font-weight="bold" fill="#0369a1">①</text>
+    
+    <circle cx="180" cy="40" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="180" y="44" font-weight="bold" fill="#0369a1">②</text>
+
+    <circle cx="180" cy="140" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="180" y="144" font-weight="bold" fill="#0369a1">③</text>
+
+    <circle cx="340" cy="40" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="340" y="44" font-weight="bold" fill="#0369a1">④</text>
+
+    <circle cx="340" cy="140" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="340" y="144" font-weight="bold" fill="#0369a1">⑤</text>
+
+    <circle cx="500" cy="90" r="20" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="500" y="94" font-weight="bold" fill="#0369a1">⑥</text>
+
+    <circle cx="630" cy="90" r="20" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+    <text x="630" y="94" font-weight="bold" fill="#15803d">⑦</text>
+
+    <line x1="70" y1="80" x2="160" y2="48" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="110" y="55" fill="#1e293b" font-weight="bold">A (4天)</text>
+
+    <line x1="70" y1="100" x2="160" y2="132" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="110" y="130" fill="#1e293b" font-weight="bold">B (6天)</text>
+
+    <line x1="200" y1="40" x2="320" y2="40" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="260" y="30" fill="#1e293b" font-weight="bold">C (5天)</text>
+
+    <line x1="180" y1="60" x2="320" y2="132" stroke="#0284c7" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow1)"/>
+    <text x="240" y="85" fill="#64748b">虚活动 (0天)</text>
+
+    <line x1="200" y1="140" x2="320" y2="140" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="260" y="158" fill="#1e293b" font-weight="bold">D (8天)</text>
+
+    <line x1="360" y1="48" x2="480" y2="80" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="420" y="55" fill="#1e293b" font-weight="bold">E (6天)</text>
+
+    <line x1="360" y1="132" x2="480" y2="100" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow1)"/>
+    <text x="420" y="130" fill="#1e293b" font-weight="bold">F (7天)</text>
+
+    <line x1="520" y1="90" x2="610" y2="90" stroke="#16a34a" stroke-width="2" marker-end="url(#arrowG)"/>
+    <text x="565" y="80" fill="#15803d" font-weight="bold">G (3天)</text>
+  </g>
+</svg>
+【问题1】（6分）请写出该项目的全部活动路径及其持续时间，并指出关键路径是哪一条？项目的总工期是多少天？
+【问题2】（8分）请计算活动 A 和活动 C 的总时差（TF）与自由时差（FF）。
+【问题3】（6分）若业主提出将项目总工期压缩 2 天，且要求增加的成本最低。项目经理应优先考虑压缩哪些活动？为什么？`,
         options: [],
         answer: `【参考采分点】
-1. 指标计算与状态评价（8分）：
-   - 进度偏差 SV = EV - PV = 200 - 250 = -50 万元（进度落后）
-   - 成本偏差 CV = EV - AC = 200 - 280 = -80 万元（成本超支）
-   - 进度绩效指数 SPI = EV / PV = 200 / 250 = 0.8
-   - 成本绩效指数 CPI = EV / AC = 200 / 280 ≈ 0.71
-   - 综合评价：项目当前处于“进度延误且成本严重超支”的不良状态。
+1. 路径与关键路径分析（6分）：
+   - 路径1：①-②-④-⑥-⑦（A-C-E-G），持续时间 = 4 + 5 + 6 + 3 = 18 天；
+   - 路径2：①-②-⑤-⑥-⑦（A-虚活动-F-G），持续时间 = 4 + 0 + 7 + 3 = 14 天；
+   - 路径3：①-③-⑤-⑥-⑦（B-D-F-G），持续时间 = 6 + 8 + 7 + 3 = 24 天。
+   - 关键路径为：①-③-⑤-⑥-⑦（即 B-D-F-G 路径），项目总工期为 24 天。
 
-2. 纠偏措施建议（7分）：
-   - 赶工（Crashing）：在关键路径上增加高技能资源或安排加班，压缩关键活动工期；
-   - 快速跟进（Fast Tracking）：将原本串行执行的关键路径任务改为部分并行执行；
-   - 加强过程质量控制，减少因返工带来的额外成本和时间损耗；
-   - 严格控制项目范围蔓延，暂缓执行非关键变更；
-   - 寻求高性价比替代资源，优化资源配置效率。`,
-        analysis: `【核心考点定位】软考中高级案例分析必考计算题：挣值管理EVM综合计算与进度成本双偏差纠偏对策。`,
+2. 时差计算（8分）：
+   - 活动 A（持续4天）：最早开始 ES=0，最早完成 EF=4。后续通过活动 C 的总时差 TF = 24 - 18 = 6 天。自由时差 FF = min(ES(紧后) - EF(A)) = min(4-4, 6-4) = 0 天。
+   - 活动 C（持续5天）：总时差 TF = 24 - 18 = 6 天；自由时差 FF = ES(E) - EF(C) = 15 - 9 = 6 天。
+
+3. 工期压缩决策（6分）：
+   - 压缩原则：只能压缩关键路径（B-D-F-G）上的活动，且应优先选择赶工单位成本最低、具备可压缩空间且不影响安全质量的关键活动；
+   - 注意事项：压缩后需重新核算各路径长度，防止次关键路径（A-C-E-G）转变为新的关键路径。`,
+        analysis: `【案例考点定位】国家软考核心必考题：双代号网络图绘制、关键路径判定、总时差/自由时差计算与工期优化压缩方法。`,
         difficulty: 4,
+      },
+      {
+        content: `【案例背景】某金融机构信贷风控系统升级项目，合同预算 BAC = 600 万元，计划总工期 12 个月。项目进行到第 6 个月末时，项目经理对项目执行绩效进行了全面核算，相关 EVM 趋势如下图所示：
+<svg viewBox="0 0 650 200" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; margin:12px 0; display:block;">
+  <g font-family="sans-serif" font-size="11">
+    <!-- 坐标轴 -->
+    <line x1="60" y1="160" x2="600" y2="160" stroke="#94a3b8" stroke-width="1.5"/>
+    <line x1="60" y1="20" x2="60" y2="160" stroke="#94a3b8" stroke-width="1.5"/>
+    
+    <text x="600" y="175" fill="#64748b" text-anchor="end">时间 (月)</text>
+    <text x="50" y="25" fill="#64748b" text-anchor="end">金额(万)</text>
+
+    <!-- 网格线 -->
+    <line x1="60" y1="120" x2="600" y2="120" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="60" y1="80" x2="600" y2="80" stroke="#f1f5f9" stroke-width="1"/>
+    <line x1="60" y1="40" x2="600" y2="40" stroke="#f1f5f9" stroke-width="1"/>
+
+    <text x="50" y="124" fill="#94a3b8" text-anchor="end">200</text>
+    <text x="50" y="84" fill="#94a3b8" text-anchor="end">400</text>
+    <text x="50" y="44" fill="#94a3b8" text-anchor="end">600(BAC)</text>
+
+    <text x="320" y="175" fill="#0284c7" font-weight="bold" text-anchor="middle">第6月末(检查点)</text>
+    <line x1="320" y1="30" x2="320" y2="160" stroke="#0284c7" stroke-dasharray="3"/>
+
+    <!-- PV 线 -->
+    <path d="M 60 160 Q 320 100 580 40" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4"/>
+    <circle cx="320" cy="100" r="4" fill="#64748b"/>
+    <text x="330" y="98" fill="#475569" font-weight="bold">PV=300万</text>
+
+    <!-- AC 线 -->
+    <path d="M 60 160 Q 190 130 320 85" fill="none" stroke="#ef4444" stroke-width="2.5"/>
+    <circle cx="320" cy="85" r="4" fill="#ef4444"/>
+    <text x="330" y="80" fill="#dc2626" font-weight="bold">AC=350万</text>
+
+    <!-- EV 线 -->
+    <path d="M 60 160 Q 190 145 320 115" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+    <circle cx="320" cy="115" r="4" fill="#16a34a"/>
+    <text x="330" y="125" fill="#15803d" font-weight="bold">EV=240万</text>
+  </g>
+</svg>
+【问题1】（8分）请计算第6月末该项目的 CV、SV、CPI、SPI，并基于指标详细说明当前项目的成本与进度状态。
+【问题2】（6分）若项目当前的成本偏差被认定为“典型偏差”，请预测该项目的完工估算 EAC 与完工尚需估算 ETC。
+【问题3】（6分）针对上述偏差情况，项目经理应采取哪些综合管理措施使项目重回受控状态？`,
+        options: [],
+        answer: `【参考采分点】
+1. 指标计算与状态分析（8分）：
+   - 成本偏差 CV = EV - AC = 240 - 350 = -110 万元（CV < 0，成本超支 110 万元）；
+   - 进度偏差 SV = EV - PV = 240 - 300 = -60 万元（SV < 0，进度落后 60 万元）；
+   - 成本绩效指数 CPI = EV / AC = 240 / 350 ≈ 0.69（CPI < 1，成本效率低下）；
+   - 进度绩效指数 SPI = EV / PV = 240 / 300 = 0.80（SPI < 1，进度严重滞后）。
+   - 综合评价：项目目前处于“成本严重超支且进度明显拖后”的高风险状态。
+
+2. 典型偏差下的完工预测（6分）：
+   - 完工尚需估算 ETC = (BAC - EV) / CPI = (600 - 240) / (240 / 350) = 360 / 0.6857 = 525 万元；
+   - 完工估算 EAC = BAC / CPI = 600 / 0.6857 = 875 万元（预计超支 275 万元）。
+
+3. 综合纠偏措施（6分）：
+   - 进度维度：实施关键活动赶工，协调资源加班；对具备条件的任务进行快速跟进；
+   - 成本维度：优化采购成本与外包结构，压缩非核心开支；
+   - 质量与范围维度：严控范围蔓延，暂缓非必要变更；减少返工率；
+   - 沟通维度：及时向高层与客户汇报真实状态，商议调整基准或争取追加资源。`,
+        analysis: `【案例考点定位】软考下午案例经典必考大题：EVM 挣值管理动态曲线分析、典型/非典型预测公式计算及纠偏对策。`,
+        difficulty: 4,
+      },
+      {
+        content: `【案例背景】某跨国企业建设企业级混合云网络与安全防护体系，其总部数据中心与 DMZ 区网络拓扑架构如下图所示：
+<svg viewBox="0 0 660 190" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; margin:12px 0; display:block;">
+  <g font-family="sans-serif" font-size="11" text-anchor="middle">
+    <!-- 外网 -->
+    <rect x="20" y="70" width="80" height="40" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
+    <text x="60" y="94" font-weight="bold" fill="#991b1b">Internet</text>
+
+    <!-- 边界防火墙 -->
+    <line x1="100" y1="90" x2="140" y2="90" stroke="#64748b" stroke-width="2"/>
+    <rect x="140" y="65" width="80" height="50" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+    <text x="180" y="88" font-weight="bold" fill="#c2410c">边界防火墙</text>
+    <text x="180" y="104" fill="#9a3412" font-size="10">FW-Outer</text>
+
+    <!-- 核心交换机 -->
+    <line x1="220" y1="90" x2="270" y2="90" stroke="#64748b" stroke-width="2"/>
+    <rect x="270" y="65" width="85" height="50" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+    <text x="312" y="88" font-weight="bold" fill="#0369a1">核心交换机</text>
+    <text x="312" y="104" fill="#0284c7" font-size="10">Core Switch</text>
+
+    <!-- DMZ区 -->
+    <line x1="312" y1="65" x2="312" y2="35" stroke="#64748b" stroke-width="2"/>
+    <line x1="312" y1="35" x2="410" y2="35" stroke="#64748b" stroke-width="2"/>
+    <rect x="410" y="15" width="110" height="40" rx="6" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+    <text x="465" y="35" font-weight="bold" fill="#854d0e">DMZ 区 (Web集群)</text>
+    <text x="465" y="48" fill="#a16207" font-size="9">公开服务/反向代理</text>
+
+    <!-- 内部防火墙 -->
+    <line x1="355" y1="90" x2="410" y2="90" stroke="#64748b" stroke-width="2"/>
+    <rect x="410" y="65" width="80" height="50" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+    <text x="450" y="88" font-weight="bold" fill="#c2410c">内部防火墙</text>
+    <text x="450" y="104" fill="#9a3412" font-size="10">FW-Inner</text>
+
+    <!-- 内网数据库核心区 -->
+    <line x1="490" y1="90" x2="530" y2="90" stroke="#64748b" stroke-width="2"/>
+    <rect x="530" y="60" width="115" height="60" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="587" y="85" font-weight="bold" fill="#15803d">信任安全内网</text>
+    <text x="587" y="102" fill="#166534" font-size="10">核心数据库/主应用</text>
+  </g>
+</svg>
+项目在上线安全测试中发现，外部攻击者可通过 Web 服务的特定漏洞直接读取内网数据库敏感数据。
+【问题1】（6分）分析该网络架构中 DMZ 区的设计原则及其与内部信任网络之间的访问控制策略应如何配置？
+【问题2】（7分）针对上述漏洞风险，请从网络安全防护（深度防御）、访问控制与数据加密三个维度给出整改方案。
+【问题3】（6分）简述在信息系统安全运维中，等级保护2.0（三级）对数据备份与灾难恢复的具体要求。`,
+        options: [],
+        answer: `【参考采分点】
+1. DMZ 区设计与访问控制原则（6分）：
+   - 隔离原则：外网只能访问 DMZ 中的公开服务（如 Web/Nginx 反向代理），严禁直接访问内网；
+   - 单向发起：DMZ 区服务器绝对禁止主动向内网信任区发起连接，必须由内网主动轮询或仅开放特定数据库只读端口；
+   - 双重防火墙策略：FW-Outer 和 FW-Inner 应采用异构防火墙，避免单一设备漏洞全盘失守。
+
+2. 纵深防御与整改方案（7分）：
+   - 网络维度：部署 WAF（Web应用防火墙）与 IPS/IDS，过滤 SQL 注入与 XSS 攻击；
+   - 访问控制维度：实施最小权限原则与网络微隔离（VLAN + ACL），限制 Web 到 DB 的 IP 白名单；
+   - 数据加密维度：数据库敏感字段（身份证/密钥/手机号）实施密文存储，传输层全量强制启用 TLS 1.3。
+
+3. 等保 2.0 三级数据备份与容灾要求（6分）：
+   - 本地数据备份：提供本地实时或每日异机自动数据备份机制；
+   - 异地容灾：建立异地数据备份中心或实时云端双活备份；
+   - 恢复演练：定期开展数据恢复完整性验证演练（至少每半年一次）。`,
+        analysis: `【案例考点定位】软考网络与信息安全大题：DMZ 隔离架构、纵深防御体系与等保 2.0 规范。`,
+        difficulty: 4,
+      },
+      {
+        content: `【案例背景】某集团级 ERP 升级项目在实施过程中，由于业务部门在开发中后期连续提出 20 余项重大变更，开发团队按业务要求直接修改了生产代码，导致系统在集成联调时发生严重业务崩溃与配置混乱。
+【问题1】（7分）指出该项目在范围管理与配置管理中存在哪些严重问题？
+【问题2】（8分）请写出项目规范的变更控制流程（CCB 处理闭环步骤）。
+【问题3】（5分）什么是配置基线？基线建立后如需修改应遵循什么规范？`,
+        options: [],
+        answer: `【参考采分点】
+1. 存在的主要问题（7分）：
+   - 未建立规范的变更控制流程，存在严重的“范围蔓延（Scope Creep）”和“镀金”；
+   - 变更未经过综合影响分析与变更控制委员会（CCB）正式审批；
+   - 配置管理失控，未对开发基线与发布基线进行版本分支隔离；
+   - 缺乏变更执行后的验证测试与回归测试。
+
+2. 规范变更控制流程（8分）：
+   - 提出变更申请：由申请人提交书面《变更申请单》；
+   - 变更初审与影响分析：项目经理组织团队评估变更对工期、成本、质量、风险的综合影响；
+   - CCB 审查与决议：CCB 召开会议评估决定批准、拒绝或推迟；
+   - 实施与跟踪：按批准的方案修改代码、文档并同步调整项目计划基线；
+   - 验证与确认：开展集成测试与用户验收确认；
+   - 关闭与通知：更新配置库并正式通知所有干系人。
+
+3. 配置基线与修改规范（5分）：
+   - 配置基线定义：经过正式评审和批准的配置项集合，作为后续开发的基准和里程碑交付物；
+   - 修改规范：基线一旦建立，任何修改必须走正式变更流程（CCB审批），严禁私自修改。`,
+        analysis: `【案例考点定位】软考案例分析高频必考管理题：变更管理失控原因、CCB 标准变更流程与配置基线管理。`,
+        difficulty: 3,
       },
     ];
 
