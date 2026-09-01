@@ -285,7 +285,7 @@ const userAnswers = reactive<Record<number, string>>({})
 
 // 过滤计算
 const filteredList = computed(() => {
-  let list = knowledgeList.value
+  let list = [...knowledgeList.value]
 
   // 分类筛选
   if (selectedCategory.value && selectedCategory.value !== '全部') {
@@ -308,6 +308,22 @@ const filteredList = computed(() => {
         item.memoryTips?.toLowerCase().includes(kw)
     )
   }
+
+  // 排序：重点必考 > 高频 > 其他，同级别按 sort 升序优先展示在最前面
+  list.sort((a, b) => {
+    const getScore = (item: any) => {
+      const imp = item.importance || ''
+      if (imp.includes('必考') || imp === 'must_know') return 1
+      if (imp.includes('高频') || imp === 'high') return 2
+      if (imp.includes('常考') || imp === 'medium') return 3
+      return 4
+    }
+    const scoreDiff = getScore(a) - getScore(b)
+    if (scoreDiff !== 0) return scoreDiff
+    const aSort = a.sort ?? 999
+    const bSort = b.sort ?? 999
+    return aSort - bSort
+  })
 
   return list
 })

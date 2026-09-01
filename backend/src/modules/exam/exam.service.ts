@@ -37,6 +37,242 @@ export class ExamService implements OnModuleInit {
   async onModuleInit() {
     await this.ensureTablesSchema();
     await this.seedInitialExamData();
+    await this.ensureKeyKnowledgePoints();
+  }
+
+  /**
+   * 确保知识库核心关键必考考点完整存在并置顶排序
+   */
+  async ensureKeyKnowledgePoints() {
+    try {
+      const keyPoints = [
+        {
+          subjectId: 1,
+          chapterId: 9,
+          name: '净值管理(EVM)关键公式与绩效指标分析',
+          categoryTag: '项目成本与进度管理',
+          sourceBook: '《教程》第9章 项目成本管理',
+          importance: '必考',
+          coreAnalysis: `### 一、净值管理（EVM）核心三参数
+1. **计划价值（PV, Planned Value）**：截至某一时间点，按计划应完成工作的预算金额。\`PV = 计划工时 × 预算单价\`
+2. **实际成本（AC, Actual Cost）**：截至某一时间点，完成工作实际耗费的全部成本。
+3. **挣值（EV, Earned Value）**：截至某一时间点，实际已完成工作的预算金额。\`EV = 实际完工比例 × 总预算(BAC)\`
+
+### 二、两大偏差与绩效指数公式
+- **进度偏差（SV）**：\`SV = EV - PV\`（>0 进度提前，<0 进度滞后）
+- **成本偏差（CV）**：\`CV = EV - AC\`（>0 成本节约，<0 成本超支）
+- **进度绩效指数（SPI）**：\`SPI = EV / PV\`（>1 提前，<1 滞后）
+- **成本绩效指数（CPI）**：\`CPI = EV / AC\`（>1 节约，<1 超支）
+
+### 三、完工估算（EAC）计算法则
+- **非典型偏差（后续按原计划预算执行）**：\`EAC = AC + (BAC - EV)\`
+- **典型偏差（后续保持当前CPI绩效趋势）**：\`EAC = BAC / CPI\`
+- **综合考虑进度与成本（兼顾SPI与CPI）**：\`EAC = AC + (BAC - EV) / (CPI × SPI)\`
+- **完工尚需估算（ETC）**：非典型 \`ETC = BAC - EV\`；典型 \`ETC = (BAC - EV) / CPI\`
+- **完工偏差（VAC）**：\`VAC = BAC - EAC\`（>0 费用节约，<0 费用超支）`,
+          memoryTips: '口诀：EV在前面，减去谁算谁；减PV是进度偏差，减AC是成本偏差；大于0好，小于0差！除法同理，大于1赚，小于1亏！典型除CPI，非典型加剩余！',
+          sort: 1,
+        },
+        {
+          subjectId: 1,
+          chapterId: 8,
+          name: '关键路径法(CPM)与三点估算(PERT)公式',
+          categoryTag: '项目进度管理',
+          sourceBook: '《教程》第8章 项目进度管理',
+          importance: '必考',
+          coreAnalysis: `### 一、关键路径法（CPM）核心原则
+1. **关键路径定义**：网络图中耗时最长的路径序列，决定了项目的最短完工工期。一个项目可能存在多条关键路径。
+2. **总时差（Total Float / Slack）**：在不影响项目总工期前提下，活动可延误的时间。\`TF = LS - ES = LF - EF\`（关键路径上总时差通常为0）。
+3. **自由时差（Free Float）**：在不影响所有紧后活动最早开始时间前提下，活动可推迟的时间。\`FF = Min(所有紧后活动ES) - 本活动EF\`。
+4. **时差关系定理**：\`总时差 ≥ 自由时差 ≥ 0\`。
+
+### 二、PERT 三点估算公式（β分布与三角分布）
+- **期望工期（Te, 贝塔分布）**：\`Te = (To + 4Tm + Tp) / 6\`
+  - \`To\`：最乐观时间（Optimistic）
+  - \`Tm\`：最可能时间（Most Likely）
+  - \`Tp\`：最悲观时间（Pessimistic）
+- **三角分布工期**：\`Te = (To + Tm + Tp) / 3\`
+- **标准差（σ）**：\`σ = (Tp - To) / 6\`
+- **方差（σ²）**：\`σ² = [(Tp - To) / 6]²\`（项目总方差 = 各关键活动方差之和）
+- **正态分布完成概率区间**：
+  - \`Te ± 1σ\`：约 68.26% 概率完成
+  - \`Te ± 2σ\`：约 95.46% 概率完成
+  - \`Te ± 3σ\`：约 99.73% 概率完成`,
+          memoryTips: '口诀：一乐一悲四可能，加和除以六得工期；悲减乐再除六，标准差算方差平方走；正负一西格玛六十八，二西格玛九十五，三西格玛九九点七全拿下！',
+          sort: 2,
+        },
+        {
+          subjectId: 1,
+          chapterId: 14,
+          name: '整体变更控制流程与 CCB 决策机制',
+          categoryTag: '项目变更与配置管理',
+          sourceBook: '《教程》第14章 项目变更管理',
+          importance: '必考',
+          coreAnalysis: `### 一、变更控制委员会（CCB）核心职责与定位
+- **定位**：CCB（Change Control Board）是项目的决策机构而非日常作业执行机构，由项目发起人、客户代表、项目经理、技术负责人等关键干系人共同组成。
+- **职责**：负责审查、评估、批准、推迟或否决对项目基准（范围、进度、成本、质量基准）的变更请求。
+- **项目经理职责**：PM 负责组织对变更的影响评估，提交 CCB 审议，并在批准后组织落实、更新计划并监控执行。
+
+### 二、整体变更控制标准 7 步闭环流程
+1. **提出变更申请**：由干系人以正式书面形式提出变更请求（CR）。
+2. **评估影响分析**：PM 组织团队全面综合分析变更对范围、成本、进度、质量、风险等各方面的综合影响。
+3. **提交 CCB 审批**：将变更方案及综合影响评估报告提交 CCB 审议。
+4. **CCB 做出决策**：CCB 正式作出批准（Approve）、否决（Reject）或推迟（Defer）决议。
+5. **更新项目基准与管理计划**：变更批准后，必须立即同步更新范围/进度/成本基准与项目管理计划。
+6. **通知受影响干系人**：将变更决议与更新后的管理计划及时通知全体相关干系人。
+7. **监控执行与效果验证**：跟踪变更落实执行过程，验证变更效果，记录经验教训并闭环归档。`,
+          memoryTips: '口诀：变更必须走书面，先评估再报CCB审；批准改基准通知全员，跟踪验证保闭环；口头变更不作数，基准调整不可乱！',
+          sort: 3,
+        },
+        {
+          subjectId: 1,
+          chapterId: 7,
+          name: '项目范围基线、WBS 拆解原则与范围确认',
+          categoryTag: '项目范围管理',
+          sourceBook: '《教程》第7章 项目范围管理',
+          importance: '必考',
+          coreAnalysis: `### 一、项目范围基线组成（核心三要素）
+1. **项目范围说明书（Scope Statement）**：详细描述项目范围、主要可交付成果、验收标准、假设条件与制约因素。
+2. **工作分解结构（WBS）**：对项目团队为实现目标、创建可交付成果而执行的全部工作范围的层级分解树。
+3. **WBS 词典（WBS Dictionary）**：对 WBS 各工作包进行详细技术描述、负责部门、资源估算与验收标准的配套定义文件。
+
+### 二、WBS 拆解核心原则与黄金法则
+- **100% 原则**：WBS 必须包含且仅包含项目 100% 的工作（既不遗漏也不多做，杜绝范围蔓延与镀金）。
+- **面向可交付成果**：WBS 必须以可交付成果或产品组件为导向进行分解，而非按组织架构或人员分工分解。
+- **底层工作包（Work Package）**：WBS 最底层为工作包，通常满足 8/80 准则（耗时在 8~80 小时间），具有唯一责任人且可独立估算核算。
+- **唯一编码**：每个 WBS 元素均分配全局唯一编码标识。
+
+### 三、范围确认（Validate Scope）vs 质量控制（Control Quality）
+- **质量控制（QC）**：强调工作成果的“正确性”与技术指标达标，由项目内部团队/质检部门执行，通常先于范围确认。
+- **范围确认**：强调客户/发起人对可交付成果的“正式验收与签字确认”，由外部干系人/客户执行，输出为验收的可交付成果。`,
+          memoryTips: '口诀：范围基线三件套：说明书、WBS、词典好；100%分解不漏不少；内部质控查正确，外部范围确认客户签收单！',
+          sort: 4,
+        },
+        {
+          subjectId: 1,
+          chapterId: 12,
+          name: '风险识别与消极/积极风险应对策略',
+          categoryTag: '项目风险管理',
+          sourceBook: '《教程》第12章 项目风险管理',
+          importance: '必考',
+          coreAnalysis: `### 一、消极风险（威胁 Threat）四大应对策略
+1. **规避（Avoid）**：改变项目管理计划以彻底消除威胁（如取消高风险模块、采用成熟技术、更换合格供应商）。
+2. **转移（Transfer）**：将风险的所有权及应对后果转移给第三方（如购买商业保险、签署固定总价合同、业务外包）。
+3. **减轻（Mitigate）**：采取前期行动降低风险发生的概率或减少其负面影响（如增加单元测试、采用冗余双备份架构、设计原型验证）。
+4. **接受（Accept）**：
+   - **主动接受**：建立应急储备（应急预算/应急时间）以应对已知风险；
+   - **被动接受**：不采取任何预防措施，仅在风险发生时记录并应对。
+
+### 二、积极风险（机会 Opportunity）四大应对策略
+1. **开拓（Exploit）**：采取 100% 确保机会得以实现的行动（如指派公司最资深架构师攻坚）。
+2. **提高（Enhance）**：提高机会发生的概率或积极影响（如提前追加资源争取提前完工奖励）。
+3. **分享（Share）**：将机会部分或全部分配给最能捕捉该机会的第三方（如组建联合体/合资企业共同投标）。
+4. **接受（Accept）**：乐于利用机会带来的利益，但不主动投入资源去追求。
+
+### 三、应急应对策略 vs 弹回计划
+- **应急应对策略（Contingency Plan）**：仅在特定触发条件满足时才执行的预备方案；
+- **弹回计划（Fallback Plan）**：当主要应对策略无效时使用的备用次选方案。`,
+          memoryTips: '口诀：消极四策略——规避转移减轻接受；积极四策略——开拓提高分享接受；买保险签固定合同叫转移，设应急备用金叫主动接受！',
+          sort: 5,
+        },
+        {
+          subjectId: 1,
+          chapterId: 10,
+          name: '沟通渠道计算与干系人管理策略 (权力-利益方格)',
+          categoryTag: '项目沟通与干系人管理',
+          sourceBook: '《教程》第10章 项目沟通与干系人',
+          importance: '必考',
+          coreAnalysis: `### 一、沟通渠道数量计算公式
+- **潜在沟通渠道数公式**：\`M = N × (N - 1) / 2\`
+  - \`N\`：参与沟通的干系人总人数（**必须包含项目经理本人**）。
+  - **新增渠道数计算**：若团队人数从 N 人增加到 N + K 人，新增沟通渠道为 \`(N+K)(N+K-1)/2 - N(N-1)/2\`。
+
+### 二、干系人权力-利益方格（Power/Interest Grid）四大分类与应对策略
+1. **高权力 - 高利益（重点管理 Manage Closely）**：
+   - 特征：对项目有关键决策权且利益休戚相关（如项目发起人、主要客户主管）。
+   - 策略：必须时刻密切关注其期望，定期深入重点沟通与汇报。
+2. **高权力 - 低利益（令其满意 Keep Satisfied）**：
+   - 特征：拥有重大行政/审批权力但不过多关注细节（如公司高管、监管机构）。
+   - 策略：满足其管理诉求，保持良好关系，防止其滥用权力阻碍项目。
+3. **低权力 - 高利益（随时告知 Keep Informed）**：
+   - 特征：深受项目影响但决策权力有限（如最终系统操作用户、社区公众）。
+   - 策略：充分告知项目进展与变动，征求其意见反馈，争取其全力支持。
+4. **低权力 - 低利益（监督观察 Monitor）**：
+   - 特征：既无权力也不太受影响。
+   - 策略：花费最少精力进行常规监控与通用信息发布即可。`,
+          memoryTips: '口诀：沟通渠道N乘N减一除以二；高权高利重点管，高权低利令满意；低权高利随时告知，低权低利省力监督！',
+          sort: 6,
+        },
+        {
+          subjectId: 1,
+          chapterId: 13,
+          name: '项目采购合同类型与风险承担对比',
+          categoryTag: '项目采购管理',
+          sourceBook: '《教程》第13章 项目采购管理',
+          importance: '必考',
+          coreAnalysis: `### 一、三大类项目采购合同与适用场景对比
+1. **总价合同（Fixed-Price Contracts）**：
+   - **固定总价合同（FFP, Firm Fixed Price）**：最常用，价格不可变更。**买方风险最小，卖方风险最大**。适用于范围非常清晰、规范明确的项目。
+   - **总价加激励费用（FPIF）**：设有目标成本、目标利润、最高限价与分摊比例（买方:卖方）。
+   - **总价加经济价格调整（FP-EPA）**：适用于跨年度、受通货膨胀或汇率波动大的长期项目。
+
+2. **成本补偿合同（Cost-Reimbursable Contracts）**：
+   - **买方承担主要成本风险，卖方风险较小**。适用于项目范围初期不明确、处于研发探索阶段的项目。
+   - **成本加固定费用（CPFF）**：报销实际成本 + 固定利润。
+   - **成本加激励费用（CPIF）**：报销实际成本 + 节约分摊奖励。计算公式：\`实际支付 = 实际成本 + 目标利润 + (目标成本 - 实际成本) × 卖方分摊比例\`。
+   - **成本加奖励费用（CPAF）**：报销成本 + 完全由买方主观评定的奖励。
+
+3. **工料合同（T&M, Time and Material Contracts）**：
+   - 混合型合同，按预定单价（工时费率、材料单价）乘以实际消耗量结算。
+   - 适用于紧急工作、需要人员增补或无法预估详细工作量的小型短期任务。通常应设定**最高限额（Not-to-Exceed Ceiling）**以控制买方风险。
+
+### 二、合同类型买卖双方风险对比矩阵
+| 合同类型 | 买方（业主）风险 | 卖方（乙方）风险 | 范围明确度要求 |
+| :--- | :--- | :--- | :--- |
+| **固定总价合同 (FFP)** | 🟢 最小 | 🔴 最大 | 必须极其清晰明确 |
+| **总价加激励费用 (FPIF)** | 🟡 较小 | 🟠 较大 | 比较明确 |
+| **工料合同 (T&M)** | 🟠 中等偏高 | 🟡 中等偏低 | 初步明确 / 快速补充 |
+| **成本加激励费用 (CPIF)** | 🟠 较大 | 🟡 较小 | 不太明确 |
+| **成本加固定费用 (CPFF)** | 🔴 最大 | 🟢 最小 | 完全不明确 / 探索研发 |`,
+          memoryTips: '口诀：范围清楚签总价，卖方承担风险大；范围不清成本加，买方买单风险高；紧急招人签工料，最高限额不可少！',
+          sort: 7,
+        },
+      ];
+
+      for (const kp of keyPoints) {
+        let existing: any = null;
+        try {
+          existing = await this.knowledgePointRepository
+            .createQueryBuilder('k')
+            .where('k.name = :name OR k.name LIKE :likeName', {
+              name: kp.name,
+              likeName: `%${kp.name.slice(0, 4)}%`,
+            })
+            .getOne();
+        } catch {
+          existing = null;
+        }
+
+        if (existing) {
+          existing.name = kp.name;
+          existing.categoryTag = kp.categoryTag;
+          existing.sourceBook = kp.sourceBook;
+          existing.importance = kp.importance;
+          existing.coreAnalysis = kp.coreAnalysis;
+          existing.memoryTips = kp.memoryTips;
+          existing.sort = kp.sort;
+          existing.subjectId = kp.subjectId;
+          existing.chapterId = kp.chapterId;
+          await this.knowledgePointRepository.save(existing);
+        } else {
+          const item = this.knowledgePointRepository.create(kp as any);
+          await this.knowledgePointRepository.save(item);
+        }
+      }
+      this.logger.log('ensureKeyKnowledgePoints: 7 大核心必考考点已全部同步入库并置顶排序！');
+    } catch (err: any) {
+      this.logger.warn(`ensureKeyKnowledgePoints error: ${err.message}`);
+    }
   }
 
   /**
@@ -662,6 +898,13 @@ export class ExamService implements OnModuleInit {
       );
     }
 
+    qb.orderBy(
+      'CASE WHEN kp.importance = "必考" THEN 1 WHEN kp.importance = "高频" THEN 2 WHEN kp.importance = "常考" THEN 3 ELSE 4 END',
+      'ASC',
+    )
+      .addOrderBy('kp.sort', 'ASC')
+      .addOrderBy('kp.id', 'ASC');
+
     try {
       const [rawList, total] = await qb.getManyAndCount();
 
@@ -773,27 +1016,11 @@ export class ExamService implements OnModuleInit {
     // 若暂无关联题目，提供高质量精选典型例题
     if (mappedQuestions.length === 0) {
       let sampleQ: any = null;
-      if (kp.name.includes('风险应对')) {
+      if (kp.name.includes('净值') || kp.name.includes('EVM')) {
         sampleQ = {
           id: 10000 + Number(kp.id),
           type: 'single_choice',
-          content: '项目经理为了应对技术难度极高的核心模块开发风险，决定将该模块以固定总价合同形式外包给一家经验丰富专业公司。这种风险应对策略属于（ ）。',
-          options: [
-            { key: 'A', content: '风险规避' },
-            { key: 'B', content: '风险转移' },
-            { key: 'C', content: '风险减轻' },
-            { key: 'D', content: '风险开拓' },
-          ],
-          answer: 'B',
-          analysis: '【解析】将风险的后果连同应对的权力转移给第三方（如购买保险、签订固定总价合同外包），属于典型的风险转移策略。规避是通过修改计划消除威胁；减轻是降低概率或影响；开拓属于积极风险策略。故选B。',
-          difficulty: 3,
-          score: 1,
-        };
-      } else if (kp.name.includes('净值') || kp.name.includes('EVM')) {
-        sampleQ = {
-          id: 10000 + Number(kp.id),
-          type: 'single_choice',
-          content: '某项目进行到第6个月末，计划成本PV=100万元，实际支出AC=110万元，完成工作预算EV=90万元。则该项目的成本偏差(CV)和进度偏差(SV)分别为（ ）。',
+          content: '某项目进行到第6个月末，计划价值PV=100万元，实际成本AC=110万元，挣值EV=90万元。则该项目的成本偏差(CV)和进度偏差(SV)分别为（ ）。',
           options: [
             { key: 'A', content: '-20万元，-10万元' },
             { key: 'B', content: '-20万元，10万元' },
@@ -801,7 +1028,103 @@ export class ExamService implements OnModuleInit {
             { key: 'D', content: '-10万元，-20万元' },
           ],
           answer: 'A',
-          analysis: '【解析】成本偏差 CV = EV - AC = 90 - 110 = -20万元（成本超支）；进度偏差 SV = EV - PV = 90 - 100 = -10万元（进度延误）。故正确答案为A。',
+          analysis: '【解析】成本偏差 CV = EV - AC = 90 - 110 = -20万元（成本超支）；进度偏差 SV = EV - PV = 90 - 100 = -10万元（进度延误）。故选A。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('关键路径') || kp.name.includes('CPM') || kp.name.includes('PERT') || kp.name.includes('三点估算')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '某活动的乐观时间为4天，最可能时间为6天，悲观时间为14天。采用PERT（贝塔分布）进行三点估算，该活动的期望工期和标准差分别为（ ）。',
+          options: [
+            { key: 'A', content: '7天，1.67天' },
+            { key: 'B', content: '8天，1.67天' },
+            { key: 'C', content: '7天，1.4天' },
+            { key: 'D', content: '6天，2天' },
+          ],
+          answer: 'A',
+          analysis: '【解析】期望工期 Te = (To + 4Tm + Tp) / 6 = (4 + 4×6 + 14) / 6 = 42 / 6 = 7天；标准差 σ = (Tp - To) / 6 = (14 - 4) / 6 = 10 / 6 ≈ 1.67天。故选A。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('变更') || kp.name.includes('CCB')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '在项目整体变更控制流程中，项目经理在收到客户提出的书面变更申请后，下一步应当首先开展的工作是（ ）。',
+          options: [
+            { key: 'A', content: '直接修改范围基准和项目管理计划' },
+            { key: 'B', content: '组织团队全面评估该变更对范围、成本、进度及质量等基准的综合影响' },
+            { key: 'C', content: '立即提交CCB进行投票决议' },
+            { key: 'D', content: '直接拒绝客户的不合理变更要求' },
+          ],
+          answer: 'B',
+          analysis: '【解析】整体变更控制标准流程：提出变更申请 -> 评估变更影响 -> 提交CCB审批 -> CCB决议 -> 更新基准与计划 -> 通知干系人 -> 监控实施。因此收到变更后第一步必须先组织评估影响，再报CCB。故选B。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('范围基线') || kp.name.includes('WBS')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '关于工作分解结构（WBS）的拆解原则与规范，下列说法中不正确的是（ ）。',
+          options: [
+            { key: 'A', content: 'WBS 必须遵循 100% 原则，下层所有元素的总和等于上一层元素' },
+            { key: 'B', content: 'WBS 应当以可交付成果为导向进行分解' },
+            { key: 'C', content: 'WBS 最底层的工作单元称为工作包' },
+            { key: 'D', content: 'WBS 中应详细定义各项活动之间的前后逻辑依赖关系' },
+          ],
+          answer: 'D',
+          analysis: '【解析】WBS 本身只展现范围层次结构，不体现活动之间的先后逻辑依赖关系（活动先后排序属于进度管理的前导图法PDM），故D选项说法错误。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('风险应对') || kp.name.includes('风险管理')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '项目经理为了应对技术难度极高的核心模块开发风险，决定将该模块以固定总价合同形式外包给一家经验丰富的专业公司。这种风险应对策略属于（ ）。',
+          options: [
+            { key: 'A', content: '风险规避' },
+            { key: 'B', content: '风险转移' },
+            { key: 'C', content: '风险减轻' },
+            { key: 'D', content: '风险开拓' },
+          ],
+          answer: 'B',
+          analysis: '【解析】将风险的后果连同应对的权力转移给第三方（如购买保险、签订固定总价合同外包），属于典型的风险转移策略。故选B。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('沟通渠道') || kp.name.includes('干系人') || kp.name.includes('权力-利益')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '某项目团队最初由项目经理和4名工程师组成（共5人），后因工期紧张又增加了3名开发人员。则该项目团队的潜在沟通渠道数增加了（ ）个。',
+          options: [
+            { key: 'A', content: '18' },
+            { key: 'B', content: '28' },
+            { key: 'C', content: '10' },
+            { key: 'D', content: '15' },
+          ],
+          answer: 'A',
+          analysis: '【解析】原沟通渠道 M1 = 5 × (5 - 1) / 2 = 10条；增加3人后人数为8人，M2 = 8 × (8 - 1) / 2 = 28条。新增沟通渠道数 = 28 - 10 = 18条。故选A。',
+          difficulty: 3,
+          score: 1,
+        };
+      } else if (kp.name.includes('采购') || kp.name.includes('合同类型')) {
+        sampleQ = {
+          id: 10000 + Number(kp.id),
+          type: 'single_choice',
+          content: '在项目采购管理中，当项目工作范围极其清晰明确、技术规范非常完整时，买方（业主）为了将自身成本风险降至最低，最适宜采用的合同类型是（ ）。',
+          options: [
+            { key: 'A', content: '固定总价合同（FFP）' },
+            { key: 'B', content: '成本加固定费用合同（CPFF）' },
+            { key: 'C', content: '工料合同（T&M）' },
+            { key: 'D', content: '成本加激励费用合同（CPIF）' },
+          ],
+          answer: 'A',
+          analysis: '【解析】固定总价合同（FFP）中价格固定不变，买方风险最小，卖方承担全部成本超支风险，适用于工作范围定义非常明确的项目。故选A。',
           difficulty: 3,
           score: 1,
         };
