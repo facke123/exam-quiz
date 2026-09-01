@@ -1677,59 +1677,54 @@ function parseExcelToQuestions(rows: any[]) {
 }
 
 function parseTextToQuestions(rawText: string): number {
-  const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const questionsMap = new Map<number, any>()
+  // eslint-disable-next-line no-control-regex
+  const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
+  const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
+  const questions: any[] = []
   let currentQ: any = null
-  let lastSavedNum = 0
+  let currentChapter = '第1章 信息化发展'
+  let currentTypeFromTag = ''
 
-  function isAdOrHeader(line: string): boolean {
-    if (/^(?:一、|二、|三、|四、|五、|part\s*\d|section\s*\d)/i.test(line)) return true
-    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
-    if (/^\d{4}\s*年?(?:上|下)半年.*(?:系统集成|信息系统|项目管理|真题|基础知识|综合知识)/i.test(line)) return true
+  function isHeaderOrInstruction(line: string): boolean {
+    if (/^(?:系统集成|信息系统|软考|全国计算机|中级|高级|基础知识|应用技术).*模拟试卷/i.test(line)) return true
+    if (/^（依据《.*》.*编写）/.test(line)) return true
+    if (/^(?:试卷说明|考试科目|合格分数线|建议用时|使用说明|满分|题量|题型|说明|项目)$/.test(line)) return true
+    if (/^\d+\s*分(?:（含\s*\d+\s*分）)?$/.test(line)) return true
+    if (/^\d+\s*分钟$/.test(line)) return true
+    if (/^共\s*\d+\s*题/.test(line)) return true
+    if (/^第[一二三四五六七八九十]+部分/.test(line)) return true
+    if (/^[一二三四五六七八九十]+[、.．\s].*（第\s*\d+.*题）/.test(line)) return true
     if (/^-\(全国卷\)/.test(line)) return true
+    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
     return false
   }
 
-  function extractQuestionStart(line: string, activeNum: number) {
-    if (isAdOrHeader(line)) return null
-
-    // Pattern 1: (1) ... / （1） ... / [1] ... / 1. ... / 1、 ... / 1． ... / 1 ...
-    const regex1 = /^(?:试题\s*|第\s*)?(?:[\(（\[【]\s*(\d{1,3})\s*[\)）\]】][\s、.．:：\-\—_]?|(\d{1,3})[\s、.．:：\-\—_])\s*(?:【[^】]*】)?\s*(.*)/
-    const m = line.match(regex1)
-    let num: number | null = null
-    let content = ''
-
-    if (m) {
-      num = parseInt(m[1] || m[2], 10)
-      content = (m[3] || '').trim()
-    } else {
-      // Pattern 2: 题干末尾包含 (55) 或开头带空括号 ( )关于... (25)。
-      const m2 = line.match(/^(?:[\(（]\s*[\)）])?\s*(.*[\(（](\d{1,3})[\)）].*)/)
-      if (m2) {
-        const candidateNum = parseInt(m2[2], 10)
-        if (activeNum > 0 && (candidateNum === activeNum + 1 || candidateNum === activeNum + 2)) {
-          num = candidateNum
-          content = m2[1].trim()
-        }
-      }
+  function extractChapterFromHeader(line: string) {
+    const chMatch = line.match(/^(?:第\s*(\d{1,2})\s*章|[一二三四五六七八九十]+[、.．\s])\s*([^（(\n\r]+)/)
+    if (chMatch) {
+      return line.trim()
     }
+    return null
+  }
 
-    if (num === null) return null
+  function extractQuestionStart(line: string) {
+    if (isHeaderOrInstruction(line)) return null
 
-    // 题号序列判断
-    if (activeNum > 0) {
-      if (num > activeNum && num <= activeNum + 3) {
+    // 匹配各种真题格式：
+    // 1. 第1题. / 第1题：/ 第 1 题 / 第1题 / 试题1. / 试题1 / 【试题1】
+    // 2. 1. / 1、 / 1． / 1: / 1：
+    // 3. (1) / （1） / [1] / 【1】
+    const qPattern = /^(?:【?(?:单选|多选|判断|问答|案例|论述)题?】?\s*)?(?:【?(?:试题\s*|第\s*)?(\d{1,3})\s*(?:题)?[\)）\]】]?[\.、．:：\-\—_\s]\s*|(?:试题\s*|第\s*)(\d{1,3})\s*题[\.、．:：\-\—_\s]*|[\(（\[【](\d{1,3})[\)）\]】][\.、．:：\-\—_\s]*)(.*)/
+    const m = line.match(qPattern)
+    if (m) {
+      const numStr = m[1] || m[2] || m[3]
+      const num = parseInt(numStr, 10)
+      const content = (m[4] || '').trim()
+      if (num >= 1 && num <= 200) {
         return { num, content }
       }
-      // 允许71-75的双语重现（中文翻译补充）
-      if (num >= 71 && num <= 75 && activeNum >= 71) {
-        return { num, content, isRepeat: true }
-      }
-      return null
-    } else {
-      if (num === 1) return { num, content }
-      return null
     }
+    return null
   }
 
   function saveCurrentQ() {
@@ -1737,56 +1732,51 @@ function parseTextToQuestions(rawText: string): number {
     if (!currentQ.answer && currentQ.options.length > 0) {
       currentQ.answer = 'A'
     }
-    const qNum = currentQ.num || (questionsMap.size + 1)
-    if (questionsMap.has(qNum)) {
-      const existing = questionsMap.get(qNum)
-      if (currentQ.answer) existing.answer = currentQ.answer
-      if (currentQ.analysis) existing.analysis = currentQ.analysis
-      if (currentQ.options && currentQ.options.length >= 2) {
-        if (!existing.options || existing.options.length < 2) {
-          existing.options = currentQ.options
-        }
-      }
-      if (currentQ.content && currentQ.content.length > 5) {
-        if (!existing.content.includes(currentQ.content)) {
-          existing.content += '\n【中文译文】' + currentQ.content
-        }
-      }
-    } else {
-      questionsMap.set(qNum, {
-        num: qNum,
-        type: currentQ.type || 'single',
-        content: currentQ.content.trim(),
-        options: currentQ.options,
-        answer: currentQ.answer.trim().toUpperCase(),
-        analysis: currentQ.analysis.trim(),
-        score: 1,
-      })
-      lastSavedNum = qNum
-    }
+    questions.push({
+      num: currentQ.num || (questions.length + 1),
+      type: currentQ.type || (currentQ.options.length > 0 ? (currentQ.answer.length > 1 ? 'multiple' : 'single') : 'essay'),
+      chapter: currentQ.chapter || currentChapter,
+      content: currentQ.content.trim(),
+      options: currentQ.options,
+      answer: currentQ.answer.trim().toUpperCase(),
+      analysis: currentQ.analysis.trim(),
+      knowledgePoint: currentQ.knowledgePoint,
+      score: 1,
+    })
     currentQ = null
   }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (isAdOrHeader(line)) continue
+    if (/^【(单选题|多选题|判断题|问答题|案例分析题|论述题)】$/.test(line)) {
+      currentTypeFromTag = line.replace(/[【】]/g, '')
+      continue
+    }
+    const ch = extractChapterFromHeader(line)
+    if (ch && !line.includes('。') && !line.includes('？') && line.length < 30) {
+      currentChapter = ch
+      continue
+    }
+    if (isHeaderOrInstruction(line)) continue
 
-    const activeNum = currentQ ? currentQ.num : lastSavedNum
-    const qStart = extractQuestionStart(line, activeNum)
+    const qStart = extractQuestionStart(line)
     if (qStart) {
       saveCurrentQ()
       let type = 'single'
-      if (qStart.content.includes('多选')) type = 'multiple'
-      else if (qStart.content.includes('判断')) type = 'judge'
-      else if (qStart.content.includes('问答') || qStart.content.includes('案例')) type = 'essay'
+      const fullContent = (currentTypeFromTag + ' ' + qStart.content)
+      if (fullContent.includes('多选')) type = 'multiple'
+      else if (fullContent.includes('判断')) type = 'judge'
+      else if (fullContent.includes('问答') || fullContent.includes('案例') || fullContent.includes('论述')) type = 'essay'
 
       currentQ = {
         num: qStart.num,
         type,
-        content: qStart.content.replace(/【(?:单选|多选|判断|问答)题?】/g, '').trim(),
+        chapter: currentChapter,
+        content: qStart.content.replace(/【(?:单选|多选|判断|问答|案例|论述)题?】/g, '').trim(),
         options: [],
         answer: '',
         analysis: '',
+        knowledgePoint: '',
         state: 'stem',
       }
       continue
@@ -1802,21 +1792,41 @@ function parseTextToQuestions(rawText: string): number {
       continue
     }
 
+    // 考点识别
+    const kpMatch = line.match(/^【?(?:核心)?考点(?:定位)?】?[:：\s]*(.*)/i)
+    if (kpMatch) {
+      currentQ.state = 'kp'
+      currentQ.knowledgePoint = kpMatch[1].trim()
+      if (currentQ.analysis) {
+        currentQ.analysis += '\n【考点定位】' + kpMatch[1].trim()
+      } else {
+        currentQ.analysis = '【考点定位】' + kpMatch[1].trim()
+      }
+      continue
+    }
+
     // 解析识别
     const anaMatch = line.match(/^【?(?:答案|试题)?解析】?[:：\s]*(.*)/i)
     if (anaMatch) {
       currentQ.state = 'analysis'
-      currentQ.analysis = anaMatch[1].trim()
+      const anaText = anaMatch[1].trim()
+      if (currentQ.analysis) {
+        currentQ.analysis += '\n【名师解析】' + anaText
+      } else {
+        currentQ.analysis = '【名师解析】' + anaText
+      }
       continue
     }
 
-    // 如果处于解析阶段
-    if (currentQ.state === 'analysis') {
-      currentQ.analysis += (currentQ.analysis ? '\n' : '') + line
+    // 易错点 / 避坑口诀 / 名师点拨
+    const extraMatch = line.match(/^【(易错点|避坑口诀|名师点拨|考前速记)】[:：\s]*(.*)/i)
+    if (extraMatch) {
+      currentQ.state = 'analysis'
+      currentQ.analysis += '\n【' + extraMatch[1] + '】' + extraMatch[2].trim()
       continue
     }
 
-    // 单行多个选项: A. xxx B. yyy C. zzz D. kkk
+    // 选项识别 - 单行多个选项
     if (/[A-Da-d][.、．:：\s].+[B-Eb-e][.、．:：\s]/.test(line)) {
       const inlineRegex = /([A-Ga-g])[.、．:：\s]\s*([^A-Ga-g]+)/g
       let m: RegExpExecArray | null
@@ -1834,28 +1844,24 @@ function parseTextToQuestions(rawText: string): number {
 
     // 独立选项: A. / A、 / A． / (A) / （A） / A: / A
     const optMatch = line.match(/^[\(（]?([A-Ga-g])[\)）]?\s*[.、．:：\s]\s*(.*)/)
-    if (optMatch) {
+    if (optMatch && currentQ.state !== 'analysis' && currentQ.state !== 'kp') {
       currentQ.state = 'option'
       const key = optMatch[1].toUpperCase()
       currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
       continue
     }
 
-    // 选项换行追加
-    if (currentQ.state === 'option' && currentQ.options.length > 0) {
-      const lastOpt = currentQ.options[currentQ.options.length - 1]
-      lastOpt.content += (lastOpt.content ? '\n' : '') + line
-      continue
-    }
-
-    // 题干多行追加
-    if (currentQ.state === 'stem') {
-      currentQ.content += (currentQ.content ? '\n' : '') + line
+    // 状态续行
+    if (currentQ.state === 'analysis' || currentQ.state === 'kp') {
+      currentQ.analysis += '\n' + line
+    } else if (currentQ.state === 'option' && currentQ.options.length > 0) {
+      currentQ.options[currentQ.options.length - 1].content += '\n' + line
+    } else if (currentQ.state === 'stem') {
+      currentQ.content += '\n' + line
     }
   }
 
   saveCurrentQ()
-  const questions = Array.from(questionsMap.values())
   parsedQuestions.value = questions
   if (questions.length > 0) {
     ElMessage.success(`试卷解析完毕，共提取出 ${questions.length} 道试题！`)
