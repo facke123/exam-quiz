@@ -58,6 +58,7 @@ const fromDbType = (t?: string) => {
 @Injectable()
 export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
+  private readonly memoryTasks = new Map<number, any>();
 
   constructor(
     @InjectRepository(AiTask)
@@ -139,6 +140,8 @@ export class AiService implements OnModuleInit {
       `);
 
       const alterQueries = [
+        'ALTER TABLE `ai_tasks` MODIFY COLUMN `type` VARCHAR(50) NOT NULL DEFAULT "generate_question"',
+        'ALTER TABLE `ai_tasks` MODIFY COLUMN `status` VARCHAR(30) DEFAULT "pending"',
         'ALTER TABLE `questions` ADD COLUMN `source` VARCHAR(30) DEFAULT "manual" COMMENT "来源"',
         'ALTER TABLE `questions` ADD COLUMN `aiConfidence` FLOAT NULL DEFAULT 0.95 COMMENT "AI置信度"',
         'ALTER TABLE `questions` ADD COLUMN `ai_confidence` FLOAT NULL DEFAULT 0.95',
@@ -155,9 +158,9 @@ export class AiService implements OnModuleInit {
 
       for (const q of alterQueries) {
         try {
-          await this.questionRepository.query(q);
+          await this.taskRepository.query(q);
         } catch {
-          // 列已存在，忽略
+          // 列已存在或已兼容，忽略
         }
       }
     } catch (e: any) {
@@ -1786,28 +1789,53 @@ ${negativeStemsNote}
       );
     }
 
-    const modelToUse = dto.model?.trim() || aiConfig.model;
-    const task = this.taskRepository.create({
+    const modelToUse = dto.model?.trim() || aiConfig.model || 'gemini-2.5-flash';
+    const taskId = Date.now();
+    const taskData: any = {
+      id: taskId,
       type: 'generate_paper',
       status: 'processing',
       model: modelToUse,
-      params: dto as unknown as Record<string, unknown>,
+      params: dto,
       result: {
         progress: 5,
         step: '正在初始化 AI 命题任务与考点大纲...',
         questionCount: Number(dto.questionCount) || 75,
       },
-      adminId,
-    });
-    const savedTask = await this.taskRepository.save(task);
+      adminId: Number(adminId) || 1,
+      createdAt: new Date(),
+    };
+    this.memoryTasks.set(taskId, taskData);
+
+    let finalTaskId = taskId;
+
+    // 尝试保存到数据库记录
+    try {
+      const task = this.taskRepository.create({
+        type: 'generate_paper',
+        status: 'processing',
+        model: modelToUse,
+        params: dto as unknown as Record<string, unknown>,
+        result: taskData.result,
+        adminId: Number(adminId) || 1,
+      });
+      const savedTask = await this.taskRepository.save(task);
+      if (savedTask && savedTask.id) {
+        finalTaskId = Number(savedTask.id);
+        this.memoryTasks.delete(taskId);
+        this.memoryTasks.set(finalTaskId, { ...taskData, id: finalTaskId });
+      }
+    } catch (dbErr: any) {
+      this.logger.warn(`AI 任务保存数据库异常，已启用内存任务引擎: ${dbErr.message}`);
+    }
 
     // 启动后台异步工作线程执行试卷生成
-    this.runAsyncPaperTask(Number(savedTask.id), dto, adminId).catch((err) => {
-      this.logger.error(`异步出卷任务[${savedTask.id}]执行异常: ${err.message}`, err.stack);
+    this.runAsyncPaperTask(finalTaskId, dto, adminId).catch((err) => {
+      this.logger.error(`异步出卷任务[${finalTaskId}]执行异常: ${err.message}`, err.stack);
     });
 
     return {
-      taskId: Number(savedTask.id),
+      taskId: finalTaskId,
       status: 'processing',
       message: 'AI 试卷命题任务已创建，正在后台极速并发命题中...',
     };
@@ -1817,47 +1845,84 @@ ${negativeStemsNote}
    * 后台异步执行试卷生成工作流并实时汇报进度
    */
   async runAsyncPaperTask(taskId: number, dto: AiGeneratePaperDto, adminId: number = 1): Promise<void> {
-    try {
-      const updateProgress = async (progress: number, step: string) => {
-        try {
-          await this.taskRepository.update(taskId, {
-            result: {
-              progress,
-              step,
-              questionCount: Number(dto.questionCount) || 75,
-            },
-          });
-        } catch {
-          // ignore progress update errors
-        }
-      };
+    const updateProgress = async (progress: number, step: string) => {
+      const current = this.memoryTasks.get(taskId) || {};
+      this.memoryTasks.set(taskId, {
+        ...current,
+        id: taskId,
+        status: 'processing',
+        result: {
+          ...(current.result || {}),
+          progress,
+          step,
+          questionCount: Number(dto.questionCount) || 75,
+        },
+      });
 
+      try {
+        await this.taskRepository.update(taskId, {
+          result: {
+            progress,
+            step,
+            questionCount: Number(dto.questionCount) || 75,
+          },
+        });
+      } catch {
+        // ignore progress update errors
+      }
+    };
+
+    try {
       await updateProgress(10, '正在提取各章节考点大纲与初始化试卷防重复题库...');
       const genResult = await this.executePaperGenerationCore(dto, adminId, updateProgress);
 
-      await this.taskRepository.update(taskId, {
+      const successResult = {
+        progress: 100,
+        step: '🎉 试卷生成完成，已自动入库！',
+        paperId: genResult.paperId,
+        paper: genResult.paper,
+        questionCount: genResult.questionCount,
+        message: genResult.message,
+      };
+
+      const current = this.memoryTasks.get(taskId) || {};
+      this.memoryTasks.set(taskId, {
+        ...current,
         status: 'completed',
         completedAt: new Date(),
-        result: {
-          progress: 100,
-          step: '🎉 试卷生成完成，已自动入库！',
-          paperId: genResult.paperId,
-          paper: genResult.paper,
-          questionCount: genResult.questionCount,
-          message: genResult.message,
-        },
+        result: successResult,
       });
+
+      try {
+        await this.taskRepository.update(taskId, {
+          status: 'completed',
+          completedAt: new Date(),
+          result: successResult,
+        });
+      } catch {
+        // ignore
+      }
     } catch (err: any) {
       this.logger.error(`异步生成试卷失败[taskId=${taskId}]: ${err.message}`, err.stack);
+      const failResult = {
+        progress: 0,
+        step: '试卷生成失败',
+        error: err.message || 'AI 试卷生成异常',
+      };
+
+      const current = this.memoryTasks.get(taskId) || {};
+      this.memoryTasks.set(taskId, {
+        ...current,
+        status: 'failed',
+        completedAt: new Date(),
+        result: failResult,
+      });
+
       try {
         await this.taskRepository.update(taskId, {
           status: 'failed',
           completedAt: new Date(),
-          result: {
-            progress: 0,
-            step: '试卷生成失败',
-            error: err.message || 'AI 试卷生成异常',
-          },
+          result: failResult,
         });
       } catch {
         // ignore
@@ -2813,12 +2878,20 @@ ${dto.content}`;
   /**
    * 获取 AI 任务详情
    */
-  async getTask(id: number): Promise<AiTask> {
-    const task = await this.taskRepository.findOne({ where: { id } });
-    if (!task) {
-      throw new NotFoundException('任务不存在');
+  async getTask(id: number): Promise<AiTask | any> {
+    const memoryTask = this.memoryTasks.get(Number(id));
+    if (memoryTask) {
+      return memoryTask;
     }
-    return task;
+    try {
+      const task = await this.taskRepository.findOne({ where: { id: Number(id) } });
+      if (task) {
+        return task;
+      }
+    } catch (e: any) {
+      this.logger.warn(`查询数据库任务异常: ${e.message}`);
+    }
+    throw new NotFoundException('任务不存在或已过期');
   }
 
   /**

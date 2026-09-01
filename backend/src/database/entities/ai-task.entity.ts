@@ -17,14 +17,14 @@ export class AiTask {
   @Index()
   @Column({
     type: 'varchar',
-    length: 30,
-    comment: '类型: generate_question/generate_analysis/import',
+    length: 50,
+    comment: '类型: generate_question/generate_paper/generate_analysis/import',
   })
   type: string;
 
   @Column({
     type: 'varchar',
-    length: 20,
+    length: 30,
     default: 'pending',
     comment: '状态: pending/processing/completed/failed',
   })

@@ -358,8 +358,8 @@ CREATE TABLE IF NOT EXISTS operation_logs (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_tasks (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  type ENUM('generate_question','generate_analysis','import') NOT NULL COMMENT '任务类型',
-  status ENUM('pending','processing','completed','failed') DEFAULT 'pending',
+  type VARCHAR(50) NOT NULL DEFAULT 'generate_question' COMMENT '任务类型',
+  status VARCHAR(30) DEFAULT 'pending' COMMENT '任务状态',
   params JSON COMMENT '任务参数',
   result JSON COMMENT '任务结果',
   model VARCHAR(50) COMMENT '使用的AI模型',
