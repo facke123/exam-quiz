@@ -774,6 +774,7 @@ import {
   rewriteQuestionAnalysis,
   updateAIQuestion,
   getAIQuota,
+  getAIConfig,
 } from '@/api/ai'
 import { getAllSubjects, getChapterTree } from '@/api/exam'
 
@@ -814,7 +815,7 @@ const currentKnowledgePoints = ref<any[]>([])
 
 // 单题/批量出题表单
 const generateForm = reactive<any>({
-  model: 'gemini-3.7-flash',
+  model: '',
   subjectId: 1,
   chapterId: 1,
   knowledgePointId: undefined,
@@ -827,7 +828,7 @@ const generateForm = reactive<any>({
 
 // 整套试卷出题表单
 const paperForm = reactive<any>({
-  model: 'gemini-3.7-flash',
+  model: '',
   subjectId: 1,
   paperName: '',
   questionTypeCategory: 'case',
@@ -1334,10 +1335,19 @@ async function handleClearAllPending() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadSubjects()
   fetchQuota()
   fetchReviewList()
+  try {
+    const cfgRes: any = await getAIConfig()
+    if (cfgRes?.data?.model) {
+      generateForm.model = cfgRes.data.model
+      paperForm.model = cfgRes.data.model
+    }
+  } catch {
+    // ignore
+  }
 })
 </script>
 

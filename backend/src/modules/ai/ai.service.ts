@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -603,41 +603,73 @@ export class AiService implements OnModuleInit {
   ): Promise<any | null> {
     const config = await this.getRawAiConfig();
     if (config.enabled !== '1' || !config.apiKey) {
-      this.logger.debug('AI 功能未开启或未配置 API Key，将采用高精考点知识库模版');
+      this.logger.debug('AI 功能未开启或未配置 API Key');
       return null;
     }
 
+    let targetModel = options?.model?.trim() || config.model;
+    if (!targetModel) {
+      targetModel = config.model || 'deepseek-chat';
+    }
+
+    let responseText: string | null = null;
     try {
-      const responseText = await this.rawHttpChatCompletion({
+      responseText = await this.rawHttpChatCompletion({
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
-        model: options?.model || config.model,
+        model: targetModel,
         messages,
         temperature: options?.temperature ?? config.temperature,
         maxTokens: options?.maxTokens ?? config.maxTokens,
       });
-
-      if (!options?.json) {
-        return responseText;
-      }
-
-      // JSON 提取
-      const cleanJson = responseText
-        .replace(/```(?:json)?\s*/gi, '')
-        .replace(/```/g, '')
-        .trim();
-
-      try {
-        return JSON.parse(cleanJson);
-      } catch {
-        const match = cleanJson.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-        if (match) {
-          return JSON.parse(match[1]);
-        }
-        return cleanJson;
-      }
     } catch (err: any) {
-      this.logger.warn(`真实大模型调用异常: ${err.message}，自动启用高精命题备选方案`);
+      this.logger.warn(`模型 [${targetModel}] 调用异常: ${err.message}`);
+      // 若自定义指定的模型报错且与系统配置模型不同，尝试使用系统默认模型重试
+      if (targetModel !== config.model && config.model) {
+        try {
+          this.logger.log(`尝试使用系统默认配置模型 [${config.model}] 重试...`);
+          responseText = await this.rawHttpChatCompletion({
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+            model: config.model,
+            messages,
+            temperature: options?.temperature ?? config.temperature,
+            maxTokens: options?.maxTokens ?? config.maxTokens,
+          });
+        } catch (retryErr: any) {
+          this.logger.warn(`系统默认配置模型重试亦失败: ${retryErr.message}`);
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+
+    if (!responseText) {
+      return null;
+    }
+
+    if (!options?.json) {
+      return responseText;
+    }
+
+    // JSON 提取
+    const cleanJson = responseText
+      .replace(/```(?:json)?\s*/gi, '')
+      .replace(/```/g, '')
+      .trim();
+
+    try {
+      return JSON.parse(cleanJson);
+    } catch {
+      const match = cleanJson.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+      if (match) {
+        try {
+          return JSON.parse(match[1]);
+        } catch {
+          return null;
+        }
+      }
       return null;
     }
   }
@@ -1392,13 +1424,12 @@ export class AiService implements OnModuleInit {
     else if (dbType === 'true_false') selectedPool = judgePool;
     else if (dbType === 'case_analysis') selectedPool = casePool;
 
-    // 收集候选且过滤已存在题目
+    // 收集候选且严格过滤已存在题目（绝不重复取用）
     const available = selectedPool.filter((item) => !this.checkStemInList(item.content, existingStems));
-    const poolToUse = available.length >= count ? available : selectedPool;
 
     for (let i = 0; i < count; i++) {
-      if (i < poolToUse.length) {
-        const item = poolToUse[i];
+      if (i < available.length) {
+        const item = available[i];
         results.push({
           content: item.content,
           options: item.options,
@@ -1753,16 +1784,31 @@ ${negativeStemsNote}
     const subject = await this.subjectRepository.findOne({ where: { id: subjectId } });
     const subName = subject ? subject.name : '系统集成项目管理工程师';
 
-    const isCasePaper = dto.questionTypeCategory === 'case' || dto.paperType === 'case';
+    const aiConfig = await this.getRawAiConfig();
+    if (aiConfig.enabled !== '1' || !aiConfig.apiKey) {
+      throw new BadRequestException(
+        'AI 服务未开启或未配置 API Key，请先前往后台「AI大模型配置」页面填写并测试您的 API Key 后再使用 AI 一键出卷功能！',
+      );
+    }
+
+    const questionCategory = dto.questionTypeCategory || 'case';
+    const isCasePaper = questionCategory === 'case' || dto.paperType === 'case';
+    const isMixedPaper = questionCategory === 'mixed';
     const currentYear = dto.paperName
       ? Number((dto.paperName.match(/(20\d{2})/) || [])[1]) || new Date().getFullYear()
       : new Date().getFullYear();
 
     const paperType = ['mock', 'real', 'practice'].includes(String(dto.paperType)) ? String(dto.paperType) : 'mock';
     const duration = Number(dto.duration) || 150;
-    const difficulty = Number(dto.difficulty) || 4;
+    const difficulty = Number(dto.difficulty) || 3;
+    const modelToUse = dto.model?.trim() || aiConfig.model;
 
-    // ==================== 1. 案例分析大题整卷流水线 (Case Analysis Full Paper) ====================
+    // 全局防重复题干集合（含数据库历史最近题干 + 本次试卷已命制题干）
+    const existingStemsInDb = await this.getRecentQuestionStems(subjectId, undefined, 80);
+    const paperGeneratedStems: string[] = [...existingStemsInDb];
+    const generatedQuestionsData: any[] = [];
+
+    // ==================== 1. 案例分析大题整卷流水线 (Case Analysis Paper) ====================
     if (isCasePaper) {
       const caseCount = Math.min(Math.max(Number(dto.questionCount) || 4, 2), 6);
       const paperName =
@@ -1774,62 +1820,77 @@ ${negativeStemsNote}
 
       const caseDomains = [
         {
-          domain: '进度管理与工期赶工优化',
-          focus: '包含活动/紧前关系/正常赶工时间与费用数据表格（Markdown表格）、关键路径CPM判定、总时差自由时差计算、工期压缩与最低成本赶工方案决策',
+          domain: '进度管理与双代号时标网络图关键路径CPM及工期压缩赶工决策',
+          scenario: '某大型智慧城市政务数据中台系统集成项目',
+          focus: '包含真实完整的项目活动数据表（Markdown表格，列出活动代号、紧前活动、正常工作天数、正常每天费用、赶工天数、赶工每天费用），求出关键路径CPM、总工期、总时差（TF）与自由时差（FF）计算推导，并给出工期压缩目标与最低增加费用赶工方案决策。',
           score: 20,
         },
         {
-          domain: '成本管理与 EVM 挣值分析',
-          focus: '包含项目执行数据表或EVM曲线图、PV/EV/AC参数核算、CV/SV/CPI/SPI状态评价、典型与非典型完工尚需ETC/完工估算EAC预测及纠偏方案',
+          domain: '项目成本管理与 EVM 挣值分析动态曲线及绩效预测',
+          scenario: '某商业银行核心支付清算分布式微服务重构项目',
+          focus: '包含执行节点真实EVM数据（PV、AC、EV），核算CV、SV、CPI、SPI并评价项目当前状态；针对典型偏差与非典型偏差分别预测完工尚需估算ETC与完工估算EAC；提出针对性的成本/进度纠偏措施。',
           score: 20,
         },
         {
-          domain: '网络工程、安全防护与系统架构',
-          focus: '包含网络拓扑架构图（内联自适应SVG图）、DMZ区隔离访问控制策略、纵深安全防御、等保2.0合规与数据容灾备份体系',
+          domain: '信息系统网络架构、安全纵深防御与等保2.0合规',
+          scenario: '某三甲医院智慧医疗与远程影像互联互通平台',
+          focus: '包含网络拓扑架构（外网、边界防火墙、DMZ区Web集群、内部防火墙、信任安全内网，提供自适应SVG拓扑图），剖析DMZ区单向访问控制原则、等保2.0三级数据备份与异地容灾要求、SQL注入与敏感数据加密纵深防御方案。',
           score: 18,
         },
         {
-          domain: '项目范围蔓延、配置管理与 CCB 变更控制闭环',
-          focus: '包含真实业务多方变更冲突场景、配置基线管理失控诊断、CCB变更控制规范流程六步骤及项目范围纠偏对策',
+          domain: '项目范围蔓延、配置基线版本失控与 CCB 变更控制闭环',
+          scenario: '某新能源汽车智能座舱车联网中控研发项目',
+          focus: '剖析开发团队私自修改代码导致的范围蔓延与基线混乱根因，详细写出国家标准 CCB 变更控制规范六步法（提出申请、初审评估、CCB评审决议、实施跟踪、验证确认、关闭归档），说明配置基线的定义与修改原则。',
           score: 17,
         },
         {
-          domain: '质量管理与风险定量/定性分析',
-          focus: '包含质量因果鱼骨图/帕累托图、风险登记册、风险应对策略选择（规避/减轻/转移/接受）及应急预案',
+          domain: '质量管理 QC 七种工具、因果鱼骨图/帕累托图与质量保证体系',
+          scenario: '某智能制造工厂数字孪生 MES 车间中控系统',
+          focus: '针对联调上线中出现的系统卡顿与数据丢包缺陷，运用因果图（鱼骨图）从人、机、料、法、环维度定位根本原因；运用帕累托图（80/20法则）锁定关键少数；阐述质量保证QA（过程导向）与质量控制QC（结果导向）的分工与协作。',
+          score: 18,
+        },
+        {
+          domain: '项目风险管理定性/定量评估与决策树 EMV 预期货币价值分析',
+          scenario: '某省级低空经济无人机智能调度与立体监控云平台',
+          focus: '包含风险识别与风险登记册（风险概率与影响矩阵），绘制决策树分析图并计算不同技术方案的预期货币价值（EMV），制定消极风险（规避/转移/减轻/接受）与积极机会（开拓/提高/分享/接受）的具体应对策略。',
           score: 18,
         },
       ];
 
-      const generatedQuestionsData: any[] = [];
-      const existingStems = await this.getRecentQuestionStems(subjectId, 40);
-
-      // 为每道大题调用 LLM 生成或从高精池抽取
       for (let i = 0; i < caseCount; i++) {
         const domainItem = caseDomains[i % caseDomains.length];
         const questionScore = domainItem.score || Math.round(75 / caseCount);
         const qIndexStr = ['一', '二', '三', '四', '五', '六'][i] || String(i + 1);
 
-        const prompt = `你是一位国家软考高级命题专家（${subName}专家组成员）。
-现在请为【${subName}】命制 1 道国家级考试标准的【试题${qIndexStr}：案例分析主观大题】（满分 ${questionScore} 分）。
+        const negativePrompt =
+          paperGeneratedStems.length > 0
+            ? `【严禁出题重复】：以下是本次整卷中已有的题目题干切片，本次生成严禁出现相似考点、相同工程背景或重复题目：\n${paperGeneratedStems.slice(-6).map((s, idx) => `${idx + 1}. ${s.slice(0, 50)}...`).join('\n')}`
+            : '';
 
-【考点核心领域】
+        const prompt = `你是一位国家软考高级命题专家（${subName}命题组成员）。
+现在请为【${subName}】命制 1 道国家级软考真实下午标准的【试题${qIndexStr}：案例分析主观大题】（满分 ${questionScore} 分）。
+
+【工程背景情境】
 领域：${domainItem.domain}
-核心要求：${domainItem.focus}
+项目情境：${domainItem.scenario}
+核心命题要求：${domainItem.focus}
 
 【试题硬性规范】
-1. 试题形式：国家软考下午科目二 案例分析主观问答题（绝不是单选题/多选题/选择题，options 必须严格为空数组 []）。
-2. 背景材料（500~800字）：包含真实完整的工程或IT项目情境，必须包含专业数据表格（Markdown 表格格式）或自适应矢量 SVG 图表代码。
-3. 问题设置：必须拆解为 2~3 个具体小问，每个小问严格标明分值（如：“【问题1】（5分）”、“【问题2】（8分）”、“【问题3】（7分）”，所有小问分值之和必须等于 ${questionScore} 分）。
-4. 标准答案：必须提供规范的【参考采分点】，针对每个小问逐一给出计算推导过程、得分要点与分值分配（如：“(1) 关键路径为...（3分）”、“(2) 不影响工期...（2分）”）。
+1. 试题题型：国家软考下午科目二 案例分析主观问答大题（绝不是单选题/多选题/选择题，options 必须严格为空数组 []）。
+2. 背景材料（500~800字）：包含真实完整的软考工程情境，必须包含专业数据表格（Markdown 表格格式）或自适应矢量 SVG 图表代码。
+3. 问题设置：必须拆解为 2~3 个具体小问，每个小问严格标明分值（如：“【问题1】（5分）”、“【问题2】（8分）”、“【问题3】（7分）”，所有小问分值之和必须严格等于 ${questionScore} 分）。
+4. 标准答案：必须提供规范详尽的【参考采分点】，针对每个小问逐一给出计算推导过程、得分要点与分值分配（如：“(1) 关键路径为...（3分）”、“(2) 不影响工期...（2分）”）。
 5. 名师解析：提供详尽的考点定位与答题避坑技巧。
+
+${negativePrompt}
 
 【输出格式】必须严格输出单个标准 JSON 对象：
 {
   "title": "试题${qIndexStr}（${questionScore}分）",
-  "content": "【案例背景】某工程项目部分信息如下表所示：\\n\\n| 活动 | 紧前活动 | 正常工作时间(天) | 正常工作每天费用(元) | 赶工时间(天) | 赶工每天费用(元) |\\n| :--- | :--- | :--- | :--- | :--- | :--- |\\n| A | / | 10 | 40 | 6 | 75 |\\n| B | / | 8 | 40 | 8 | 40 |\\n| C | A、B | 6 | 35 | 4 | 60 |\\n| D | B | 16 | 60 | 12 | 85 |\\n| E | C | 24 | 5 | 24 | 5 |\\n| F | D、E | 4 | 10 | 2 | 25 |\\n\\n【问题1】（5分）\\n结合案例：(1) 请写出项目关键路径，并计算项目总工期。(2) 如果活动L工期拖延10天，对整个工期是否有影响？请说明原因。\\n\\n【问题2】（8分）\\n假设项目总预算为100万，按进度计划平均分摊。工程执行到第40天结束，完成了3/5工作量，实际花费65万元。请计算成本与进度绩效指标并评价当前状态。\\n\\n【问题3】（7分）\\n若要求工程在70天内完工且费用最低，请写出哪些活动需要赶工，并计算赶工增加的总费用。",
+  "content": "【案例背景】...（500字以上详尽背景、表格或SVG）\\n\\n【问题1】（XX分）...\\n\\n【问题2】（XX分）...\\n\\n【问题3】（XX分）...",
   "options": [],
-  "answer": "【参考采分点】\\n【问题1 解答】（5分）\\n(1) 关键路径为：...，工期为 XX 天。（3分）\\n(2) 活动L拖延10天对总工期无影响。（1分）原因：活动L总时差为28天 > 10天。（1分）\\n\\n【问题2 解答】（8分）\\nPV=50万，EV=60万，AC=65万。CV=-5万（超支），SV=+10万（提前），CPI=0.92，SPI=1.20。（6分）\\n状态评价：进度提前、成本超支。（2分）\\n\\n【问题3 解答】（7分）\\n...",
-  "analysis": "【案例考点定位】软考下午案例核心考点：关键路径法、挣值分析EVM与赶工工期成本优化。",
+  "answer": "【参考采分点】\\n【问题1 解答】（XX分）...\\n\\n【问题2 解答】（XX分）...\\n\\n【问题3 解答】（XX分）...",
+  "analysis": "【案例考点定位】...\\n【答题技巧剖析】...",
   "difficulty": 4,
   "score": ${questionScore}
 }`;
@@ -1838,25 +1899,28 @@ ${negativeStemsNote}
         try {
           const llmRes = await this.callLlm([{ role: 'user', content: prompt }], {
             json: true,
-            model: dto.model,
-            temperature: 0.6,
+            model: modelToUse,
+            temperature: 0.7,
           });
           if (llmRes && (llmRes.content || llmRes.title)) {
-            questionItem = {
-              content: String(llmRes.content || llmRes.title).trim(),
-              options: [],
-              answer: String(llmRes.answer || '【参考采分点】详见官方名师参考答案与评分细则。'),
-              analysis: String(llmRes.analysis || `【案例考点】考核《${subName}》案例分析核心知识域。`),
-              type: 'case_analysis',
-              difficulty: Number(llmRes.difficulty) || 4,
-              score: Number(llmRes.score) || questionScore,
-            };
+            const rawContent = String(llmRes.content || llmRes.title).trim();
+            if (rawContent && !this.checkStemInList(rawContent, paperGeneratedStems)) {
+              questionItem = {
+                content: rawContent,
+                options: [],
+                answer: String(llmRes.answer || '【参考采分点】详见官方名师参考答案与评分细则。'),
+                analysis: String(llmRes.analysis || `【案例考点】考核《${subName}》${domainItem.domain}核心知识域。`),
+                type: 'case_analysis',
+                difficulty: Number(llmRes.difficulty) || 4,
+                score: Number(llmRes.score) || questionScore,
+              };
+            }
           }
         } catch (err: any) {
           this.logger.warn(`AI 案例大题大模型生成异常: ${err.message}`);
         }
 
-        // 若大模型生成未就绪，使用专业高精题库池
+        // 若大模型生成未就绪或被过滤，从增强型知识库抽取唯一题
         if (!questionItem) {
           const fallbacks = this.getEnhancedFallbackQuestions(
             subName,
@@ -1866,7 +1930,7 @@ ${negativeStemsNote}
             1,
             4,
             dto.promptStyle,
-            existingStems,
+            paperGeneratedStems,
           );
           if (fallbacks.length > 0) {
             questionItem = {
@@ -1877,7 +1941,7 @@ ${negativeStemsNote}
         }
 
         if (questionItem) {
-          existingStems.push(questionItem.content);
+          paperGeneratedStems.push(questionItem.content);
           generatedQuestionsData.push(questionItem);
         }
       }
@@ -1910,7 +1974,6 @@ ${negativeStemsNote}
         }
       }
 
-      // 创建试卷实体 (满分 75分，时长 150分钟)
       const paper = this.paperRepository.create({
         subjectId,
         name: paperName,
@@ -1928,7 +1991,7 @@ ${negativeStemsNote}
         const task = this.taskRepository.create({
           type: 'generate_question',
           status: 'completed',
-          model: dto.model || (await this.getRawAiConfig()).model,
+          model: modelToUse,
           params: { ...dto, paperId: Number(savedPaper.id) } as unknown as Record<string, unknown>,
           result: { paperId: Number(savedPaper.id), count: savedQuestionIds.length, type: 'case_analysis' },
           adminId,
@@ -1949,11 +2012,11 @@ ${negativeStemsNote}
           questionCount: savedQuestionIds.length,
         },
         questionCount: savedQuestionIds.length,
-        message: `🎉 AI 大模型已成功生成国家软考下午【案例分析大题整卷】「${paperName}」（共 ${savedQuestionIds.length} 道综合案例大题，满分 75 分，及格线 45 分），已同步上架至试卷管理！`,
+        message: `🎉 AI 大模型已成功生成国家软考下午【案例分析大题整卷】「${paperName}」（共 ${savedQuestionIds.length} 道综合案例大题，满分 ${totalPaperScore || 75} 分），已同步入库！`,
       };
     }
 
-    // ==================== 2. 客观单选题/混合整卷流水线 ====================
+    // ==================== 2. 客观单选题综合卷 / 全景综合混合卷流水线 ====================
     let chapters = await this.chapterRepository.find({
       where: { subjectId },
       order: { sort: 'ASC' },
@@ -1968,17 +2031,25 @@ ${negativeStemsNote}
       ];
     }
 
-    const totalCount = Math.min(Math.max(Number(dto.questionCount) || 75, 5), 100);
-    const paperName = dto.paperName && dto.paperName.trim().length > 0
-      ? dto.paperName.trim()
-      : `${currentYear}年${subName}【AI全真模拟押题卷·第1套】`;
+    const requestedCount = Number(dto.questionCount) || (isMixedPaper ? 78 : 75);
+    const caseBigQuestionCount = isMixedPaper ? (requestedCount >= 70 ? 3 : 2) : 0;
+    const objectiveCount = Math.max(isMixedPaper ? requestedCount - caseBigQuestionCount : requestedCount, 5);
 
-    this.logger.log(`开始启动 AI 客观单选题整卷命题: 科目=${subName}, 卷名=${paperName}, 题量=${totalCount}, 章节数=${chapters.length}`);
+    const paperName =
+      dto.paperName && dto.paperName.trim().length > 0
+        ? dto.paperName.trim()
+        : isMixedPaper
+        ? `${currentYear}年${subName}【综合知识+案例分析全真全景模考卷】`
+        : `${currentYear}年${subName}【AI全真模拟押题卷·第1套】`;
+
+    this.logger.log(
+      `🚀 启动 AI 整卷命题: 科目=${subName}, 模式=${isMixedPaper ? '混合全景卷' : '客观单选卷'}, 卷名=${paperName}, 单选题量=${objectiveCount}, 案例大题量=${caseBigQuestionCount}, 章节数=${chapters.length}`,
+    );
 
     // 计算各章节题量配额
     const chapterQuotas: Array<{ chapter: Chapter; count: number }> = [];
-    const basePerChapter = Math.floor(totalCount / chapters.length);
-    let remainder = totalCount % chapters.length;
+    const basePerChapter = Math.floor(objectiveCount / chapters.length);
+    let remainder = objectiveCount % chapters.length;
 
     for (let i = 0; i < chapters.length; i++) {
       const count = basePerChapter + (i < remainder ? 1 : 0);
@@ -1987,35 +2058,54 @@ ${negativeStemsNote}
       }
     }
 
-    // 多批次并发命题生成
-    const generatedQuestionsData: any[] = [];
-    const existingStems = await this.getRecentQuestionStems(subjectId, 80);
+    // 采用受控小批量（每批2个章节并发）顺序推进，彻底杜绝高并发导致的大模型 429 限流和去重竞态
+    const objectiveQuestions: any[] = [];
+    const BATCH_CONCURRENCY = 2;
 
-    const chunkPromises = chapterQuotas.map(async ({ chapter, count }) => {
-      const chId = Number(chapter.id);
-      const chName = chapter.name;
+    for (let i = 0; i < chapterQuotas.length; i += BATCH_CONCURRENCY) {
+      const batchSlice = chapterQuotas.slice(i, i + BATCH_CONCURRENCY);
+      const batchPromises = batchSlice.map(async ({ chapter, count }) => {
+        const chId = Number(chapter.id);
+        const chName = chapter.name;
 
-      const kps = await this.knowledgePointRepository.find({ where: { chapterId: chId } });
-      const kpNames = kps.map((k) => k.name).join('、') || chName;
+        const kps = await this.knowledgePointRepository.find({ where: { chapterId: chId } });
+        const kpNames = kps.map((k) => k.name).join('、') || chName;
 
-      const subChunks: number[] = [];
-      let rem = count;
-      while (rem > 0) {
-        const sz = Math.min(rem, 6);
-        subChunks.push(sz);
-        rem -= sz;
-      }
+        const localChapterQuestions: any[] = [];
+        const subChunks: number[] = [];
+        let rem = count;
+        while (rem > 0) {
+          const sz = Math.min(rem, 5);
+          subChunks.push(sz);
+          rem -= sz;
+        }
 
-      const chapterQuestions: any[] = [];
-      for (const batchSize of subChunks) {
-        const prompt = `你是一位国家软考高级命题专家。现在请为【${subName}】的【${chName}】（包含考点：${kpNames}）命制 ${batchSize} 道高水准的标准单选题（含名师四段式深度解析）。
-难度等级：${difficulty}星（1-5星）。
-出题风格：${dto.promptStyle || 'standard'}（要求情境真实，考点清晰，选项具有强辨析度与迷惑性）。
+        for (const batchSize of subChunks) {
+          const recentStemsSummary = paperGeneratedStems
+            .slice(-8)
+            .map((s, idx) => `${idx + 1}. ${s.slice(0, 45)}...`)
+            .join('\n');
 
-【输出格式】严格输出标准 JSON 数组：
+          const negativePrompt =
+            recentStemsSummary.length > 0
+              ? `【严禁出题重复】：以下是本次整套试卷中其他章节已生成的题目切片，本次生成严禁出现相似考点、相同题干或重复参数：\n${recentStemsSummary}`
+              : '';
+
+          const prompt = `你是一位中国计算机技术与软件专业技术资格（软考）高级命题专家。
+现在请为【${subName}】的【${chName}】（本章节核心考点包括：${kpNames}）命制 ${batchSize} 道国家软考真题标准的单项选择题（包含深度名师解析）。
+
+【试题硬性标准】
+1. 试题题型：单项选择题（single_choice），必须严格包含 4 个选项（A、B、C、D），正确答案为单个大写字母（A/B/C/D）。
+2. 考点聚焦：必须真实考查【${chName}】的核心知识点与国家规范，严禁脱离本章内容生成无关题干！
+3. 难度等级：${difficulty}星（1-5星）。
+4. 深度解析：每道题必须包含【核心考点定位】、【正确项深度剖析】、【干扰项逐一拆解】、【考前速记避坑口诀】四个结构化小节。
+
+${negativePrompt}
+
+【输出格式】必须严格输出标准 JSON 数组：
 [
   {
-    "content": "题干内容描述？",
+    "content": "在【${chName}】中，关于...的说法正确的是？",
     "options": [
       {"key": "A", "label": "A", "content": "选项A具体描述"},
       {"key": "B", "label": "B", "content": "选项B具体描述"},
@@ -2023,84 +2113,196 @@ ${negativeStemsNote}
       {"key": "D", "label": "D", "content": "选项D具体描述"}
     ],
     "answer": "A",
-    "analysis": "【核心考点定位】...\\n【答案剖析】...\\n【干扰项辨析】...\\n【名师避坑速记】...",
+    "analysis": "【核心考点定位】...\\n【正确项深度剖析】...\\n【干扰项逐一拆解】...\\n【考前速记避坑口诀】...",
     "difficulty": ${difficulty}
   }
 ]`;
 
-        let llmResult: any = null;
-        try {
-          llmResult = await this.callLlm([{ role: 'user', content: prompt }], {
-            json: true,
-            model: dto.model,
-            temperature: 0.7,
-          });
-        } catch (err: any) {
-          this.logger.warn(`AI 整卷子批次生成异常: ${err.message}`);
-        }
+          let llmResult: any = null;
+          try {
+            llmResult = await this.callLlm([{ role: 'user', content: prompt }], {
+              json: true,
+              model: modelToUse,
+              temperature: 0.7,
+            });
+          } catch (err: any) {
+            this.logger.warn(`AI 整卷子批次生成异常: ${err.message}`);
+          }
 
-        if (Array.isArray(llmResult)) {
-          for (const raw of llmResult) {
-            const normalized = this.normalizeAndValidateQuestion(raw, 'single', difficulty, subName, chName);
-            if (normalized && !this.checkStemInList(normalized.content, existingStems)) {
-              existingStems.push(normalized.content);
-              chapterQuestions.push({
-                ...normalized,
+          if (Array.isArray(llmResult)) {
+            for (const raw of llmResult) {
+              const normalized = this.normalizeAndValidateQuestion(raw, 'single', difficulty, subName, chName);
+              if (normalized && !this.checkStemInList(normalized.content, paperGeneratedStems)) {
+                paperGeneratedStems.push(normalized.content);
+                localChapterQuestions.push({
+                  ...normalized,
+                  chapterId: chId,
+                  knowledgePoint: chName,
+                  score: 1,
+                });
+                if (localChapterQuestions.length >= count) break;
+              }
+            }
+          }
+
+          // 若大模型当前批次未足量生成，从动态参数化高精题库池补充唯一题
+          if (localChapterQuestions.length < count) {
+            const missing = count - localChapterQuestions.length;
+            const fallbacks = this.getEnhancedFallbackQuestions(
+              subName,
+              chName,
+              kpNames,
+              'single',
+              missing,
+              difficulty,
+              dto.promptStyle,
+              paperGeneratedStems,
+            );
+            for (const fb of fallbacks) {
+              paperGeneratedStems.push(fb.content);
+              localChapterQuestions.push({
+                ...fb,
                 chapterId: chId,
                 knowledgePoint: chName,
+                score: 1,
               });
+              if (localChapterQuestions.length >= count) break;
             }
           }
         }
 
-        // 如果 AI 生成题目不足，从高精题库池补充
-        if (chapterQuestions.length < count) {
-          const fallbacks = this.getEnhancedFallbackQuestions(
-            subName,
-            chName,
-            kpNames,
-            'single',
-            count - chapterQuestions.length,
-            difficulty,
-            dto.promptStyle,
-            existingStems,
-          );
-          for (const fb of fallbacks) {
-            existingStems.push(fb.content);
-            chapterQuestions.push({
-              ...fb,
-              chapterId: chId,
-              knowledgePoint: chName,
-            });
-          }
-        }
+        return localChapterQuestions.slice(0, count);
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      for (const list of batchResults) {
+        objectiveQuestions.push(...list);
       }
-
-      return chapterQuestions.slice(0, count);
-    });
-
-    const chunkResults = await Promise.all(chunkPromises);
-    for (const res of chunkResults) {
-      generatedQuestionsData.push(...res);
     }
 
-    // 将生成的试题直接入库到 questions 表（发布状态）
+    // ==================== 3. 混合卷案例大题生成 (若为 mixed 模式) ====================
+    const caseQuestionsForMixed: any[] = [];
+    if (isMixedPaper && caseBigQuestionCount > 0) {
+      const mixedCaseDomains = [
+        {
+          domain: '进度管理与关键路径CPM网络图计算及工期优化赶工',
+          scenario: '智慧医疗物联网平台研发项目',
+          score: 20,
+        },
+        {
+          domain: '成本管理与 EVM 挣值分析动态曲线及绩效预测',
+          scenario: '银行分布式核心交易清算系统升级',
+          score: 20,
+        },
+        {
+          domain: '范围蔓延、配置基线管理与 CCB 变更控制闭环',
+          scenario: '智能网联新能源汽车车载操作系统项目',
+          score: 18,
+        },
+        {
+          domain: '企业网络DMZ架构设计、安全纵深防御与等保合规',
+          scenario: '跨境电商混合云多数据中心建设',
+          score: 18,
+        },
+      ];
+
+      for (let i = 0; i < caseBigQuestionCount; i++) {
+        const domainItem = mixedCaseDomains[i % mixedCaseDomains.length];
+        const qIndexStr = ['一', '二', '三', '四'][i] || String(i + 1);
+
+        const prompt = `你是一位国家软考高级命题专家。
+请为【${subName}】全真模拟卷命制 1 道压轴【案例分析主观大题·试题${qIndexStr}】（满分 ${domainItem.score} 分）。
+领域：${domainItem.domain}
+情境：${domainItem.scenario}
+要求：包含真实背景（500字以上并含表格/SVG）、2~3个具体小问（标明分值）、参考采分点答案与名师深度解析。options 必须严格为空数组 []。
+
+【输出格式】标准 JSON：
+{
+  "title": "案例分析大题·试题${qIndexStr}（${domainItem.score}分）",
+  "content": "【案例背景】...\\n\\n【问题1】...\\n\\n【问题2】...",
+  "options": [],
+  "answer": "【参考采分点】...",
+  "analysis": "【案例考点定位】...",
+  "difficulty": 4,
+  "score": ${domainItem.score}
+}`;
+
+        let caseItem: any = null;
+        try {
+          const llmRes = await this.callLlm([{ role: 'user', content: prompt }], {
+            json: true,
+            model: modelToUse,
+            temperature: 0.7,
+          });
+          if (llmRes && (llmRes.content || llmRes.title)) {
+            const rawStem = String(llmRes.content || llmRes.title).trim();
+            if (rawStem && !this.checkStemInList(rawStem, paperGeneratedStems)) {
+              caseItem = {
+                content: rawStem,
+                options: [],
+                answer: String(llmRes.answer || '【参考采分点】详见官方名师参考答案。'),
+                analysis: String(llmRes.analysis || `【案例考点】考核《${subName}》${domainItem.domain}。`),
+                type: 'case_analysis',
+                difficulty: 4,
+                score: domainItem.score,
+                chapterId: chapters[0]?.id ? Number(chapters[0].id) : 1,
+              };
+            }
+          }
+        } catch (err: any) {
+          this.logger.warn(`AI 混合卷案例大题生成异常: ${err.message}`);
+        }
+
+        if (!caseItem) {
+          const fallbacks = this.getEnhancedFallbackQuestions(
+            subName,
+            domainItem.domain,
+            domainItem.domain,
+            'case_analysis',
+            1,
+            4,
+            dto.promptStyle,
+            paperGeneratedStems,
+          );
+          if (fallbacks.length > 0) {
+            caseItem = {
+              ...fallbacks[0],
+              score: domainItem.score,
+              chapterId: chapters[0]?.id ? Number(chapters[0].id) : 1,
+            };
+          }
+        }
+
+        if (caseItem) {
+          paperGeneratedStems.push(caseItem.content);
+          caseQuestionsForMixed.push(caseItem);
+        }
+      }
+    }
+
+    // ==================== 4. 试题保存入库与整卷组装 ====================
+    const allFinalQuestions = [...objectiveQuestions, ...caseQuestionsForMixed];
     const savedQuestionIds: number[] = [];
-    for (const qData of generatedQuestionsData) {
+    let totalScore = 0;
+
+    for (const qData of allFinalQuestions) {
+      const qScore = Number(qData.score) || 1;
+      totalScore += qScore;
+
       const qEntity = this.questionRepository.create({
         subjectId,
-        chapterId: qData.chapterId,
+        chapterId: qData.chapterId || (chapters[0]?.id ? Number(chapters[0].id) : 1),
         knowledgePointIds: [],
-        type: 'single_choice',
+        type: qData.type || 'single_choice',
         difficulty: qData.difficulty || difficulty,
         content: qData.content,
-        options: qData.options,
+        options: qData.options || [],
         answer: qData.answer,
         analysis: qData.analysis,
         aiConfidence: Number((0.95 + Math.random() * 0.04).toFixed(2)),
         source: 'ai',
         status: 'published',
-        score: 1,
+        score: qScore,
       } as any);
 
       const saved = await this.questionRepository.save(qEntity as any);
@@ -2116,7 +2318,7 @@ ${negativeStemsNote}
       year: currentYear,
       type: paperType,
       duration,
-      totalScore: savedQuestionIds.length || totalCount,
+      totalScore: totalScore || savedQuestionIds.length,
       questionIds: savedQuestionIds,
       status: 1,
     } as any);
@@ -2127,9 +2329,14 @@ ${negativeStemsNote}
       const task = this.taskRepository.create({
         type: 'generate_question',
         status: 'completed',
-        model: dto.model || (await this.getRawAiConfig()).model,
+        model: modelToUse,
         params: { ...dto, paperId: Number(savedPaper.id) } as unknown as Record<string, unknown>,
-        result: { paperId: Number(savedPaper.id), count: savedQuestionIds.length },
+        result: {
+          paperId: Number(savedPaper.id),
+          count: savedQuestionIds.length,
+          objectiveCount: objectiveQuestions.length,
+          caseCount: caseQuestionsForMixed.length,
+        },
         adminId,
       });
       await this.taskRepository.save(task);
@@ -2137,7 +2344,9 @@ ${negativeStemsNote}
       // ignore
     }
 
-    this.logger.log(`✅ AI 客观整套试卷「${paperName}」生成成功！试卷ID: ${savedPaper.id}, 题量: ${savedQuestionIds.length}`);
+    this.logger.log(
+      `✅ AI 整套试卷「${paperName}」生成成功！试卷ID: ${savedPaper.id}, 题量: ${savedQuestionIds.length} (单选${objectiveQuestions.length} + 案例${caseQuestionsForMixed.length})`,
+    );
 
     return {
       paperId: Number(savedPaper.id),
@@ -2148,7 +2357,7 @@ ${negativeStemsNote}
         questionCount: savedQuestionIds.length,
       },
       questionCount: savedQuestionIds.length,
-      message: `🎉 AI 大模型已成功生成整套试卷「${paperName}」（共 ${savedQuestionIds.length} 题），已同步上架至试卷管理！`,
+      message: `🎉 AI 大模型已成功生成整套试卷「${paperName}」（共 ${savedQuestionIds.length} 题，总分 ${totalScore} 分），已同步入库！`,
     };
   }
 

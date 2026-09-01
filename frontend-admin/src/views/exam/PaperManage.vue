@@ -796,12 +796,22 @@
         </el-form-item>
 
         <el-form-item label="基座模型">
-          <el-select v-model="aiPaperForm.model" style="width: 100%">
-            <el-option label="Gemini 3.7 Flash (推荐/秒级高清出图)" value="gemini-3.7-flash" />
-            <el-option label="Gemini 3.1 Pro (高阶深度推理与计算)" value="gemini-3.1-pro" />
-            <el-option label="DeepSeek-Chat (深度求索)" value="deepseek-chat" />
-            <el-option label="DeepSeek-Reasoner (R1深度思考)" value="deepseek-reasoner" />
-            <el-option label="Qwen-Plus (阿里通义千问)" value="qwen-plus" />
+          <el-select
+            v-model="aiPaperForm.model"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="请选择基座模型（留空使用系统默认配置）"
+            style="width: 100%"
+          >
+            <el-option label="⚙️ 系统默认配置模型 (当前生效)" value="" />
+            <el-option label="💎 Gemini 2.5 Flash (推荐 / 秒级高速出题)" value="gemini-2.5-flash" />
+            <el-option label="⚡ Gemini 2.0 Flash (极速推理)" value="gemini-2.0-flash" />
+            <el-option label="🧠 Gemini 1.5 Pro (深度逻辑与高阶推理)" value="gemini-1.5-pro" />
+            <el-option label="🐳 DeepSeek-Chat (深度求索 V3)" value="deepseek-chat" />
+            <el-option label="🔬 DeepSeek-Reasoner (R1 深度思考)" value="deepseek-reasoner" />
+            <el-option label="🌟 Qwen-Plus (阿里通义千问)" value="qwen-plus" />
+            <el-option label="✨ GLM-4-Flash (智谱清言)" value="glm-4-flash" />
           </el-select>
         </el-form-item>
 
@@ -917,7 +927,7 @@ import {
   getAllSubjects,
   getChapterTree,
 } from '@/api/exam'
-import { generateEntirePaper } from '@/api/ai'
+import { generateEntirePaper, getAIConfig } from '@/api/ai'
 import { getQuestionList, type Question, type QuestionType } from '@/api/question'
 
 const loading = ref(false)
@@ -1367,7 +1377,7 @@ function formatAnalysisHtml(analysis: string) {
 const aiPaperDialogVisible = ref(false)
 const aiPaperLoading = ref(false)
 const aiPaperForm = reactive({
-  model: 'gemini-3.7-flash',
+  model: '',
   subjectId: 1,
   paperName: '',
   questionTypeCategory: 'case',
@@ -1423,10 +1433,18 @@ function onPaperCategoryChange(val: string) {
   generateAiRandomName()
 }
 
-function openAiPaperDialog() {
+async function openAiPaperDialog() {
   aiPaperForm.subjectId = query.subjectId || (subjects.value[0]?.value || 1)
   if (!aiPaperForm.questionTypeCategory) {
     aiPaperForm.questionTypeCategory = 'case'
+  }
+  try {
+    const cfgRes: any = await getAIConfig()
+    if (cfgRes?.data?.model) {
+      aiPaperForm.model = cfgRes.data.model
+    }
+  } catch {
+    // ignore
   }
   generateAiRandomName()
   aiPaperDialogVisible.value = true
