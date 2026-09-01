@@ -593,6 +593,71 @@ export class AiService implements OnModuleInit {
   }
 
   /**
+   * 鲁棒的 JSON 提取器：即使大模型输出被截断或包含 Markdown 干扰，也能精准提取出所有完整对象
+   */
+  private extractObjectsFromJsonText(text: string): any[] {
+    if (!text) return [];
+    const clean = text
+      .replace(/```(?:json)?\s*/gi, '')
+      .replace(/```/g, '')
+      .trim();
+
+    try {
+      const parsed = JSON.parse(clean);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
+    } catch {
+      // ignore
+    }
+
+    const results: any[] = [];
+    let braceCount = 0;
+    let startIndex = -1;
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = 0; i < clean.length; i++) {
+      const char = clean[i];
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+
+      if (char === '{') {
+        if (braceCount === 0) {
+          startIndex = i;
+        }
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && startIndex !== -1) {
+          const objStr = clean.slice(startIndex, i + 1);
+          try {
+            const parsedObj = JSON.parse(objStr);
+            if (parsedObj && (parsedObj.content || parsedObj.title || parsedObj.stem || parsedObj.options)) {
+              results.push(parsedObj);
+            }
+          } catch {
+            // ignore malformed snippet
+          }
+          startIndex = -1;
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * 通用大模型调用封装（支持自动从配置读取、错误降级与 JSON 结构化提取）
    */
   async callLlm(
@@ -615,6 +680,8 @@ export class AiService implements OnModuleInit {
       targetModel = config.model || 'deepseek-chat';
     }
 
+    const effectiveMaxTokens = options?.maxTokens || (options?.json ? 4096 : (config.maxTokens || 2048));
+
     let responseText: string | null = null;
     try {
       responseText = await this.rawHttpChatCompletion({
@@ -623,7 +690,7 @@ export class AiService implements OnModuleInit {
         model: targetModel,
         messages,
         temperature: options?.temperature ?? config.temperature,
-        maxTokens: options?.maxTokens ?? config.maxTokens,
+        maxTokens: effectiveMaxTokens,
       });
     } catch (err: any) {
       this.logger.warn(`模型 [${targetModel}] 调用异常: ${err.message}`);
@@ -637,7 +704,7 @@ export class AiService implements OnModuleInit {
             model: config.model,
             messages,
             temperature: options?.temperature ?? config.temperature,
-            maxTokens: options?.maxTokens ?? config.maxTokens,
+            maxTokens: effectiveMaxTokens,
           });
         } catch (retryErr: any) {
           this.logger.warn(`系统默认配置模型重试亦失败: ${retryErr.message}`);
@@ -656,15 +723,22 @@ export class AiService implements OnModuleInit {
       return responseText;
     }
 
-    // JSON 提取
+    // JSON 提取与容错切片提取
     const cleanJson = responseText
       .replace(/```(?:json)?\s*/gi, '')
       .replace(/```/g, '')
       .trim();
 
     try {
-      return JSON.parse(cleanJson);
+      const direct = JSON.parse(cleanJson);
+      return direct;
     } catch {
+      // 提取完整的 JSON 块或数组元素
+      const extractedList = this.extractObjectsFromJsonText(cleanJson);
+      if (extractedList && extractedList.length > 0) {
+        return extractedList;
+      }
+
       const match = cleanJson.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
       if (match) {
         try {
@@ -1422,10 +1496,68 @@ export class AiService implements OnModuleInit {
       },
     ];
 
+    // 按照章节名称智能路由多知识域专业题库
+    const chLower = (chName + ' ' + kpName).toLowerCase();
+    const itTechQuestions = [
+      {
+        content: `根据国家信息化发展规划与软考教程，关于云计算服务模型（IaaS、PaaS、SaaS）的划分，用户无需管理底层操作系统和运行环境、仅需部署和运行自身应用程序的服务模式是？`,
+        options: [
+          { key: 'A', label: 'A', content: '平台即服务（PaaS，Platform as a Service）' },
+          { key: 'B', label: 'B', content: '基础设施即服务（IaaS，Infrastructure as a Service）' },
+          { key: 'C', label: 'C', content: '软件即服务（SaaS，Software as a Service）' },
+          { key: 'D', label: 'D', content: '数据即服务（DaaS，Data as a Service）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考查云计算三层服务模式的核心特征与管理职责边界。\n【正确项深度剖析】PaaS 为开发者提供软件研发与运行环境平台，用户负责部署管理自有应用，云服务商负责底层计算、存储、网络及操作系统的运维。\n【考前速记避坑口诀】IaaS租硬件，PaaS包环境，SaaS用软件。`,
+        difficulty: 2,
+      },
+      {
+        content: `在大数据核心技术架构中，业界通常用“5V”特征来概括大数据的本质属性。其中指代“数据类型繁多、包含结构化/半结构化/非结构化多源数据”的特征是？`,
+        options: [
+          { key: 'A', label: 'A', content: '多样性（Variety）' },
+          { key: 'B', label: 'B', content: '大量性（Volume）' },
+          { key: 'C', label: 'C', content: '高速性（Velocity）' },
+          { key: 'D', label: 'D', content: '低价值密度（Value）' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考查大数据 5V 特征定义。\n【正确项深度剖析】Variety（多样性）强调数据形态不仅包含传统关系数据库的结构化表，还包含日志、音视频、网页等海量非结构化与半结构化数据。\n【考前速记避坑口诀】Volume数量大，Velocity处理快，Variety类型多，Value价值稀。`,
+        difficulty: 2,
+      },
+      {
+        content: `在物联网（IoT）三层标准架构中，负责利用传感器、RFID电子标签、二维码等设备进行物理世界信息实时采集与感知的核心层次是？`,
+        options: [
+          { key: 'A', label: 'A', content: '感知层' },
+          { key: 'B', label: 'B', content: '网络层' },
+          { key: 'C', label: 'C', content: '应用层' },
+          { key: 'D', label: 'D', content: '支撑层' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考查物联网（IoT）三层体系结构。\n【正确项深度剖析】物联网自下而上分为：感知层（识别采集信息）、网络层（信息传输与路由）、应用层（与行业深度融合的具体应用）。\n【考前速记避坑口诀】感知抓数据，网络送数据，应用用数据。`,
+        difficulty: 2,
+      },
+      {
+        content: `在现代密码学与信息安全传输中，关于对称加密算法与非对称加密算法的比较，以下表述正确的是？`,
+        options: [
+          { key: 'A', label: 'A', content: '对称加密加解密速度极快，适合大数据量加密；非对称加密适合密钥协商与数字签名' },
+          { key: 'B', label: 'B', content: '对称加密的公钥可以公开，私钥必须严格保密' },
+          { key: 'C', label: 'C', content: 'DES 和 AES 属于非对称加密算法，RSA 和 SM2 属于对称加密算法' },
+          { key: 'D', label: 'D', content: '非对称加密的计算效率远高于对称加密，常用于音视频实时流加密' },
+        ],
+        answer: 'A',
+        analysis: `【核心考点定位】考核信息安全密码学核心算法原理及应用场景对比。\n【正确项深度剖析】对称加密（AES/SM4）算法结构简单、计算效率极高；非对称加密（RSA/SM2）解决密钥分发难题，适合数字信封与数字签名认证。\n【考前速记避坑口诀】对称算得快保密难，非对称密钥分发放签名。`,
+        difficulty: 3,
+      },
+    ];
+
     let selectedPool: any[] = singleChoicePool;
     if (dbType === 'multiple_choice') selectedPool = multipleChoicePool;
     else if (dbType === 'true_false') selectedPool = judgePool;
     else if (dbType === 'case_analysis') selectedPool = casePool;
+
+    // 智能融入新技术专属题库
+    if (dbType === 'single_choice' && (chLower.includes('信息') || chLower.includes('技术') || chLower.includes('网络') || chLower.includes('云') || chLower.includes('安全') || chLower.includes('智能'))) {
+      selectedPool = [...itTechQuestions, ...singleChoicePool];
+    }
 
     // 收集候选且严格过滤已存在题目（绝不重复取用）
     const available = selectedPool.filter((item) => !this.checkStemInList(item.content, existingStems));
@@ -1442,25 +1574,53 @@ export class AiService implements OnModuleInit {
           difficulty: item.difficulty || difficulty,
         });
       } else {
-        // 超出固定题库时，生成动态参数化高精度变体试题（绝不产生重复题干）
+        // 超出固定题库时，根据不同章节知识体系生成专属差异化真题（绝不产生重复公式）
         const dynIndex = i + 1;
-        const pvVal = 100 + dynIndex * 25;
-        const acVal = pvVal + 15 + (dynIndex % 3) * 10;
-        const evVal = pvVal - 10 - (dynIndex % 4) * 5;
-        const svVal = evVal - pvVal;
-        const cvVal = evVal - acVal;
-
         if (dbType === 'single_choice') {
+          const domainTopics = [
+            {
+              topic: '标准规范与合规审计',
+              content: `在《${subName}》的【${chName}】实施中，项目团队在执行第${dynIndex}轮质量审计与规范符合性核查时，发现某子模块未按国家标准执行。项目经理首先应采取的做法是？`,
+              options: [
+                { key: 'A', label: 'A', content: '组织技术团队分析偏差根本原因，制定纠偏措施并纳入受控管理' },
+                { key: 'B', label: 'B', content: '为了赶工期直接忽略该项标准偏差并强行交付' },
+                { key: 'C', label: 'C', content: '立即单方面要求客户调低验收合格指标' },
+                { key: 'D', label: 'D', content: '口头通知测试人员掩盖该质量缺陷' },
+              ],
+              answer: 'A',
+              analysis: `【核心考点定位】考查【${chName}】中的规范化质量控制与纠偏管理。\n【正确项深度剖析】发现质量偏差时必须进行根本原因分析并制定切实可行的纠偏纠错方案。\n【考前速记避坑口诀】发现偏差找根因，闭环纠偏保合规。`,
+            },
+            {
+              topic: '关键技术架构选型',
+              content: `针对【${chName}】相关系统的架构高可用与容灾设计，当系统发生主节点故障时，能够在秒级内自动实现流量无缝切换的核心高可用架构机制是？`,
+              options: [
+                { key: 'A', label: 'A', content: '主从热备（Hot Standby）与双机心跳自动故障转移（Failover）' },
+                { key: 'B', label: 'B', content: '单机冷备份并在发生故障后人工手动重启机器' },
+                { key: 'C', label: 'C', content: '定期将数据库导出为 Excel 表格存储到本地硬盘' },
+                { key: 'D', label: 'D', content: '彻底关闭防火墙以提升网络连通性' },
+              ],
+              answer: 'A',
+              analysis: `【核心考点定位】考查信息系统高可用与故障自动转移设计。\n【正确项深度剖析】双机热备结合心跳检测与 VIP/DNS 漂移可实现秒级自动 Failover，确保关键业务连续性。`,
+            },
+            {
+              topic: '风险应对与应急储备',
+              content: `在【${chName}】执行过程中，团队识别出一项可能导致服务器性能严重瓶颈的技术风险。项目经理决定预先采购弹性云算力资源以备突发峰值，该策略属于风险应对中的？`,
+              options: [
+                { key: 'A', label: 'A', content: '减轻（Mitigate）' },
+                { key: 'B', label: 'B', content: '规避（Avoid）' },
+                { key: 'C', label: 'C', content: '转移（Transfer）' },
+                { key: 'D', label: 'D', content: '开拓（Exploit）' },
+              ],
+              answer: 'A',
+              analysis: `【核心考点定位】考查消极风险应对策略分类。\n【正确项深度剖析】提前准备应急冗余资源以降低潜在性能瓶颈的影响程度，属于典型的“减轻（Mitigate）”策略。`,
+            },
+          ];
+          const chosen = domainTopics[dynIndex % domainTopics.length];
           results.push({
-            content: `在《${subName}》第${dynIndex}阶段项目审计中，某子系统【${chName}】考点参数为：计划价值 PV = ${pvVal}万元，实际成本 AC = ${acVal}万元，挣值 EV = ${evVal}万元。请问该子项目的进度偏差SV和成本偏差CV分别为多少？`,
-            options: [
-              { key: 'A', label: 'A', content: `SV = ${svVal} 万元，CV = ${cvVal} 万元` },
-              { key: 'B', label: 'B', content: `SV = ${-svVal} 万元，CV = ${-cvVal} 万元` },
-              { key: 'C', label: 'C', content: `SV = ${cvVal} 万元，CV = ${svVal} 万元` },
-              { key: 'D', label: 'D', content: `SV = ${svVal + 10} 万元，CV = ${cvVal - 10} 万元` },
-            ],
-            answer: 'A',
-            analysis: `【核心考点定位】挣值管理参数动态计算与偏差判定。\n【正确项深度剖析】SV = EV - PV = ${evVal} - ${pvVal} = ${svVal} 万元；CV = EV - AC = ${evVal} - ${acVal} = ${cvVal} 万元。\n【名师避坑速记】挣值减计划看进度，挣值减实际看成本。`,
+            content: chosen.content,
+            options: chosen.options,
+            answer: chosen.answer,
+            analysis: chosen.analysis,
             type: 'single_choice',
             difficulty: 3,
           });
@@ -2210,24 +2370,24 @@ ${negativeStemsNote}
       `🚀 启动 AI 整卷命题: 科目=${subName}, 模式=${isMixedPaper ? '混合全景卷' : '客观单选卷'}, 卷名=${paperName}, 单选题量=${objectiveCount}, 案例大题量=${caseBigQuestionCount}, 章节数=${chapters.length}`,
     );
 
-    if (onProgress) await onProgress(20, `正在为 ${chapters.length} 个章节规划考点与宏批次分发...`);
+    if (onProgress) await onProgress(20, `正在为 ${chapters.length} 个章节规划考点与并发微批次分发...`);
 
-    // 将章节划分为 3~4 个宏批次（Domain Macro Batches），大幅减少 LLM 请求轮次，提速 5 倍
-    const MACRO_BATCH_COUNT = Math.min(Math.max(Math.ceil(chapters.length / 5), 2), 4);
+    // 将章节细化为每组 2 个章节的微批次（Micro Batches，每批仅命制 3~5 题），彻底杜绝大模型 Token 截断并最大化并发性能
+    const CHAPTER_CHUNK_SIZE = 2;
     const macroBatches: Array<{
       batchIndex: number;
       chapters: Chapter[];
       targetCount: number;
     }> = [];
 
-    const chaptersPerMacro = Math.ceil(chapters.length / MACRO_BATCH_COUNT);
-    const baseCountPerMacro = Math.floor(objectiveCount / MACRO_BATCH_COUNT);
-    let remCount = objectiveCount % MACRO_BATCH_COUNT;
+    const totalBatchCount = Math.ceil(chapters.length / CHAPTER_CHUNK_SIZE);
+    const baseCountPerBatch = Math.floor(objectiveCount / totalBatchCount);
+    let remCount = objectiveCount % totalBatchCount;
 
-    for (let b = 0; b < MACRO_BATCH_COUNT; b++) {
-      const bChapters = chapters.slice(b * chaptersPerMacro, (b + 1) * chaptersPerMacro);
+    for (let b = 0; b < totalBatchCount; b++) {
+      const bChapters = chapters.slice(b * CHAPTER_CHUNK_SIZE, (b + 1) * CHAPTER_CHUNK_SIZE);
       if (bChapters.length > 0) {
-        const count = baseCountPerMacro + (b < remCount ? 1 : 0);
+        const count = baseCountPerBatch + (b < remCount ? 1 : 0);
         macroBatches.push({
           batchIndex: b + 1,
           chapters: bChapters,
@@ -2259,15 +2419,15 @@ ${negativeStemsNote}
           ? `【严禁出题重复】：以下是本次试卷中已命制的考点切片，严禁出现相同题干或重复参数：\n${paperGeneratedStems.slice(-8).map((s, idx) => `${idx + 1}. ${s.slice(0, 45)}...`).join('\n')}`
           : '';
 
-      const prompt = `你是一位中国计算机技术与软件专业技术资格（软考）高级命题专家。
-现在请为【${subName}】以下章节知识域命制 ${macroBatch.targetCount} 道国家软考真题标准的单项选择题（包含深度名师解析）：
+      const prompt = `你是一位中国计算机技术与软件专业技术资格（软考）高级命题专家（${subName}官方命题组成员）。
+现在请为【${subName}】以下章节知识域命制 ${macroBatch.targetCount} 道国家软考真题标准的单项选择题（必须紧扣所属章节专业考点，绝不生成千篇一律的套版题）：
 
 【所属章节与考点范围】
 ${chPromptList}
 
 【试题硬性标准】
 1. 试题题型：单项选择题（single_choice），必须严格包含 4 个选项（A、B、C、D），正确答案为单个大写字母（A/B/C/D）。
-2. 考点均匀分配：题目必须均匀覆盖上述各个章节，题干必须紧扣所属章节的专业知识与国家标准，绝不脱节！
+2. 考点均匀分配：题目必须紧扣上述各个章节各自独立的知识体系，题干必须展现真实软考工程情境或概念考核，绝不脱节！
 3. 难度等级：${difficulty}星（1-5星）。
 4. 深度解析：每道题必须包含【核心考点定位】、【正确项深度剖析】、【干扰项逐一拆解】、【考前速记避坑口诀】四个结构化小节。
 
@@ -2295,10 +2455,11 @@ ${negativePrompt}
         llmResult = await this.callLlm([{ role: 'user', content: prompt }], {
           json: true,
           model: modelToUse,
+          maxTokens: 4096,
           temperature: 0.7,
         });
       } catch (err: any) {
-        this.logger.warn(`AI 宏批次[${macroBatch.batchIndex}]生成异常: ${err.message}`);
+        this.logger.warn(`AI 微批次[${macroBatch.batchIndex}]生成异常: ${err.message}`);
       }
 
       const batchQuestions: any[] = [];
@@ -2323,7 +2484,7 @@ ${negativePrompt}
         }
       }
 
-      // 若未达到配额，从动态题库快速补充
+      // 若未达到配额，从动态多知识域题库快速补充
       if (batchQuestions.length < macroBatch.targetCount) {
         const missing = macroBatch.targetCount - batchQuestions.length;
         for (let i = 0; i < missing; i++) {
@@ -2353,13 +2514,13 @@ ${negativePrompt}
       return batchQuestions;
     });
 
-    if (onProgress) await onProgress(40, '正在并发命制各章节单选题与四段式名师解析...');
+    if (onProgress) await onProgress(45, '正在并发命制各章节单选题与四段式名师解析...');
     const macroResults = await Promise.all(macroPromises);
     for (const list of macroResults) {
       objectiveQuestions.push(...list);
     }
 
-    if (onProgress) await onProgress(70, '单选题已全部生成完成，正在核对考点覆盖与去重...');
+    if (onProgress) await onProgress(75, '单选题已全部生成完成，正在核对考点覆盖与去重...');
 
     // ==================== 3. 混合卷案例大题生成 (若为 mixed 模式) ====================
     const caseQuestionsForMixed: any[] = [];
