@@ -908,6 +908,33 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- AI 出卷实时进度动画弹窗（彻底杜绝 524 超时与白屏等待） -->
+    <el-dialog
+      v-model="aiProgressVisible"
+      title="🤖 AI 大模型整套试卷命制中"
+      width="460px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+      center
+    >
+      <div style="text-align: center; padding: 15px 10px 5px">
+        <el-progress
+          type="circle"
+          :percentage="aiProgressPercent"
+          :status="aiProgressPercent >= 100 ? 'success' : undefined"
+          :stroke-width="8"
+          :width="120"
+        />
+        <div style="margin-top: 18px; font-size: 15px; font-weight: 600; color: #1e293b">
+          {{ aiProgressStepText }}
+        </div>
+        <div style="margin-top: 8px; font-size: 12px; color: #64748b; line-height: 1.6">
+          正在调用国家软考命题专家大模型进行宏批次命题，全程智能防重复与结构化解析校验...
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -927,7 +954,7 @@ import {
   getAllSubjects,
   getChapterTree,
 } from '@/api/exam'
-import { generateEntirePaper, getAIConfig } from '@/api/ai'
+import { generateEntirePaper, generateEntirePaperAsync, getAITaskDetail, getAIConfig } from '@/api/ai'
 import { getQuestionList, type Question, type QuestionType } from '@/api/question'
 
 const loading = ref(false)
@@ -1454,13 +1481,23 @@ function onAiSubjectChange() {
   generateAiRandomName()
 }
 
+const aiProgressVisible = ref(false)
+const aiProgressPercent = ref(10)
+const aiProgressStepText = ref('AI 正在深度解析科目考点大纲...')
+let aiTaskPollTimer: any = null
+
 async function submitAiPaper() {
   if (!aiPaperForm.paperName || !aiPaperForm.paperName.trim()) {
     generateAiRandomName()
   }
   aiPaperLoading.value = true
+  aiProgressPercent.value = 10
+  aiProgressStepText.value = '正在创建 AI 命题任务与考点规划...'
+  aiProgressVisible.value = true
+  aiPaperDialogVisible.value = false
+
   try {
-    const res = await generateEntirePaper({
+    const res = await generateEntirePaperAsync({
       model: aiPaperForm.model,
       subjectId: aiPaperForm.subjectId,
       paperName: aiPaperForm.paperName,
@@ -1472,11 +1509,65 @@ async function submitAiPaper() {
       difficulty: aiPaperForm.difficulty,
       promptStyle: aiPaperForm.promptStyle,
     })
-    ElMessage.success(res?.data?.message || '🎉 AI 大模型成功生成整套试卷并已同步入库！')
-    aiPaperDialogVisible.value = false
-    fetchList()
+
+    const taskId = res?.data?.taskId
+    if (!taskId) {
+      throw new Error('未获取到命题任务ID')
+    }
+
+    // 启动轮询
+    let pollCount = 0
+    const maxPoll = 120 // 最长等待 180 秒 (120 * 1.5s)
+    
+    if (aiTaskPollTimer) clearInterval(aiTaskPollTimer)
+    aiTaskPollTimer = setInterval(async () => {
+      pollCount++
+      try {
+        const taskRes = await getAITaskDetail(taskId)
+        const task = taskRes?.data
+        if (!task) return
+
+        if (task.status === 'processing') {
+          const remoteProgress = task.result?.progress
+          if (remoteProgress) {
+            aiProgressPercent.value = Math.min(Math.max(Number(remoteProgress), 15), 95)
+          } else {
+            aiProgressPercent.value = Math.min(aiProgressPercent.value + 5, 90)
+          }
+          if (task.result?.step) {
+            aiProgressStepText.value = String(task.result.step)
+          }
+        } else if (task.status === 'completed') {
+          clearInterval(aiTaskPollTimer)
+          aiTaskPollTimer = null
+          aiProgressPercent.value = 100
+          aiProgressStepText.value = '🎉 试卷生成完成，已自动入库！'
+          setTimeout(() => {
+            aiProgressVisible.value = false
+            ElMessage.success(task.result?.message || '🎉 AI 大模型成功生成整套试卷并已同步入库！')
+            fetchList()
+          }, 800)
+        } else if (task.status === 'failed') {
+          clearInterval(aiTaskPollTimer)
+          aiTaskPollTimer = null
+          aiProgressVisible.value = false
+          ElMessage.error(task.result?.error || 'AI 试卷生成失败，请检查 AI 配置或重试')
+        }
+      } catch {
+        // 网络短暂抖动，继续等待
+      }
+
+      if (pollCount >= maxPoll) {
+        clearInterval(aiTaskPollTimer)
+        aiTaskPollTimer = null
+        aiProgressVisible.value = false
+        ElMessage.warning('出卷任务已在后台执行，请稍后刷新试卷列表查看！')
+        fetchList()
+      }
+    }, 1500)
   } catch (err: any) {
-    ElMessage.error(err.message || 'AI 整套试卷生成失败')
+    aiProgressVisible.value = false
+    ElMessage.error(err.message || 'AI 整套试卷任务创建失败')
   } finally {
     aiPaperLoading.value = false
   }

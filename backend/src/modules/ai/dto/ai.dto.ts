@@ -108,6 +108,10 @@ export class AiGeneratePaperDto {
   @IsOptional()
   @IsString()
   model?: string;
+
+  @ApiPropertyOptional({ description: '是否异步生成（返回taskId轮询，杜绝524超时）', default: false })
+  @IsOptional()
+  async?: boolean;
 }
 
 /**

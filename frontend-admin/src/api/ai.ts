@@ -63,6 +63,7 @@ export interface AIGeneratePaperParams {
   promptStyle?: string
   chapterIds?: number[]
   model?: string
+  async?: boolean
 }
 
 // AI 出题
@@ -75,7 +76,7 @@ export function generateQuestions(data: AIGenerateParams) {
   })
 }
 
-// AI 一键生成整套试卷并自动入库
+// AI 一键生成整套试卷（同步接口）
 export function generateEntirePaper(data: AIGeneratePaperParams) {
   return request<{
     paperId: number
@@ -87,6 +88,46 @@ export function generateEntirePaper(data: AIGeneratePaperParams) {
     method: 'post',
     timeout: 180000,
     data,
+  })
+}
+
+// AI 一键生成整套试卷（异步任务模式，彻底杜绝 524 响应超时）
+export function generateEntirePaperAsync(data: AIGeneratePaperParams) {
+  return request<{
+    taskId: number
+    status: string
+    message: string
+  }>({
+    url: '/admin/ai/generate-paper-async',
+    method: 'post',
+    timeout: 30000,
+    data,
+  })
+}
+
+// 获取 AI 任务实时状态与进度详情（用于出卷轮询）
+export function getAITaskDetail(taskId: number | string) {
+  return request<{
+    id: number
+    type: string
+    status: 'pending' | 'processing' | 'completed' | 'failed' | string
+    params: any
+    result: {
+      progress?: number
+      step?: string
+      paperId?: number
+      paper?: any
+      questionCount?: number
+      message?: string
+      error?: string
+    }
+    model?: string
+    createdAt: string
+    completedAt?: string
+  }>({
+    url: `/admin/ai/tasks/${taskId}`,
+    method: 'get',
+    timeout: 15000,
   })
 }
 

@@ -57,12 +57,24 @@ export class AiController {
   }
 
   @Post(['ai/generate-paper', 'admin/ai/generate-paper', 'exam/ai/generate-paper'])
-  @ApiOperation({ summary: 'AI大模型一键生成整套试卷' })
+  @ApiOperation({ summary: 'AI大模型一键生成整套试卷（支持同步或异步轮询模式）' })
   async generateEntirePaper(
     @Body() dto: AiGeneratePaperDto,
     @CurrentUser() user?: UserPayload,
   ) {
+    if (dto.async) {
+      return this.aiService.createAsyncPaperTask(dto, user?.id || 1);
+    }
     return this.aiService.generateEntirePaper(dto, user?.id || 1);
+  }
+
+  @Post(['ai/generate-paper-async', 'admin/ai/generate-paper-async', 'exam/ai/generate-paper-async'])
+  @ApiOperation({ summary: 'AI大模型一键生成整套试卷（异步任务模式，彻底杜绝524超时）' })
+  async generateEntirePaperAsync(
+    @Body() dto: AiGeneratePaperDto,
+    @CurrentUser() user?: UserPayload,
+  ) {
+    return this.aiService.createAsyncPaperTask(dto, user?.id || 1);
   }
 
   @Public()
