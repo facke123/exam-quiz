@@ -36,6 +36,14 @@
         </div>
 
         <div class="action-bar">
+          <el-button
+            v-if="selectedPaperRows.length > 0"
+            type="danger"
+            plain
+            @click="handleBatchDeletePapers"
+          >
+            🗑️ 批量删除 ({{ selectedPaperRows.length }})
+          </el-button>
           <el-button type="primary" plain :icon="'MagicStick'" @click="openAiPaperDialog">
             🤖 AI 一键出整卷
           </el-button>
@@ -52,7 +60,15 @@
       </div>
 
       <!-- 试卷表格 -->
-      <el-table v-loading="loading" :data="list" class="custom-table" border stripe>
+      <el-table
+        v-loading="loading"
+        :data="list"
+        class="custom-table"
+        border
+        stripe
+        @selection-change="handlePaperSelectionChange"
+      >
+        <el-table-column type="selection" width="45" align="center" />
         <el-table-column prop="id" label="ID" width="70" align="center" />
 
         <el-table-column label="试卷名称" min-width="260">
@@ -949,6 +965,7 @@ import {
   createPaper,
   updatePaper,
   deletePaper,
+  batchDeletePapers,
   autoGeneratePaper,
   importPaper,
   getAllSubjects,
@@ -960,6 +977,11 @@ import { getQuestionList, type Question, type QuestionType } from '@/api/questio
 const loading = ref(false)
 const list = ref<any[]>([])
 const subjects = ref<{ label: string; value: number }[]>([])
+const selectedPaperRows = ref<any[]>([])
+
+function handlePaperSelectionChange(rows: any[]) {
+  selectedPaperRows.value = rows
+}
 
 const query = reactive<any>({
   page: 1,
@@ -1896,12 +1918,49 @@ async function submitImportPaper() {
 }
 
 async function handleDeletePaper(row: any) {
+  const qCount = row.questionCount || (row.questionIds ? row.questionIds.length : 0)
+  const tipMessage = qCount > 0
+    ? `确定要删除试卷「${row.name}」吗？\n【重要提示】：此操作将同时在题目库中彻底删除该试卷对应的 ${qCount} 道试题！`
+    : `确定要删除试卷「${row.name}」吗？`
+
   try {
-    await ElMessageBox.confirm(`确定要删除试卷「${row.name}」吗？`, '删除确认', {
+    await ElMessageBox.confirm(tipMessage, '删除试卷与题目确认', {
+      confirmButtonText: '确定彻底删除',
+      cancelButtonText: '取消',
       type: 'warning',
+      confirmButtonClass: 'el-button--danger',
     })
-    await deletePaper(row.id)
-    ElMessage.success('删除成功')
+    const res: any = await deletePaper(row.id)
+    ElMessage.success(res?.message || res?.data?.message || '试卷及其对应题库题目已彻底删除！')
+    fetchList()
+  } catch {
+    // cancel
+  }
+}
+
+async function handleBatchDeletePapers() {
+  if (selectedPaperRows.value.length === 0) return
+  const count = selectedPaperRows.value.length
+  let totalQCount = 0
+  selectedPaperRows.value.forEach((r) => {
+    totalQCount += (r.questionCount || (r.questionIds ? r.questionIds.length : 0))
+  })
+
+  const tipMessage = totalQCount > 0
+    ? `确定要批量删除选中的 ${count} 套试卷吗？\n【重要提示】：此操作将同时在题目库中彻底删除关联的 ${totalQCount} 道试题！`
+    : `确定要批量删除选中的 ${count} 套试卷吗？`
+
+  try {
+    await ElMessageBox.confirm(tipMessage, '批量删除确认', {
+      confirmButtonText: '确定彻底删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    })
+    const ids = selectedPaperRows.value.map((r) => r.id)
+    const res: any = await batchDeletePapers(ids)
+    ElMessage.success(res?.message || res?.data?.message || `已成功批量删除 ${count} 套试卷及关联题目！`)
+    selectedPaperRows.value = []
     fetchList()
   } catch {
     // cancel

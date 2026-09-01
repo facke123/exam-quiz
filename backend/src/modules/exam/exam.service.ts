@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
@@ -1057,13 +1057,110 @@ export class ExamService implements OnModuleInit {
   }
 
   /**
-   * 删除试卷
+   * 删除试卷，并同步级联删除题库中该试卷所包含的全部试题
    */
-  async deletePaper(id: number): Promise<void> {
-    const result = await this.paperRepository.delete(id);
-    if (!result.affected) {
+  async deletePaper(id: number): Promise<{ deletedQuestionsCount: number; message: string }> {
+    const paper = await this.paperRepository.findOne({ where: { id } });
+    if (!paper) {
       throw new NotFoundException('试卷不存在');
     }
+
+    let deletedQuestionsCount = 0;
+    const qIds = Array.isArray(paper.questionIds)
+      ? paper.questionIds
+          .map((qid: any) => Number(qid))
+          .filter((num: number) => !isNaN(num) && num > 0)
+      : [];
+
+    if (qIds.length > 0) {
+      try {
+        const delRes = await this.questionRepository.delete(qIds);
+        deletedQuestionsCount = delRes.affected || qIds.length;
+        this.logger.log(
+          `deletePaper: 成功删除试卷 [${paper.name}](ID:${id}) 及关联的 ${deletedQuestionsCount} 道题库试题`,
+        );
+      } catch (err: any) {
+        this.logger.error(`deletePaper: 级联删除试题失败: ${err.message}`);
+        for (const qid of qIds) {
+          try {
+            await this.questionRepository.delete(qid);
+            deletedQuestionsCount++;
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    await this.paperRepository.delete(id);
+
+    return {
+      deletedQuestionsCount,
+      message: `试卷删除成功，已同步彻底清理题库中对应的 ${deletedQuestionsCount} 道试题`,
+    };
+  }
+
+  /**
+   * 批量删除试卷，并同步级联删除题库中对应的全部试题
+   */
+  async batchDeletePapers(ids: number[]): Promise<{
+    deletedPapersCount: number;
+    deletedQuestionsCount: number;
+    message: string;
+  }> {
+    if (!ids || ids.length === 0) {
+      return {
+        deletedPapersCount: 0,
+        deletedQuestionsCount: 0,
+        message: '未选择任何试卷',
+      };
+    }
+
+    const papers = await this.paperRepository.find({
+      where: { id: In(ids) },
+    });
+
+    const allQIdsSet = new Set<number>();
+    for (const paper of papers) {
+      if (Array.isArray(paper.questionIds)) {
+        paper.questionIds.forEach((qid: any) => {
+          const num = Number(qid);
+          if (!isNaN(num) && num > 0) allQIdsSet.add(num);
+        });
+      }
+    }
+
+    const qIds = Array.from(allQIdsSet);
+    let deletedQuestionsCount = 0;
+
+    if (qIds.length > 0) {
+      try {
+        const delRes = await this.questionRepository.delete(qIds);
+        deletedQuestionsCount = delRes.affected || qIds.length;
+        this.logger.log(
+          `batchDeletePapers: 批量删除 ${papers.length} 套试卷关联的 ${deletedQuestionsCount} 道题库试题`,
+        );
+      } catch (err: any) {
+        this.logger.error(`batchDeletePapers: 批量删除试题异常: ${err.message}`);
+        for (const qid of qIds) {
+          try {
+            await this.questionRepository.delete(qid);
+            deletedQuestionsCount++;
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    const paperDelRes = await this.paperRepository.delete(ids);
+    const deletedPapersCount = paperDelRes.affected || papers.length;
+
+    return {
+      deletedPapersCount,
+      deletedQuestionsCount,
+      message: `成功批量删除 ${deletedPapersCount} 套试卷，并同步彻底清理题库中 ${deletedQuestionsCount} 道试题`,
+    };
   }
 
   /**

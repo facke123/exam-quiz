@@ -185,6 +185,14 @@ export function deletePaper(id: number) {
   })
 }
 
+export function batchDeletePapers(ids: number[]) {
+  return request({
+    url: '/admin/papers/batch-delete',
+    method: 'post',
+    data: { ids },
+  })
+}
+
 // 自动组卷规则
 export interface AutoPaperRule {
   subjectId: number

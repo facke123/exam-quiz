@@ -228,10 +228,15 @@ export class ExamController {
   }
 
   @Delete(['exam/papers/:id', 'admin/papers/:id'])
-  @ApiOperation({ summary: '删除试卷' })
+  @ApiOperation({ summary: '删除试卷（级联删除题库关联题目）' })
   async deletePaper(@Param('id', ParseIntPipe) id: number) {
-    await this.examService.deletePaper(id);
-    return { message: '删除成功' };
+    return this.examService.deletePaper(id);
+  }
+
+  @Post(['exam/papers/batch-delete', 'admin/papers/batch-delete'])
+  @ApiOperation({ summary: '批量删除试卷（级联删除题库关联题目）' })
+  async batchDeletePapers(@Body() body: { ids: number[] }) {
+    return this.examService.batchDeletePapers(body.ids || []);
   }
 
   @Post(['exam/papers/generate', 'admin/papers/generate', 'admin/papers/auto-generate', 'exam/papers/auto-generate'])
