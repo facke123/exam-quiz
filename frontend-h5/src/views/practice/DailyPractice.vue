@@ -193,12 +193,13 @@
         </div>
       </div>
 
-      <!-- 7. 开始刷题操作按钮 -->
-      <div class="bottom-bar">
-        <button class="start-btn" :class="{ 'btn-secondary': isCompleted }" @click="onStart">
-          {{ isCompleted ? `🔄 再次自测刷题（${selectedCount}题）` : `🎯 开启今日打卡挑战（${selectedCount}题）` }}
-        </button>
-      </div>
+    </div>
+
+    <!-- 7. 底部固定操作栏 -->
+    <div class="daily-bottom-bar">
+      <button class="start-btn" :class="{ 'btn-secondary': isCompleted }" @click="onStart">
+        {{ isCompleted ? `🔄 再次自测刷题（${selectedCount}题）` : `🎯 开启今日打卡挑战（${selectedCount}题）` }}
+      </button>
     </div>
 
     <!-- 打卡成就分享弹窗 -->
@@ -442,7 +443,7 @@ onMounted(() => {
 .daily-page {
   min-height: 100vh;
   background: #f8fafc;
-  padding-bottom: 30px;
+  padding-bottom: 96px; /* 预留底部操作栏空间，防止内容遮挡 */
 }
 
 .nav-bar {
@@ -1112,9 +1113,19 @@ onMounted(() => {
   }
 }
 
-/* 7. 底部开始刷题按钮 */
-.bottom-bar {
-  margin-top: 6px;
+/* 7. 底部固定操作栏（严格吸底并兼容 PC/H5 居中） */
+.daily-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 520px;
+  background: #ffffff;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid #e2e8f0;
+  z-index: 40;
 
   .start-btn {
     width: 100%;
@@ -1126,7 +1137,11 @@ onMounted(() => {
     font-size: 15px;
     font-weight: 800;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
     transition: all 0.2s;
 
     &:active {
@@ -1136,7 +1151,7 @@ onMounted(() => {
 
     &.btn-secondary {
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
     }
   }
 }

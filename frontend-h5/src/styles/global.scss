@@ -145,21 +145,34 @@ textarea {
     background-attachment: fixed !important;
   }
 
-  // 修复 PC 端所有的 position: fixed 组件，使其居中限制在 520px 画布内
+  // 修复 PC 端顶部导航栏（保持 sticky 吸顶且居中）
+  .nav-bar {
+    position: sticky !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 520px !important;
+    margin: 0 auto !important;
+    z-index: 50 !important;
+  }
+
+  // 修复 PC 端所有的底部吸底组件，使其贴底居中限制在 520px 画布内
   .van-tabbar,
   .app-tabbar,
   .quiz-footer,
   .vip-buy-bar,
-  .nav-bar,
   .fixed-bottom-bar,
   .bottom-bar,
+  .daily-bottom-bar,
   .fixed-btn-wrap {
     position: fixed !important;
+    bottom: 0 !important;
+    top: auto !important;
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%) !important;
     width: 100% !important;
     max-width: 520px !important;
+    z-index: 50 !important;
   }
 
   // 修复底部抽屉/弹窗在 PC 端的居中与最大宽度
