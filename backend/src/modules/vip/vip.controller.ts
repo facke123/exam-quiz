@@ -95,9 +95,10 @@ export class VipController {
   @ApiOperation({ summary: '卡密兑换 VIP' })
   async redeemCard(
     @CurrentUser() user: UserPayload,
-    @Body() body: { cardCode: string },
+    @Body() body: { cardCode?: string; code?: string },
   ) {
-    return this.vipService.redeemCard(user ? user.id : 1, body?.cardCode);
+    const code = body?.cardCode || body?.code || '';
+    return this.vipService.redeemCard(user ? user.id : 1, code);
   }
 
   @Post('refund')

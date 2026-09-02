@@ -125,8 +125,20 @@ export class VipService implements OnModuleInit {
     const alipayType = configMap.get('payment_alipay_type') || 'qr_code';
     const alipayQr = configMap.get('payment_alipay_qr') || '';
     const cardEnabled = configMap.get('payment_card_enabled') !== 'false';
+    const noticeText =
+      configMap.get('payment_notice_text') ||
+      '如遇到充值疑问或支付问题，请联系官方客服微信协助处理。';
 
     return {
+      sandboxEnabled,
+      wechatEnabled,
+      wechatType,
+      wechatQr,
+      alipayEnabled,
+      alipayType,
+      alipayQr,
+      cardEnabled,
+      noticeText,
       sandbox: {
         enabled: sandboxEnabled,
         title: '⚡ 沙箱/演示一键快捷支付',

@@ -163,7 +163,7 @@
           <div class="channel-list">
             <!-- 沙箱/模拟快捷支付 -->
             <div
-              v-if="channels.sandboxEnabled"
+              v-if="channels.sandboxEnabled !== false"
               class="channel-item"
               :class="{ active: selectedChannel === 'mock' }"
               @click="selectedChannel = 'mock'"
@@ -180,7 +180,7 @@
 
             <!-- 微信支付 -->
             <div
-              v-if="channels.wechatEnabled"
+              v-if="channels.wechatEnabled !== false"
               class="channel-item"
               :class="{ active: selectedChannel === 'wechat' }"
               @click="selectedChannel = 'wechat'"
@@ -197,7 +197,7 @@
 
             <!-- 支付宝 -->
             <div
-              v-if="channels.alipayEnabled"
+              v-if="channels.alipayEnabled !== false"
               class="channel-item"
               :class="{ active: selectedChannel === 'alipay' }"
               @click="selectedChannel = 'alipay'"
@@ -415,14 +415,38 @@ async function loadData() {
     }
 
     if (channelRes.status === 'fulfilled' && channelRes.value?.data) {
-      channels.value = channelRes.value.data
-      if (channels.value.sandboxEnabled) {
+      const d: any = channelRes.value.data
+      channels.value = {
+        sandboxEnabled: d.sandboxEnabled !== undefined ? Boolean(d.sandboxEnabled) : (d.sandbox?.enabled ?? true),
+        wechatEnabled: d.wechatEnabled !== undefined ? Boolean(d.wechatEnabled) : (d.wechat?.enabled ?? true),
+        wechatType: d.wechatType || d.wechat?.type || 'qr_code',
+        wechatQr: d.wechatQr || d.wechat?.qrCode || '',
+        alipayEnabled: d.alipayEnabled !== undefined ? Boolean(d.alipayEnabled) : (d.alipay?.enabled ?? true),
+        alipayType: d.alipayType || d.alipay?.type || 'qr_code',
+        alipayQr: d.alipayQr || d.alipay?.qrCode || '',
+        cardEnabled: d.cardEnabled !== undefined ? Boolean(d.cardEnabled) : (d.card?.enabled ?? true),
+        noticeText: d.noticeText || '如遇到充值疑问或支付问题，请联系官方客服微信协助处理。',
+      }
+      if (channels.value.sandboxEnabled !== false) {
         selectedChannel.value = 'mock'
-      } else if (channels.value.wechatEnabled) {
+      } else if (channels.value.wechatEnabled !== false) {
         selectedChannel.value = 'wechat'
-      } else if (channels.value.alipayEnabled) {
+      } else if (channels.value.alipayEnabled !== false) {
         selectedChannel.value = 'alipay'
       }
+    } else {
+      channels.value = {
+        sandboxEnabled: true,
+        wechatEnabled: true,
+        wechatType: 'qr_code',
+        wechatQr: '',
+        alipayEnabled: true,
+        alipayType: 'qr_code',
+        alipayQr: '',
+        cardEnabled: true,
+        noticeText: '如遇到充值疑问或支付问题，请联系官方客服微信协助处理。',
+      }
+      selectedChannel.value = 'mock'
     }
   } catch {
     planList.value = fallbackPlans
@@ -450,7 +474,8 @@ async function handleConfirmPay() {
       payMethod: selectedChannel.value,
     })
 
-    const orderId = orderRes.data?.orderId || (orderRes as any).orderId
+    const orderData: any = orderRes.data || orderRes
+    const orderId = orderData?.orderId || orderData?.id
 
     // 执行快捷模拟/扫码核销
     if (orderId) {
@@ -468,15 +493,8 @@ async function handleConfirmPay() {
       userStore.userInfo.isVip = true
     }
 
-    // 重新获取最新会员状态
-    try {
-      const res = await getVipStatus()
-      if (res?.data) {
-        vipStatus.value = res.data
-      }
-    } catch {
-      // ignore
-    }
+    // 重新获取最新会员状态与套餐
+    await loadData()
   } catch (err: any) {
     showToast({
       type: 'fail',
