@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="knowledge-manage-page">
     <!-- 顶部统计卡片 -->
     <div class="stat-grid">
@@ -92,6 +92,14 @@
           <el-button type="primary" @click="openCreateDialog">
             ➕ 新增考点
           </el-button>
+          <el-button
+            type="danger"
+            plain
+            :disabled="selectedRows.length === 0"
+            @click="handleBatchDelete"
+          >
+            🗑️ 批量删除 {{ selectedRows.length ? `(${selectedRows.length})` : '' }}
+          </el-button>
         </div>
         <div class="right-actions">
           <el-button @click="loadData">🔄 刷新</el-button>
@@ -103,11 +111,14 @@
     <div class="table-panel">
       <el-table
         v-loading="loading"
-        :data="kpList"
+        :data="pagedKpList"
+        row-key="id"
         border
         stripe
         style="width: 100%"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" :reserve-selection="true" width="48" align="center" />
         <el-table-column prop="id" label="ID" width="70" align="center" />
         <el-table-column label="考点名称" min-width="220">
           <template #default="{ row }">
@@ -156,6 +167,17 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页组件 -->
+      <div v-if="total > 0" class="pagination-panel">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100, 200]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+        />
+      </div>
     </div>
 
     <!-- 查看考点详情抽屉 (含配套例题预览) -->
@@ -302,14 +324,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getKnowledgeBase,
   getKnowledgePointDetail,
   createKnowledgePoint,
   updateKnowledgePoint,
   deleteKnowledgePoint,
+  batchDeleteKnowledgePoints,
   getAllSubjects,
 } from '@/api/exam'
 import KnowledgeImportDialog from './components/KnowledgeImportDialog.vue'
@@ -326,6 +349,14 @@ const categories = ref<string[]>([])
 const total = ref(0)
 const mustCount = ref(0)
 const highCount = ref(0)
+
+const selectedRows = ref<any[]>([])
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pagedKpList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return kpList.value.slice(start, start + pageSize.value)
+})
 
 const showImportDialog = ref(false)
 const showDetailDrawer = ref(false)
@@ -346,6 +377,10 @@ const editForm = ref<any>({
   sort: 1,
 })
 
+function handleSelectionChange(rows: any[]) {
+  selectedRows.value = rows
+}
+
 async function fetchSubjects() {
   try {
     const res = await getAllSubjects()
@@ -365,6 +400,7 @@ async function fetchSubjects() {
 
 function onSubjectChange() {
   filterCategory.value = ''
+  currentPage.value = 1
   loadData()
 }
 
@@ -475,6 +511,39 @@ async function handleDelete(row: any) {
     loadData()
   } catch (err: any) {
     ElMessage.error(err.message || '删除失败')
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请勾选要删除的考点')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要批量删除选中的 ${selectedRows.value.length} 个考点知识点吗？此操作不可撤销！`,
+      '批量删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+
+    const ids = selectedRows.value.map((r) => r.id)
+    loading.value = true
+    const res = await batchDeleteKnowledgePoints(ids)
+    ElMessage.success(res?.data?.message || `成功删除 ${ids.length} 个考点`)
+    selectedRows.value = []
+    await loadData()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '批量删除失败')
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -589,6 +658,12 @@ onMounted(async () => {
     .memory-tip-text {
       color: #d97706;
       font-size: 12px;
+    }
+
+    .pagination-panel {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
     }
   }
 

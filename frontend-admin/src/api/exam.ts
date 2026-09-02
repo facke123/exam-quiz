@@ -146,6 +146,14 @@ export function deleteKnowledgePoint(id: number) {
   })
 }
 
+export function batchDeleteKnowledgePoints(ids: number[]) {
+  return request<{ count: number; message: string }>({
+    url: '/admin/knowledge-points/batch-delete',
+    method: 'post',
+    data: { ids },
+  })
+}
+
 // 试卷
 export function getPaperList(params: PageParams & { subjectId?: number; status?: string }) {
   return request<PageResult<Paper>>({

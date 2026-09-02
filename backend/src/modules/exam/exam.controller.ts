@@ -185,6 +185,12 @@ export class ExamController {
     return { message: '删除成功' };
   }
 
+  @Post(['admin/knowledge-points/batch-delete', 'exam/knowledge-points/batch-delete', 'knowledge-points/batch-delete'])
+  @ApiOperation({ summary: '批量删除知识点' })
+  async batchDeleteKnowledgePoints(@Body() body: { ids: number[] }) {
+    return this.examService.batchDeleteKnowledgePoints(body.ids || []);
+  }
+
   // ==================== 试卷管理 ====================
 
   @Public()

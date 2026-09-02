@@ -1200,6 +1200,25 @@ export class ExamService implements OnModuleInit {
     }
   }
 
+  /**
+   * 批量删除知识点
+   */
+  async batchDeleteKnowledgePoints(ids: number[]): Promise<{ count: number; message: string }> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return { count: 0, message: '未选择任何考点' };
+    }
+    const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id) && id > 0);
+    if (numIds.length === 0) {
+      return { count: 0, message: '未选择有效的考点 ID' };
+    }
+
+    const result = await this.knowledgePointRepository.delete(numIds);
+    return {
+      count: result.affected || 0,
+      message: `成功批量删除 ${result.affected || 0} 个考点`,
+    };
+  }
+
   // ==================== 试卷管理 ====================
 
   /**
