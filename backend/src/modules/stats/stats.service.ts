@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository, Between, In, MoreThanOrEqual, MoreThan } from 'typeorm';
 import { User } from '@/database/entities/user.entity';
 import { Question } from '@/database/entities/question.entity';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
@@ -13,6 +13,8 @@ import { Subject } from '@/database/entities/subject.entity';
 import { ErrorReport } from '@/database/entities/error-report.entity';
 import { Paper } from '@/database/entities/paper.entity';
 import { AiTask } from '@/database/entities/ai-task.entity';
+import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
+import { MemberPlan } from '@/database/entities/member-plan.entity';
 import { DatetimeUtil } from '@/common/utils/datetime.util';
 
 /**
@@ -45,6 +47,10 @@ export class StatsService {
     private readonly paperRepository: Repository<Paper>,
     @InjectRepository(AiTask)
     private readonly aiTaskRepository: Repository<AiTask>,
+    @InjectRepository(KnowledgePoint)
+    private readonly knowledgePointRepository: Repository<KnowledgePoint>,
+    @InjectRepository(MemberPlan)
+    private readonly memberPlanRepository: Repository<MemberPlan>,
   ) {}
 
   // ==================== 前台统计 ====================
@@ -235,13 +241,22 @@ export class StatsService {
   /**
    * 后台 - 仪表盘完整统计 (/admin/stats/dashboard)
    */
-  async getDashboard(): Promise<{
+  async getDashboard(range: string = '7d'): Promise<{
     totalUsers: number;
+    todayNewUsers: number;
     dailyActive: number;
     totalQuestions: number;
+    publishedQuestions: number;
+    totalPapers: number;
+    totalKnowledgePoints: number;
+    totalChapters: number;
+    totalPracticeCount: number;
+    totalQuestionsAnswered: number;
     todayPracticeCount: number;
     todayRevenue: number;
+    totalRevenue: number;
     vipUsers: number;
+    pendingOrderCount: number;
     payConversionRate: number;
     questionDistribution: {
       single: number;
@@ -255,9 +270,9 @@ export class StatsService {
       casePercent: number;
     };
     userGrowth: { date: string; count: number }[];
-    chartData: { day: string; val: string; height: number; count: number }[];
-    memberDistribution: { level: string; count: number }[];
-    hotSubjects: { name: string; count: number; percent: number }[];
+    chartData: { day: string; date: string; val: string; height: number; count: number }[];
+    memberDistribution: { level: string; count: number; percent: number }[];
+    hotSubjects: { name: string; count: number; questionCount: number; practiceCount: number; percent: number }[];
     todoList: {
       id: number;
       title: string;
@@ -267,45 +282,98 @@ export class StatsService {
       btnText: string;
       count: number;
     }[];
+    recentOrders: {
+      id: number;
+      orderNo: string;
+      username: string;
+      planName: string;
+      amount: number;
+      payMethod: string;
+      payStatus: string;
+      tradeNo: string;
+      createdAt: string;
+    }[];
+    recentPractices: {
+      id: number;
+      username: string;
+      subjectName: string;
+      mode: string;
+      answeredQuestions: number;
+      correctCount: number;
+      score: number;
+      duration: number;
+      createdAt: string;
+    }[];
   }> {
+    const now = new Date();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // 1. 用户统计
     const totalUsers = await this.userRepository.count();
-    const totalQuestions = await this.questionRepository.count();
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // VIP 用户
-    const vipUsers = await this.userRepository.count({
-      where: { vipLevel: Between(1, 3) },
+    const todayNewUsers = await this.userRepository.count({
+      where: { createdAt: MoreThanOrEqual(todayStart) },
     });
 
-    // 今日做题量
+    const vipUsers = await this.userRepository
+      .createQueryBuilder('u')
+      .where('u.vipLevel > 0')
+      .andWhere('(u.vipExpireAt > :now OR u.vipLevel = 4)', { now })
+      .getCount();
+
+    // 2. 刷题统计
+    const totalPracticeCount = await this.recordRepository.count();
+    const totalAnsweredRes = await this.recordRepository
+      .createQueryBuilder('r')
+      .select('SUM(r.answeredQuestions)', 'sum')
+      .getRawOne();
+    const totalQuestionsAnswered = Number(totalAnsweredRes?.sum) || 0;
+
     const todayRecords = await this.recordRepository.find({
-      where: { startedAt: Between(today, new Date()) },
+      where: { startedAt: MoreThanOrEqual(todayStart) },
     });
     const todayPracticeCount = todayRecords.reduce(
-      (sum, r) => sum + (r.answeredQuestions || 0),
+      (sum, r) => sum + (r.answeredQuestions || 1),
       0,
     );
 
-    // 今日活跃用户
     const dailyActive = todayRecords.length > 0
       ? new Set(todayRecords.map((r) => r.userId)).size
-      : Math.max(1, Math.round(totalUsers * 0.35));
+      : 0;
 
-    // 今日新增付费
-    const todayOrders = await this.orderRepository.find({
-      where: {
-        payStatus: 'paid',
-        createdAt: Between(today, new Date()),
-      },
+    // 3. 营收与订单统计
+    const todayPaidOrders = await this.orderRepository.find({
+      where: [
+        { payStatus: 'paid', paidAt: MoreThanOrEqual(todayStart) },
+        { payStatus: 'paid', createdAt: MoreThanOrEqual(todayStart) },
+      ],
     });
-    const todayRevenue = todayOrders.reduce(
+    const todayRevenue = todayPaidOrders.reduce(
       (sum, o) => sum + (Number(o.amount) || 0),
       0,
     );
 
-    // 题型真实分布统计
+    const totalRevenueRes = await this.orderRepository
+      .createQueryBuilder('o')
+      .select('SUM(o.amount)', 'sum')
+      .where('o.payStatus = :status', { status: 'paid' })
+      .getRawOne();
+    const totalRevenue = Number(totalRevenueRes?.sum) || 0;
+
+    const pendingOrderCount = await this.orderRepository.count({
+      where: { payStatus: 'pending' },
+    });
+
+    // 4. 题库与内容统计
+    const totalQuestions = await this.questionRepository.count();
+    const publishedQuestions = await this.questionRepository.count({
+      where: { status: 'published' },
+    });
+    const totalPapers = await this.paperRepository.count();
+    const totalChapters = await this.chapterRepository.count();
+    const totalKnowledgePoints = await this.knowledgePointRepository.count();
+
+    // 5. 题型真实分布统计
     const singleCount = await this.questionRepository.count({
       where: [{ type: 'single_choice' }, { type: 'single' }],
     });
@@ -320,51 +388,77 @@ export class StatsService {
     });
 
     const safeTotalQ = totalQuestions > 0 ? totalQuestions : 1;
-    const singlePercent = Math.round((singleCount / safeTotalQ) * 100);
-    const multiplePercent = Math.round((multipleCount / safeTotalQ) * 100);
-    const judgePercent = Math.round((judgeCount / safeTotalQ) * 100);
-    const casePercent = Math.max(0, 100 - singlePercent - multiplePercent - judgePercent);
+    const singlePercent = totalQuestions > 0 ? Math.round((singleCount / safeTotalQ) * 100) : 0;
+    const multiplePercent = totalQuestions > 0 ? Math.round((multipleCount / safeTotalQ) * 100) : 0;
+    const judgePercent = totalQuestions > 0 ? Math.round((judgeCount / safeTotalQ) * 100) : 0;
+    const casePercent = totalQuestions > 0 ? Math.max(0, 100 - singlePercent - multiplePercent - judgePercent) : 0;
 
-    // 近 7 天真实刷题量趋势图
-    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-    const chartData: { day: string; val: string; height: number; count: number }[] = [];
-    const sevenDaysAgo = DatetimeUtil.subtract(new Date(), 6, 'day');
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    const pastWeekRecords = await this.recordRepository.find({
-      where: { startedAt: Between(sevenDaysAgo, new Date()) },
-    });
-
-    let maxDayCount = 1;
-    const rawCounts: { dayName: string; count: number }[] = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const targetDate = DatetimeUtil.subtract(new Date(), i, 'day');
-      const dateStr = DatetimeUtil.format(targetDate, 'YYYY-MM-DD');
-      const dayName = dayNames[targetDate.getDay()];
-      const dayQuestions = pastWeekRecords
-        .filter((r) => DatetimeUtil.format(r.startedAt, 'YYYY-MM-DD') === dateStr)
-        .reduce((sum, r) => sum + (r.answeredQuestions || 0), 0);
-
-      // 如果数据量较少则结合基础题库基数呈现平滑趋势
-      const finalCount = dayQuestions > 0 ? dayQuestions : Math.floor(20 + ((6 - i) * 15) + (totalQuestions * 3));
-      rawCounts.push({ dayName, count: finalCount });
-      if (finalCount > maxDayCount) maxDayCount = finalCount;
+    // 6. 真实刷题趋势图 (支持 7d / 30d / month)
+    let numDays = 7;
+    if (range === '30d') {
+      numDays = 30;
+    } else if (range === 'month') {
+      numDays = Math.max(1, now.getDate());
     }
 
-    for (const item of rawCounts) {
+    const periodStart = DatetimeUtil.subtract(new Date(), numDays - 1, 'day');
+    periodStart.setHours(0, 0, 0, 0);
+
+    const periodRecords = await this.recordRepository.find({
+      where: { startedAt: Between(periodStart, now) },
+    });
+
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const chartData: { day: string; date: string; val: string; height: number; count: number }[] = [];
+    const dateCounts: { dayName: string; dateStr: string; count: number }[] = [];
+    let maxDayCount = 1;
+
+    for (let i = numDays - 1; i >= 0; i--) {
+      const targetDate = DatetimeUtil.subtract(new Date(), i, 'day');
+      const dateStr = DatetimeUtil.format(targetDate, 'YYYY-MM-DD');
+      const displayDate = DatetimeUtil.format(targetDate, 'MM-DD');
+      const dayName = numDays <= 7 ? dayNames[targetDate.getDay()] : displayDate;
+
+      const dayCount = periodRecords
+        .filter((r) => DatetimeUtil.format(r.startedAt, 'YYYY-MM-DD') === dateStr)
+        .reduce((sum, r) => sum + (r.answeredQuestions || 1), 0);
+
+      dateCounts.push({ dayName, dateStr: displayDate, count: dayCount });
+      if (dayCount > maxDayCount) maxDayCount = dayCount;
+    }
+
+    for (const item of dateCounts) {
       chartData.push({
         day: item.dayName,
+        date: item.dateStr,
         count: item.count,
         val: item.count >= 1000 ? (item.count / 1000).toFixed(1) + 'k' : String(item.count),
-        height: Math.max(20, Math.min(100, Math.round((item.count / maxDayCount) * 100))),
+        height: item.count === 0 ? 4 : Math.max(10, Math.min(100, Math.round((item.count / maxDayCount) * 100))),
       });
     }
 
-    // 热门软考科目
+    // 7. 会员等级真实分布
+    const level0Count = await this.userRepository.count({
+      where: [{ vipLevel: 0 }, { vipLevel: null as any }],
+    });
+    const level1Count = await this.userRepository.count({ where: { vipLevel: 1 } });
+    const level2Count = await this.userRepository.count({ where: { vipLevel: 2 } });
+    const level3Count = await this.userRepository.count({ where: { vipLevel: 3 } });
+    const level4Count = await this.userRepository.count({ where: { vipLevel: 4 } });
+
+    const safeTotalU = totalUsers > 0 ? totalUsers : 1;
+    const memberDistribution = [
+      { level: '免费学员', count: level0Count, percent: Math.round((level0Count / safeTotalU) * 100) },
+      { level: '月卡会员', count: level1Count, percent: Math.round((level1Count / safeTotalU) * 100) },
+      { level: '季卡会员', count: level2Count, percent: Math.round((level2Count / safeTotalU) * 100) },
+      { level: '年卡会员', count: level3Count, percent: Math.round((level3Count / safeTotalU) * 100) },
+      { level: '永久尊享会员', count: level4Count, percent: Math.round((level4Count / safeTotalU) * 100) },
+    ];
+
+    // 8. 热门软考科目（真实做题量与题目量）
     const subjects = await this.subjectRepository.find({ order: { sort: 'ASC' } });
     const hotSubjects = [];
-    let maxSubCount = 1;
+    let maxSubActivity = 1;
 
     for (const s of subjects) {
       const qCount = await this.questionRepository.count({
@@ -373,22 +467,25 @@ export class StatsService {
       const pCount = await this.recordRepository.count({
         where: { subjectId: Number(s.id) },
       });
-      const combined = Math.max(qCount * 10, pCount * 5, 20);
-      if (combined > maxSubCount) maxSubCount = combined;
+      const combined = pCount + qCount;
+      if (combined > maxSubActivity) maxSubActivity = combined;
       hotSubjects.push({
         name: s.name,
+        questionCount: qCount,
+        practiceCount: pCount,
         count: combined,
         percent: 0,
       });
     }
 
+    hotSubjects.sort((a, b) => b.practiceCount - a.practiceCount || b.questionCount - a.questionCount);
     for (const hs of hotSubjects) {
-      hs.percent = Math.max(15, Math.min(100, Math.round((hs.count / maxSubCount) * 100)));
+      hs.percent = maxSubActivity > 0 ? Math.max(10, Math.min(100, Math.round((hs.count / maxSubActivity) * 100))) : 0;
     }
 
-    // 真实待办事项
+    // 9. 真实待办事项
     const pendingAiQuestions = await this.questionRepository.count({
-      where: { status: 'pending', source: 'ai' },
+      where: { status: 'pending' },
     });
     const pendingErrorReports = await this.errorReportRepository.count({
       where: { status: 'pending' },
@@ -400,16 +497,16 @@ export class StatsService {
     const todoList = [
       {
         id: 1,
-        title: `待审核 AI 生成题目（${pendingAiQuestions}道）`,
-        desc: '由大模型智能命题生成，等待人工复核校验入库',
-        type: 'ai_question',
-        route: '/ai/generate',
-        btnText: '去审核',
-        count: pendingAiQuestions,
+        title: `待审核 VIP 充值转账（${pendingOrderCount}笔）`,
+        desc: '考生通过个人微信/支付宝扫码转账提交的开通核销申请',
+        type: 'vip_order',
+        route: '/user/vip',
+        btnText: '去核销',
+        count: pendingOrderCount,
       },
       {
         id: 2,
-        title: `用户纠错反馈待处理（${pendingErrorReports}条）`,
+        title: `考生纠错反馈待处理（${pendingErrorReports}条）`,
         desc: '考生提交的题干疑问与解析异议反馈待核实答复',
         type: 'error_report',
         route: '/question/error-report',
@@ -418,24 +515,94 @@ export class StatsService {
       },
       {
         id: 3,
-        title: `未发布/草稿试卷待发布（${draftPapers}套）`,
-        desc: '真题及模拟试卷组卷完成后待审核上线',
+        title: `草稿/未发布试卷待上线（${draftPapers}套）`,
+        desc: '真题及模拟试卷组卷完成后待审核发布上线',
         type: 'paper',
         route: '/exam/paper',
         btnText: '去发布',
         count: draftPapers,
       },
+      {
+        id: 4,
+        title: `待审核 AI 生成题目（${pendingAiQuestions}道）`,
+        desc: '由大模型智能命题生成，等待人工复核校验入库',
+        type: 'ai_question',
+        route: '/ai/generate',
+        btnText: '去审核',
+        count: pendingAiQuestions,
+      },
     ];
+
+    // 10. 最新真实订单流水 Top 5
+    const recentOrdersRaw = await this.orderRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 5,
+    });
+    const userIds = Array.from(new Set(recentOrdersRaw.map((o) => o.userId).filter(Boolean)));
+    const planIds = Array.from(new Set(recentOrdersRaw.map((o) => o.planId).filter(Boolean)));
+
+    const users = userIds.length > 0 ? await this.userRepository.find({ where: { id: In(userIds) } }) : [];
+    const plans = planIds.length > 0 ? await this.memberPlanRepository.find({ where: { id: In(planIds) } }) : [];
+
+    const userMap = new Map(users.map((u) => [Number(u.id), u.nickname || u.username]));
+    const planMap = new Map(plans.map((p) => [Number(p.id), p.name]));
+
+    const recentOrders = recentOrdersRaw.map((o) => ({
+      id: Number(o.id),
+      orderNo: o.orderNo,
+      username: userMap.get(Number(o.userId)) || `学员 #${o.userId}`,
+      planName: planMap.get(Number(o.planId)) || 'VIP会员套餐',
+      amount: Number(o.amount) || 0,
+      payMethod: o.payMethod,
+      payStatus: o.payStatus,
+      tradeNo: o.tradeNo || '',
+      createdAt: DatetimeUtil.format(o.createdAt, 'YYYY-MM-DD HH:mm'),
+    }));
+
+    // 11. 最新真实学员刷题动态 Top 5
+    const recentPracticesRaw = await this.recordRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 5,
+    });
+    const practiceUserIds = Array.from(new Set(recentPracticesRaw.map((r) => r.userId).filter(Boolean)));
+    const practiceSubjectIds = Array.from(new Set(recentPracticesRaw.map((r) => r.subjectId).filter(Boolean)));
+
+    const pUsers = practiceUserIds.length > 0 ? await this.userRepository.find({ where: { id: In(practiceUserIds) } }) : [];
+    const pSubjects = practiceSubjectIds.length > 0 ? await this.subjectRepository.find({ where: { id: In(practiceSubjectIds) } }) : [];
+
+    const pUserMap = new Map(pUsers.map((u) => [Number(u.id), u.nickname || u.username]));
+    const pSubjectMap = new Map(pSubjects.map((s) => [Number(s.id), s.name]));
+
+    const recentPractices = recentPracticesRaw.map((r) => ({
+      id: Number(r.id),
+      username: pUserMap.get(Number(r.userId)) || `学员 #${r.userId}`,
+      subjectName: pSubjectMap.get(Number(r.subjectId)) || '软考科目',
+      mode: r.mode,
+      answeredQuestions: r.answeredQuestions || 0,
+      correctCount: r.correctCount || 0,
+      score: r.score || 0,
+      duration: r.duration || 0,
+      createdAt: DatetimeUtil.format(r.createdAt || r.startedAt, 'YYYY-MM-DD HH:mm'),
+    }));
 
     const userGrowth = await this.getUserGrowth();
 
     return {
-      totalUsers: totalUsers || 1,
+      totalUsers,
+      todayNewUsers,
       dailyActive,
-      totalQuestions: totalQuestions || 0,
-      todayPracticeCount: todayPracticeCount || chartData[chartData.length - 1]?.count || 0,
+      totalQuestions,
+      publishedQuestions,
+      totalPapers,
+      totalKnowledgePoints,
+      totalChapters,
+      totalPracticeCount,
+      totalQuestionsAnswered,
+      todayPracticeCount,
       todayRevenue,
+      totalRevenue,
       vipUsers,
+      pendingOrderCount,
       payConversionRate:
         totalUsers > 0 ? Number(((vipUsers / totalUsers) * 100).toFixed(1)) : 0,
       questionDistribution: {
@@ -451,14 +618,11 @@ export class StatsService {
       },
       userGrowth,
       chartData,
-      memberDistribution: [
-        { level: '免费用户', count: Math.max(0, totalUsers - vipUsers) },
-        { level: '月卡会员', count: Math.round(vipUsers * 0.5) },
-        { level: '季卡会员', count: Math.round(vipUsers * 0.3) },
-        { level: '年卡会员', count: Math.round(vipUsers * 0.2) },
-      ],
+      memberDistribution,
       hotSubjects,
       todoList,
+      recentOrders,
+      recentPractices,
     };
   }
 
@@ -483,7 +647,7 @@ export class StatsService {
 
       list.push({
         date: DatetimeUtil.format(d, 'MM-DD'),
-        count: count || Math.floor(Math.random() * 5) + 1,
+        count,
       });
     }
     return list;
@@ -510,11 +674,11 @@ export class StatsService {
 
       const count = records.reduce((s, r) => s + (r.answeredQuestions || 0), 0);
       const correct = records.reduce((s, r) => s + (r.correctCount || 0), 0);
-      const correctRate = count > 0 ? Math.round((correct / count) * 100) : 76;
+      const correctRate = count > 0 ? Math.round((correct / count) * 100) : 0;
 
       list.push({
         date: DatetimeUtil.format(d, 'MM-DD'),
-        count: count || 45 + i * 12,
+        count,
         correctRate,
       });
     }
@@ -533,10 +697,17 @@ export class StatsService {
       const total = await this.questionRepository.count({
         where: { subjectId: Number(s.id) },
       });
+      const records = await this.recordRepository.find({
+        where: { subjectId: Number(s.id) },
+      });
+      const totalAnswered = records.reduce((sum, r) => sum + (r.answeredQuestions || 0), 0);
+      const totalCorrect = records.reduce((sum, r) => sum + (r.correctCount || 0), 0);
+      const avgCorrectRate = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+
       result.push({
         subject: s.name,
-        total: total || 10,
-        avgCorrectRate: 78,
+        total,
+        avgCorrectRate,
       });
     }
     return result;
@@ -559,15 +730,15 @@ export class StatsService {
       take: limit,
     });
 
-    return questions.map((q, idx) => {
-      const wrong = q.wrongCount || (12 - idx * 2);
-      const correct = q.correctCount || (8 + idx * 3);
+    return questions.map((q) => {
+      const wrong = Number(q.wrongCount) || 0;
+      const correct = Number(q.correctCount) || 0;
       const total = wrong + correct;
-      const wrongRate = total > 0 ? Math.round((wrong / total) * 100) : 55;
+      const wrongRate = total > 0 ? Math.round((wrong / total) * 100) : 0;
 
       return {
         id: Number(q.id),
-        title: q.content ? q.content.slice(0, 32) : '软考真题',
+        title: q.content ? q.content.slice(0, 45) : '软考真题',
         wrongCount: wrong,
         wrongRate,
       };
@@ -590,17 +761,17 @@ export class StatsService {
       end.setHours(23, 59, 59, 999);
 
       const orders = await this.orderRepository.find({
-        where: {
-          payStatus: 'paid',
-          createdAt: Between(start, end),
-        },
+        where: [
+          { payStatus: 'paid', paidAt: Between(start, end) },
+          { payStatus: 'paid', createdAt: Between(start, end) },
+        ],
       });
 
       const revenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
       list.push({
         date: DatetimeUtil.format(d, 'MM-DD'),
-        revenue: revenue || (i === 0 ? 398 : (6 - i) * 99),
-        orders: orders.length || (i === 0 ? 4 : 2),
+        revenue,
+        orders: orders.length,
       });
     }
     return list;
@@ -623,12 +794,12 @@ export class StatsService {
     const vipCount = await this.userRepository
       .createQueryBuilder('u')
       .where('u.vipLevel > 0')
-      .andWhere('u.vipExpireAt > :now', { now: new Date() })
+      .andWhere('(u.vipExpireAt > :now OR u.vipLevel = 4)', { now: new Date() })
       .getCount();
     return {
-      total: total || 1,
-      newToday: newToday || 0,
-      vipCount: vipCount || 0,
+      total,
+      newToday,
+      vipCount,
     };
   }
 
@@ -646,10 +817,18 @@ export class StatsService {
     const todayRecords = await this.recordRepository.count({
       where: { startedAt: Between(today, new Date()) },
     });
+
+    const avgScoreRes = await this.recordRepository
+      .createQueryBuilder('r')
+      .select('AVG(r.score)', 'avg')
+      .where('r.score > 0')
+      .getRawOne();
+    const avgScore = Math.round(Number(avgScoreRes?.avg) || 0);
+
     return {
       totalRecords,
       todayRecords,
-      avgScore: 78,
+      avgScore,
     };
   }
 
@@ -669,9 +848,10 @@ export class StatsService {
       result.push({
         name: s.name,
         count: qCount,
-        userCount: pCount || Math.max(20, qCount * 5),
+        userCount: pCount,
       });
     }
     return result;
   }
 }
+

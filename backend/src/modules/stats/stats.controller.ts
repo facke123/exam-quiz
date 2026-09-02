@@ -60,8 +60,8 @@ export class StatsController {
 
   @Get(['admin/stats/dashboard', 'stats/admin/dashboard'])
   @ApiOperation({ summary: '后台统计 - 仪表盘完整数据' })
-  async getDashboard() {
-    return this.statsService.getDashboard();
+  async getDashboard(@Query('range') range?: string) {
+    return this.statsService.getDashboard(range);
   }
 
   @Get(['admin/stats/user-growth', 'stats/admin/user-growth'])

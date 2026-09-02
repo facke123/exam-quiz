@@ -14,6 +14,8 @@ import { Subject } from '@/database/entities/subject.entity';
 import { ErrorReport } from '@/database/entities/error-report.entity';
 import { Paper } from '@/database/entities/paper.entity';
 import { AiTask } from '@/database/entities/ai-task.entity';
+import { KnowledgePoint } from '@/database/entities/knowledge-point.entity';
+import { MemberPlan } from '@/database/entities/member-plan.entity';
 
 /**
  * 统计模块
@@ -33,6 +35,8 @@ import { AiTask } from '@/database/entities/ai-task.entity';
       ErrorReport,
       Paper,
       AiTask,
+      KnowledgePoint,
+      MemberPlan,
     ]),
   ],
   controllers: [StatsController],
@@ -40,3 +44,4 @@ import { AiTask } from '@/database/entities/ai-task.entity';
   exports: [StatsService],
 })
 export class StatsModule {}
+
