@@ -187,3 +187,33 @@ export function testEmailConfig(data: { to: string } & Partial<EmailConfig>) {
     data,
   })
 }
+
+// 数据库备份
+export interface DatabaseBackupItem {
+  filename: string
+  size: number
+  sizeFormatted: string
+  createdAt: string
+  tableCount?: number
+}
+
+export function getDatabaseBackupList() {
+  return request<DatabaseBackupItem[]>({
+    url: '/admin/system/backups',
+    method: 'get',
+  })
+}
+
+export function createDatabaseBackup() {
+  return request<{ success: boolean; filename: string; sizeFormatted: string; createdAt: string; message?: string }>({
+    url: '/admin/system/backups/create',
+    method: 'post',
+  })
+}
+
+export function deleteDatabaseBackup(filename: string) {
+  return request({
+    url: `/admin/system/backups/${filename}`,
+    method: 'delete',
+  })
+}

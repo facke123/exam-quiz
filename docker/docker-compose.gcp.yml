@@ -131,13 +131,35 @@ services:
     ports:
       - "80:80"
       - "81:81"
-      - "443:443"
     volumes:
       - ./nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - h5
       - admin
       - backend
+    networks:
+      - exam-network
+
+  # ========== MySQL 定时自动备份服务 (全量归档并保留30天) ==========
+  db-backup:
+    image: mysql:8.0
+    container_name: exam-db-backup
+    restart: always
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MYSQL_DATABASE: exam_quiz
+      KEEP_DAYS: 30
+      TZ: Asia/Shanghai
+    volumes:
+      - ../backups/mysql:/backups
+      - ./mysql/backup-entrypoint.sh:/backup-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/backup-entrypoint.sh"]
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - exam-network
 

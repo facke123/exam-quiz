@@ -65,6 +65,13 @@ jobs:
             git fetch --all
             git reset --hard origin/main
             
+            mkdir -p "$TARGET_DIR/backups/mysql"
+            chmod +x "$TARGET_DIR/deploy"/*.sh "$TARGET_DIR/docker/mysql"/*.sh 2>/dev/null || true
+
+            # 配置宿主机每日 02:00 自动备份 MySQL 数据库定时任务
+            echo ">>> 配置系统级每日数据库定时自动备份 (02:00)..."
+            (crontab -l 2>/dev/null | grep -v backup-db.sh; echo "0 2 * * * /bin/bash $TARGET_DIR/deploy/backup-db.sh >> /var/log/exam-quiz-backup.log 2>&1") | crontab -
+            
             # 3. 执行 Docker 容器热更新
             cd "$TARGET_DIR/docker"
             echo ">>> 重新构建并启动服务容器..."
@@ -78,7 +85,13 @@ jobs:
               docker compose up -d --build --force-recreate
             fi
             
-            # 4. 清理旧构建缓存与无用悬空镜像
+            # 4. 重载宿主机 Nginx 反代服务（若运行在宿主机）
+            if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx; then
+              echo ">>> 重载宿主机 Nginx 反代服务..."
+              systemctl reload nginx || systemctl restart nginx
+            fi
+
+            # 5. 清理旧构建缓存与无用悬空镜像
             echo ">>> 清理悬空镜像..."
             docker image prune -f
             

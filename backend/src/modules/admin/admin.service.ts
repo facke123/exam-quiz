@@ -8,6 +8,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as zlib from 'zlib';
+import dayjs from 'dayjs';
 import { Admin } from '@/database/entities/admin.entity';
 import { User } from '@/database/entities/user.entity';
 import { SystemConfig } from '@/database/entities/system-config.entity';
@@ -334,6 +338,9 @@ export class AdminService {
           await this.configRepository.save(cfg);
         }
       }
+
+      // 5. 启动每日定时备份计划 (每天凌晨 02:00 自动执行全量归档并保留30天)
+      this.scheduleDailyBackup();
     } catch {
       // ignore startup check error
     }
@@ -1343,5 +1350,255 @@ export class AdminService {
   }): Promise<void> {
     const log = this.logRepository.create(params);
     await this.logRepository.save(log);
+  }
+
+  // ==================== 数据库自动定时与手动备份 ====================
+
+  /**
+   * 启动每日定时备份调度任务 (每天凌晨 02:00 自动执行)
+   */
+  private scheduleDailyBackup(): void {
+    // 延迟 30 秒执行一次初始备份自检（若今日尚无备份则创建）
+    setTimeout(async () => {
+      try {
+        const list = await this.getDatabaseBackupList();
+        const todayStr = dayjs().format('YYYYMMDD');
+        const hasTodayBackup = list.some((b) => b.filename.includes(todayStr));
+        if (!hasTodayBackup) {
+          await this.createDatabaseBackup();
+        }
+      } catch (err: any) {
+        // ignore background backup error
+      }
+    }, 30000);
+
+    // 每小时检查一次，若当前为凌晨 2 点且未备份则触发备份
+    setInterval(async () => {
+      try {
+        const now = dayjs();
+        if (now.hour() === 2) {
+          const list = await this.getDatabaseBackupList();
+          const todayStr = now.format('YYYYMMDD');
+          const hasTodayBackup = list.some((b) => b.filename.includes(todayStr));
+          if (!hasTodayBackup) {
+            await this.createDatabaseBackup();
+          }
+        }
+      } catch {
+        // ignore cron error
+      }
+    }, 3600000);
+  }
+
+  /**
+   * 立即生成 MySQL 数据库全量备份 (.sql.gz)
+   */
+  async createDatabaseBackup(): Promise<{
+    success: boolean;
+    filename: string;
+    size: number;
+    sizeFormatted: string;
+    createdAt: string;
+    tableCount: number;
+  }> {
+    const backupDirs = [
+      path.join(process.cwd(), 'backups', 'mysql'),
+      path.join(process.cwd(), '..', 'backups', 'mysql'),
+      '/backups',
+      '/app/backups/mysql',
+    ];
+
+    let targetDir = backupDirs[0];
+    for (const dir of backupDirs) {
+      try {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        targetDir = dir;
+        break;
+      } catch {
+        // try next
+      }
+    }
+
+    const nowStr = dayjs().format('YYYYMMDD_HHmmss');
+    const filename = `exam_quiz_${nowStr}.sql.gz`;
+    const filePath = path.join(targetDir, filename);
+
+    const tables: any[] = await this.adminRepository.manager.query(
+      'SHOW FULL TABLES WHERE Table_type = "BASE TABLE"',
+    );
+    const tableNames: string[] = tables.map((t) => Object.values(t)[0] as string);
+
+    let sqlDump = `-- ========================================================\n`;
+    sqlDump += `-- 软考刷题系统 数据库全量备份\n`;
+    sqlDump += `-- 备份时间: ${dayjs().format('YYYY-MM-DD HH:mm:ss')}\n`;
+    sqlDump += `-- 表总数: ${tableNames.length}\n`;
+    sqlDump += `-- ========================================================\n\n`;
+    sqlDump += `SET FOREIGN_KEY_CHECKS=0;\n`;
+    sqlDump += `SET NAMES utf8mb4;\n\n`;
+
+    for (const table of tableNames) {
+      // 1. 表结构
+      const createTableRes: any[] = await this.adminRepository.manager.query(
+        `SHOW CREATE TABLE \`${table}\``,
+      );
+      if (createTableRes && createTableRes[0]) {
+        const createSql = createTableRes[0]['Create Table'] || createTableRes[0]['Create View'];
+        sqlDump += `DROP TABLE IF EXISTS \`${table}\`;\n`;
+        sqlDump += `${createSql};\n\n`;
+      }
+
+      // 2. 表数据
+      const rows: any[] = await this.adminRepository.manager.query(`SELECT * FROM \`${table}\``);
+      if (rows && rows.length > 0) {
+        const columns = Object.keys(rows[0]);
+        const colList = columns.map((c) => `\`${c}\``).join(', ');
+
+        const escapeVal = (val: any) => {
+          if (val === null || val === undefined) return 'NULL';
+          if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+          if (val instanceof Date) return `'${dayjs(val).format('YYYY-MM-DD HH:mm:ss')}'`;
+          if (typeof val === 'object') return `'${JSON.stringify(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+          return `'${String(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+        };
+
+        const chunk = 100;
+        for (let i = 0; i < rows.length; i += chunk) {
+          const slice = rows.slice(i, i + chunk);
+          const valuesList = slice
+            .map((r) => `(${columns.map((c) => escapeVal(r[c])).join(', ')})`)
+            .join(',\n');
+          sqlDump += `INSERT INTO \`${table}\` (${colList}) VALUES\n${valuesList};\n`;
+        }
+        sqlDump += `\n`;
+      }
+    }
+
+    sqlDump += `SET FOREIGN_KEY_CHECKS=1;\n`;
+
+    // 压缩写入 .sql.gz
+    const compressed = zlib.gzipSync(Buffer.from(sqlDump, 'utf8'));
+    fs.writeFileSync(filePath, compressed);
+
+    const stats = fs.statSync(filePath);
+    const sizeFormatted =
+      stats.size > 1024 * 1024
+        ? `${(stats.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${(stats.size / 1024).toFixed(1)} KB`;
+
+    // 自动清理 30 天前的旧备份
+    this.cleanOldBackups(targetDir, 30);
+
+    return {
+      success: true,
+      filename,
+      size: stats.size,
+      sizeFormatted,
+      createdAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+      tableCount: tableNames.length,
+    };
+  }
+
+  /**
+   * 获取数据库历史备份清单
+   */
+  async getDatabaseBackupList(): Promise<any[]> {
+    const backupDirs = [
+      path.join(process.cwd(), 'backups', 'mysql'),
+      path.join(process.cwd(), '..', 'backups', 'mysql'),
+      '/backups',
+      '/app/backups/mysql',
+    ];
+
+    const fileMap = new Map<string, any>();
+
+    for (const dir of backupDirs) {
+      if (fs.existsSync(dir)) {
+        try {
+          const files = fs.readdirSync(dir);
+          for (const f of files) {
+            if (f.endsWith('.sql.gz') || f.endsWith('.sql')) {
+              const fullPath = path.join(dir, f);
+              const stats = fs.statSync(fullPath);
+              const sizeFormatted =
+                stats.size > 1024 * 1024
+                  ? `${(stats.size / (1024 * 1024)).toFixed(2)} MB`
+                  : `${(stats.size / 1024).toFixed(1)} KB`;
+              fileMap.set(f, {
+                filename: f,
+                size: stats.size,
+                sizeFormatted,
+                createdAt: dayjs(stats.mtime).format('YYYY-MM-DD HH:mm:ss'),
+                path: fullPath,
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return Array.from(fileMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
+
+  /**
+   * 获取备份文件绝对路径（用于下载）
+   */
+  getDatabaseBackupFilePath(filename: string): string {
+    const safeFilename = path.basename(filename);
+    const backupDirs = [
+      path.join(process.cwd(), 'backups', 'mysql'),
+      path.join(process.cwd(), '..', 'backups', 'mysql'),
+      '/backups',
+      '/app/backups/mysql',
+    ];
+
+    for (const dir of backupDirs) {
+      const fullPath = path.join(dir, safeFilename);
+      if (fs.existsSync(fullPath)) {
+        return fullPath;
+      }
+    }
+    throw new NotFoundException('备份文件不存在');
+  }
+
+  /**
+   * 删除指定数据库备份文件
+   */
+  async deleteDatabaseBackup(filename: string): Promise<void> {
+    const filePath = this.getDatabaseBackupFilePath(filename);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err: any) {
+      throw new BadRequestException(`删除备份失败: ${err.message}`);
+    }
+  }
+
+  /**
+   * 清理过期备份
+   */
+  private cleanOldBackups(dir: string, keepDays: number = 30): void {
+    try {
+      if (!fs.existsSync(dir)) return;
+      const files = fs.readdirSync(dir);
+      const now = Date.now();
+      const maxAgeMs = keepDays * 24 * 3600 * 1000;
+
+      for (const f of files) {
+        if (f.startsWith('exam_quiz_') && (f.endsWith('.sql.gz') || f.endsWith('.sql'))) {
+          const fullPath = path.join(dir, f);
+          const stats = fs.statSync(fullPath);
+          if (now - stats.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(fullPath);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
 }

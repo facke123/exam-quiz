@@ -9,7 +9,9 @@ import {
   Post,
   Put,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { AdminLoginDto, SystemConfigDto, CreateUserAdminDto } from './dto/admin.dto';
@@ -364,5 +366,36 @@ export class AdminController {
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
     );
+  }
+
+  // ==================== 数据库备份与维护 ====================
+
+  @Get('system/backups')
+  @ApiOperation({ summary: '获取数据库历史备份清单' })
+  async getDatabaseBackupList() {
+    return this.adminService.getDatabaseBackupList();
+  }
+
+  @Post('system/backups/create')
+  @ApiOperation({ summary: '立即创建数据库全量备份' })
+  async createDatabaseBackup() {
+    return this.adminService.createDatabaseBackup();
+  }
+
+  @Delete('system/backups/:filename')
+  @ApiOperation({ summary: '删除指定数据库备份文件' })
+  async deleteDatabaseBackup(@Param('filename') filename: string) {
+    await this.adminService.deleteDatabaseBackup(filename);
+    return { message: '备份文件删除成功' };
+  }
+
+  @Get('system/backups/download/:filename')
+  @ApiOperation({ summary: '下载指定数据库备份文件' })
+  async downloadDatabaseBackup(
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ) {
+    const filePath = this.adminService.getDatabaseBackupFilePath(filename);
+    res.download(filePath, filename);
   }
 }

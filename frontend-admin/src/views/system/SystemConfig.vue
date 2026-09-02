@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElNotification } from 'element-plus'
+import { ElMessage, ElNotification, ElMessageBox } from 'element-plus'
 import SearchForm, { type SearchItem } from '@/components/SearchForm.vue'
 import ProTable, { type ProColumn } from '@/components/ProTable.vue'
 import ProDialog from '@/components/ProDialog.vue'
@@ -13,6 +13,10 @@ import {
   updateEmailConfig,
   testEmailConfig,
   type EmailConfig,
+  getDatabaseBackupList,
+  createDatabaseBackup,
+  deleteDatabaseBackup,
+  type DatabaseBackupItem,
 } from '@/api/system'
 
 const route = useRoute()
@@ -261,9 +265,71 @@ async function handleSubmit() {
   }
 }
 
+// ==================== 4. 💾 数据库备份与安全维护 ====================
+const backupLoading = ref(false)
+const backupCreating = ref(false)
+const backupList = ref<DatabaseBackupItem[]>([])
+
+async function fetchBackupList() {
+  backupLoading.value = true
+  try {
+    const res = await getDatabaseBackupList()
+    if (res?.data && Array.isArray(res.data)) {
+      backupList.value = res.data
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取数据库备份列表失败')
+  } finally {
+    backupLoading.value = false
+  }
+}
+
+async function handleCreateBackup() {
+  backupCreating.value = true
+  try {
+    const res = await createDatabaseBackup()
+    ElNotification.success({
+      title: '数据库备份成功',
+      message: `已成功生成全量备份文件 ${res?.data?.filename || ''} (${res?.data?.sizeFormatted || ''})`,
+    })
+    fetchBackupList()
+  } catch (err: any) {
+    ElMessage.error(err.message || '创建备份失败')
+  } finally {
+    backupCreating.value = false
+  }
+}
+
+function handleDownloadBackup(row: DatabaseBackupItem) {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+  window.open(`/api/admin/system/backups/download/${encodeURIComponent(row.filename)}?token=${token}`, '_blank')
+}
+
+async function handleDeleteBackup(row: DatabaseBackupItem) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除备份文件【${row.filename}】吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+    await deleteDatabaseBackup(row.filename)
+    ElMessage.success('备份文件已删除')
+    fetchBackupList()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '删除失败')
+    }
+  }
+}
+
 onMounted(() => {
   fetchEmailConfig()
   fetchList()
+  fetchBackupList()
 })
 </script>
 
@@ -508,6 +574,61 @@ onMounted(() => {
             <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
           </template>
         </ProTable>
+      </el-tab-pane>
+
+      <!-- ================= 标签页 4：💾 数据库备份与安全维护 ================= -->
+      <el-tab-pane label="💾 数据库备份与安全" name="backup">
+        <div class="backup-settings-layout">
+          <div class="backup-info-card">
+            <div class="bic-header">
+              <div class="bic-title">🛡️ 数据库自动化全量归档备份策略</div>
+              <el-button
+                type="primary"
+                :loading="backupCreating"
+                @click="handleCreateBackup"
+              >
+                ⚡ 立即生成数据库快照备份
+              </el-button>
+            </div>
+            <div class="bic-desc">
+              系统已启用全自动归档机制，每天凌晨 <strong>02:00</strong> 会自动将 MySQL 数据库完整结构与数据导出并使用 Gzip 极限压缩（<code>.sql.gz</code>），自动保留最近 <strong>30 天</strong> 的历史备份以防误删或故障。您也可以在此随时手动创建或下载备份。
+            </div>
+          </div>
+
+          <div class="backup-table-panel" v-loading="backupLoading">
+            <div class="panel-header-row">
+              <div class="phr-title">📁 历史备份文件清单 ({{ backupList.length }} 个)</div>
+              <el-button size="small" @click="fetchBackupList">🔄 刷新列表</el-button>
+            </div>
+
+            <el-table :data="backupList" border stripe style="width: 100%">
+              <el-table-column label="备份文件名称" min-width="260">
+                <template #default="{ row }">
+                  <div class="file-name-cell">
+                    <span class="file-icon">📦</span>
+                    <span class="file-text">{{ row.filename }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="sizeFormatted" label="压缩包大小" width="130" align="center">
+                <template #default="{ row }">
+                  <el-tag type="info" size="small">{{ row.sizeFormatted }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="createdAt" label="备份生成时间" width="190" align="center" />
+              <el-table-column label="操作" width="160" align="center" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="handleDownloadBackup(row)">
+                    📥 下载
+                  </el-button>
+                  <el-button link type="danger" size="small" @click="handleDeleteBackup(row)">
+                    🗑️ 删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -774,6 +895,84 @@ onMounted(() => {
     :deep(.el-form-item) {
       margin-bottom: 0;
       margin-right: 18px;
+    }
+  }
+}
+
+.backup-settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  .backup-info-card {
+    background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+    border: 1px solid #bae6fd;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.05);
+
+    .bic-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+
+      .bic-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #0369a1;
+      }
+    }
+
+    .bic-desc {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.6;
+
+      code {
+        background: #e0f2fe;
+        color: #0284c7;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .backup-table-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+
+    .panel-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+
+      .phr-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1e293b;
+      }
+    }
+
+    .file-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .file-icon {
+        font-size: 18px;
+      }
+
+      .file-text {
+        font-family: monospace;
+        font-size: 13px;
+        color: #0f172a;
+        font-weight: 600;
+      }
     }
   }
 }

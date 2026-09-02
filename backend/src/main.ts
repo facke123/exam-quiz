@@ -30,8 +30,10 @@ async function bootstrap() {
     logger.warn(`静态上传资源目录初始化提示: ${err.message}`);
   }
 
-  // 全局前缀
-  app.setGlobalPrefix('api');
+  // 全局前缀（健康检查与根路由免 /api 前缀）
+  app.setGlobalPrefix('api', {
+    exclude: ['health', ''],
+  });
 
   // 启用 CORS
   app.enableCors({

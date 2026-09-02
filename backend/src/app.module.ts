@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './config/configuration';
 import { RedisModule } from './redis/redis.module';
 import { SnakeNamingStrategy } from './common/strategies/snake-naming.strategy';
+import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { QuestionModule } from './modules/question/question.module';
 import { QuizModule } from './modules/quiz/quiz.module';
@@ -18,6 +19,7 @@ import { ContentModule } from './modules/content/content.module';
 import { MailModule } from './modules/mail/mail.module';
 
 @Module({
+  controllers: [AppController],
   imports: [
     // 配置模块（全局）
     ConfigModule.forRoot({
