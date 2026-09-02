@@ -49,7 +49,7 @@
 
         <div class="filter-item">
           <span class="label">分类：</span>
-          <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 180px" @change="loadData">
+          <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 180px" @change="onFilterChange">
             <el-option
               v-for="c in categories"
               :key="c"
@@ -61,7 +61,7 @@
 
         <div class="filter-item">
           <span class="label">级别：</span>
-          <el-select v-model="filterImportance" placeholder="全部级别" clearable style="width: 130px" @change="loadData">
+          <el-select v-model="filterImportance" placeholder="全部级别" clearable style="width: 130px" @change="onFilterChange">
             <el-option label="必考" value="必考" />
             <el-option label="高频" value="高频" />
             <el-option label="常考" value="常考" />
@@ -75,12 +75,12 @@
             placeholder="搜索考点名称、口诀、公式..."
             clearable
             style="width: 240px"
-            @keyup.enter="loadData"
-            @clear="loadData"
+            @keyup.enter="onFilterChange"
+            @clear="onFilterChange"
           >
             <template #prefix>🔍</template>
           </el-input>
-          <el-button type="primary" @click="loadData">查询</el-button>
+          <el-button type="primary" @click="onFilterChange">查询</el-button>
         </div>
       </div>
 
@@ -95,10 +95,19 @@
           <el-button
             type="danger"
             plain
-            :disabled="selectedRows.length === 0"
+            :disabled="validSelectedRows.length === 0"
             @click="handleBatchDelete"
           >
-            🗑️ 批量删除 {{ selectedRows.length ? `(${selectedRows.length})` : '' }}
+            🗑️ 批量删除 {{ validSelectedRows.length ? `(${validSelectedRows.length})` : '' }}
+          </el-button>
+          <el-button
+            v-if="validSelectedRows.length > 0"
+            size="small"
+            text
+            type="info"
+            @click="clearSelection"
+          >
+            取消勾选 ({{ validSelectedRows.length }})
           </el-button>
         </div>
         <div class="right-actions">
@@ -110,6 +119,7 @@
     <!-- 考点数据表格 -->
     <div class="table-panel">
       <el-table
+        ref="tableRef"
         v-loading="loading"
         :data="pagedKpList"
         row-key="id"
@@ -350,12 +360,19 @@ const total = ref(0)
 const mustCount = ref(0)
 const highCount = ref(0)
 
+const tableRef = ref<any>(null)
 const selectedRows = ref<any[]>([])
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pagedKpList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return kpList.value.slice(start, start + pageSize.value)
+})
+
+// 实时过滤出属于当前考点列表的有效选中项，杜绝跨科目/跨查询历史残留导致的数量不一致
+const validSelectedRows = computed(() => {
+  const currentIdSet = new Set(kpList.value.map((k) => k.id))
+  return selectedRows.value.filter((r) => currentIdSet.has(r.id))
 })
 
 const showImportDialog = ref(false)
@@ -381,6 +398,11 @@ function handleSelectionChange(rows: any[]) {
   selectedRows.value = rows
 }
 
+function clearSelection() {
+  tableRef.value?.clearSelection()
+  selectedRows.value = []
+}
+
 async function fetchSubjects() {
   try {
     const res = await getAllSubjects()
@@ -399,7 +421,13 @@ async function fetchSubjects() {
 }
 
 function onSubjectChange() {
+  clearSelection()
   filterCategory.value = ''
+  currentPage.value = 1
+  loadData()
+}
+
+function onFilterChange() {
   currentPage.value = 1
   loadData()
 }
@@ -421,6 +449,10 @@ async function loadData() {
 
       mustCount.value = kpList.value.filter((k) => k.importance === '必考' || k.importance === '重点').length
       highCount.value = kpList.value.filter((k) => k.importance === '高频').length
+
+      // 剔除不在当前列表中的历史无效勾选
+      const currentIdSet = new Set(kpList.value.map((k) => k.id))
+      selectedRows.value = selectedRows.value.filter((r) => currentIdSet.has(r.id))
     }
   } catch (err: any) {
     ElMessage.error(err.message || '加载考点列表失败')
@@ -508,21 +540,23 @@ async function handleDelete(row: any) {
   try {
     await deleteKnowledgePoint(row.id)
     ElMessage.success('删除成功')
-    loadData()
+    selectedRows.value = selectedRows.value.filter((r) => r.id !== row.id)
+    await loadData()
   } catch (err: any) {
     ElMessage.error(err.message || '删除失败')
   }
 }
 
 async function handleBatchDelete() {
-  if (selectedRows.value.length === 0) {
+  const targets = validSelectedRows.value
+  if (targets.length === 0) {
     ElMessage.warning('请勾选要删除的考点')
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      `确定要批量删除选中的 ${selectedRows.value.length} 个考点知识点吗？此操作不可撤销！`,
+      `确定要批量删除选中的 ${targets.length} 个考点知识点吗？此操作不可撤销！`,
       '批量删除确认',
       {
         confirmButtonText: '确定删除',
@@ -532,11 +566,11 @@ async function handleBatchDelete() {
       },
     )
 
-    const ids = selectedRows.value.map((r) => r.id)
+    const ids = targets.map((r) => r.id)
     loading.value = true
     const res = await batchDeleteKnowledgePoints(ids)
     ElMessage.success(res?.data?.message || `成功删除 ${ids.length} 个考点`)
-    selectedRows.value = []
+    clearSelection()
     await loadData()
   } catch (err: any) {
     if (err !== 'cancel') {
