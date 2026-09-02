@@ -41,6 +41,18 @@
         </div>
       </div>
 
+      <!-- 待审核订单提示条 -->
+      <div v-if="pendingOrderInfo" class="pending-order-banner" @click="openPendingAudit(pendingOrderInfo)">
+        <div class="pob-left">
+          <span class="pob-icon">⏳</span>
+          <div class="pob-info">
+            <div class="pob-title">充值订单审核中 [{{ pendingOrderInfo.planName }}]</div>
+            <div class="pob-desc">已提交管理员核对收款，点击查看审核进度 ›</div>
+          </div>
+        </div>
+        <div class="pob-tag">待审核</div>
+      </div>
+
       <!-- 会员套餐选择栅格（动态加载后台配置） -->
       <div class="section-title">
         <span class="icon">💎</span>
@@ -216,9 +228,22 @@
 
         <!-- 收款二维码区域 -->
         <div v-if="(selectedChannel === 'wechat' && channels.wechatQr) || (selectedChannel === 'alipay' && channels.alipayQr)" class="qr-pay-box">
-          <div class="qr-tip">请长按识别或扫码完成转账 (¥{{ selectedPlan?.price }})：</div>
+          <div class="qr-tip">请长按保存或扫码转账 (应付: ¥{{ selectedPlan?.price }})：</div>
           <img :src="selectedChannel === 'wechat' ? channels.wechatQr : channels.alipayQr" class="qr-img" alt="收款码" />
-          <div class="qr-sub">转账完成后点击下方按钮，系统将自动核销并激活会员</div>
+          <div class="qr-sub">转账完成后，请在下方填写核对信息并点击「提交审核」</div>
+
+          <!-- 转账核对信息填写框 -->
+          <div class="transfer-remark-box">
+            <div class="tr-label">
+              <span>✍️ 转账核对信息（选填，加速后台核销）：</span>
+            </div>
+            <van-field
+              v-model="transferRemark"
+              placeholder="例如：付款微信昵称 / 支付宝姓名 / 单号后4位"
+              class="tr-field"
+              clearable
+            />
+          </div>
         </div>
 
         <!-- 温馨提示说明 -->
@@ -233,8 +258,9 @@
             :disabled="paying"
             @click="handleConfirmPay"
           >
-            <span v-if="paying">正在处理支付与激活...</span>
-            <span v-else>{{ selectedChannel === 'mock' ? '⚡ 确认一键极速支付' : '我已完成支付，立即激活' }}</span>
+            <span v-if="paying">正在提交处理中...</span>
+            <span v-else-if="selectedChannel === 'mock'">⚡ 确认一键极速支付 (沙箱测试)</span>
+            <span v-else>📤 我已完成转账，提交后台审核</span>
           </button>
         </div>
       </div>
@@ -258,6 +284,56 @@
         />
       </div>
     </van-dialog>
+
+    <!-- 支付审核等待弹窗 -->
+    <van-dialog
+      v-model:show="showAuditDialog"
+      title="📋 充值转账已提交 · 等待后台审核"
+      show-confirm-button
+      confirm-button-text="🔍 检查开通状态"
+      show-cancel-button
+      cancel-button-text="我知道了"
+      @confirm="handleCheckOrderStatus"
+    >
+      <div class="audit-dialog-body">
+        <div class="audit-status-badge">
+          <span class="as-icon">⏳</span>
+          <span class="as-text">待后台管理员核对收款并开通</span>
+        </div>
+        
+        <div class="audit-info-list">
+          <div class="ai-row">
+            <span class="ai-label">订单编号</span>
+            <span class="ai-val mono">{{ auditOrder?.orderNo || '-' }}</span>
+          </div>
+          <div class="ai-row">
+            <span class="ai-label">购买套餐</span>
+            <span class="ai-val highlight">{{ auditOrder?.planName || selectedPlan?.name }}</span>
+          </div>
+          <div class="ai-row">
+            <span class="ai-label">应付金额</span>
+            <span class="ai-val price">¥{{ auditOrder?.amount || selectedPlan?.price }}</span>
+          </div>
+          <div class="ai-row">
+            <span class="ai-label">支付通道</span>
+            <span class="ai-val">{{ auditOrder?.payMethod === 'wechat' ? '🟢 微信个人扫码' : auditOrder?.payMethod === 'alipay' ? '🔵 支付宝个人扫码' : '快捷支付' }}</span>
+          </div>
+          <div v-if="auditOrder?.tradeNo || transferRemark" class="ai-row">
+            <span class="ai-label">核对信息</span>
+            <span class="ai-val">{{ auditOrder?.tradeNo || transferRemark }}</span>
+          </div>
+        </div>
+
+        <div class="audit-tips">
+          <div class="at-title">💡 审核与生效说明：</div>
+          <div class="at-desc">
+            1. 请确保已按照收款二维码完成转账。<br />
+            2. 管理员核实到账后（通常 1~5 分钟内），将在后台确认并自动为您开通 VIP 权益与增加有效时长。<br />
+            3. 您可随时点击下方「检查开通状态」按钮实时同步最新会员状态。
+          </div>
+        </div>
+      </div>
+    </van-dialog>
   </div>
 </template>
 
@@ -270,6 +346,8 @@ import {
   getPlans,
   getVipStatus,
   createOrder,
+  getOrderStatus,
+  getLatestPendingOrder,
   getPaymentChannels,
   mockPayOrder,
   redeemVipCard,
@@ -286,6 +364,11 @@ const buying = ref(false)
 const paying = ref(false)
 const showCashierPopup = ref(false)
 const selectedChannel = ref<'mock' | 'wechat' | 'alipay'>('mock')
+
+const transferRemark = ref('')
+const showAuditDialog = ref(false)
+const auditOrder = ref<any>(null)
+const pendingOrderInfo = ref<any>(null)
 
 const showCardDialog = ref(false)
 const cardCodeInput = ref('')
@@ -388,13 +471,19 @@ function selectPlan(plan: VipPlan) {
   selectedPlan.value = plan
 }
 
+function openPendingAudit(order: any) {
+  auditOrder.value = order
+  showAuditDialog.value = true
+}
+
 async function loadData() {
   loading.value = true
   try {
-    const [planRes, statusRes, channelRes] = await Promise.allSettled([
+    const [planRes, statusRes, channelRes, pendingRes] = await Promise.allSettled([
       getPlans(),
       getVipStatus(),
       getPaymentChannels(),
+      getLatestPendingOrder(),
     ])
 
     if (planRes.status === 'fulfilled' && planRes.value?.data && planRes.value.data.length > 0) {
@@ -412,6 +501,12 @@ async function loadData() {
 
     if (statusRes.status === 'fulfilled' && statusRes.value?.data) {
       vipStatus.value = statusRes.value.data
+    }
+
+    if (pendingRes.status === 'fulfilled' && pendingRes.value?.data) {
+      pendingOrderInfo.value = pendingRes.value.data
+    } else {
+      pendingOrderInfo.value = null
     }
 
     if (channelRes.status === 'fulfilled' && channelRes.value?.data) {
@@ -472,36 +567,91 @@ async function handleConfirmPay() {
       planId: selectedPlan.value.id,
       type: selectedPlan.value.type,
       payMethod: selectedChannel.value,
+      remark: transferRemark.value,
     })
 
     const orderData: any = orderRes.data || orderRes
     const orderId = orderData?.orderId || orderData?.id
 
-    // 执行快捷模拟/扫码核销
-    if (orderId) {
-      await mockPayOrder(orderId)
+    if (selectedChannel.value === 'mock') {
+      // 仅沙箱/演示模式执行快捷直接核销
+      if (orderId) {
+        await mockPayOrder(orderId)
+      }
+
+      showCashierPopup.value = false
+      showToast({
+        type: 'success',
+        message: `🎉 恭喜！${selectedPlan.value.name} 开通成功！`,
+        duration: 2500,
+      })
+
+      if (userStore.userInfo) {
+        userStore.userInfo.isVip = true
+      }
+      await loadData()
+    } else {
+      // 个人转账收款（微信/支付宝）：提交后台审核流程
+      showCashierPopup.value = false
+      auditOrder.value = {
+        orderId,
+        orderNo: orderData.orderNo,
+        planName: selectedPlan.value.name,
+        amount: selectedPlan.value.price,
+        payMethod: selectedChannel.value,
+        tradeNo: transferRemark.value ? `REMARK: ${transferRemark.value}` : '',
+      }
+      pendingOrderInfo.value = auditOrder.value
+      showAuditDialog.value = true
+      showToast({
+        type: 'success',
+        message: '📤 转账凭证已提交，请等待后台管理员审核确认！',
+        duration: 2500,
+      })
     }
-
-    showCashierPopup.value = false
-    showToast({
-      type: 'success',
-      message: `🎉 恭喜！${selectedPlan.value.name} 开通成功！`,
-      duration: 2500,
-    })
-
-    if (userStore.userInfo) {
-      userStore.userInfo.isVip = true
-    }
-
-    // 重新获取最新会员状态与套餐
-    await loadData()
   } catch (err: any) {
     showToast({
       type: 'fail',
-      message: err.message || '开通会员失败，请稍后重试',
+      message: err.message || '提交订单失败，请稍后重试',
     })
   } finally {
     paying.value = false
+  }
+}
+
+async function handleCheckOrderStatus() {
+  if (!auditOrder.value?.orderId) {
+    await loadData()
+    return
+  }
+
+  showToast({
+    message: '正在向后台检查开通状态...',
+    duration: 1000,
+  })
+
+  try {
+    const res = await getOrderStatus(auditOrder.value.orderId)
+    if (res.data?.isPaid || res.data?.status === 'paid') {
+      showAuditDialog.value = false
+      pendingOrderInfo.value = null
+      showToast({
+        type: 'success',
+        message: `🎉 管理员已审核通过！您的 [${res.data?.planName || 'VIP会员'}] 现已正式开通！`,
+        duration: 3000,
+      })
+      if (userStore.userInfo) {
+        userStore.userInfo.isVip = true
+      }
+      await loadData()
+    } else {
+      showToast({
+        message: '⏳ 管理员正在核对收款中，请稍候再试或联系客服加速审核~',
+        duration: 2500,
+      })
+    }
+  } catch (err: any) {
+    showToast(err.message || '查询订单状态失败，请稍后重试')
   }
 }
 
@@ -1197,6 +1347,166 @@ onMounted(loadData)
     background: #f8fafc;
     border-radius: 8px;
     border: 1px solid #e2e8f0;
+  }
+}
+
+/* 待审核订单顶部横幅 */
+.pending-order-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.1);
+
+  .pob-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .pob-icon {
+      font-size: 20px;
+    }
+
+    .pob-info {
+      .pob-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #92400e;
+      }
+      .pob-desc {
+        font-size: 11px;
+        color: #b45309;
+        margin-top: 2px;
+      }
+    }
+  }
+
+  .pob-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffffff;
+    background: #f59e0b;
+    padding: 3px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+}
+
+/* 转账核对信息输入框 */
+.transfer-remark-box {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+  text-align: left;
+
+  .tr-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+  }
+
+  .tr-field {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+/* 支付审核等待弹窗 */
+.audit-dialog-body {
+  padding: 16px 18px 10px;
+
+  .audit-status-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    border-radius: 20px;
+    padding: 6px 14px;
+    margin-bottom: 14px;
+
+    .as-icon {
+      font-size: 16px;
+    }
+    .as-text {
+      font-size: 13px;
+      font-weight: 700;
+      color: #92400e;
+    }
+  }
+
+  .audit-info-list {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+
+    .ai-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      font-size: 12px;
+      border-bottom: 1px solid #f1f5f9;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      .ai-label {
+        color: #64748b;
+      }
+
+      .ai-val {
+        color: #1e293b;
+        font-weight: 600;
+
+        &.mono {
+          font-family: monospace;
+          font-size: 11px;
+        }
+
+        &.highlight {
+          color: #b45309;
+        }
+
+        &.price {
+          color: #ea580c;
+          font-size: 14px;
+          font-weight: 800;
+        }
+      }
+    }
+  }
+
+  .audit-tips {
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 10px 12px;
+
+    .at-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+
+    .at-desc {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
   }
 }
 </style>

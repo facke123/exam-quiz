@@ -231,6 +231,7 @@ export class VipService implements OnModuleInit {
 
     const payMethod = dto.payMethod || 'wechat';
     const orderNo = CryptoUtil.generateOrderNo();
+    const tradeNo = dto.remark ? `REMARK: ${dto.remark.trim()}` : undefined;
     const order = this.orderRepository.create({
       userId,
       planId: plan.id,
@@ -238,6 +239,7 @@ export class VipService implements OnModuleInit {
       amount: plan.price,
       payMethod,
       payStatus: 'pending',
+      tradeNo,
     });
 
     const saved = await this.orderRepository.save(order);
@@ -264,6 +266,7 @@ export class VipService implements OnModuleInit {
       payMethod: saved.payMethod,
       payUrl,
       qrCode,
+      tradeNo: saved.tradeNo,
       status: saved.payStatus,
       createdAt: saved.createdAt,
     };
@@ -433,9 +436,9 @@ export class VipService implements OnModuleInit {
   }
 
   /**
-   * 获取订单状态并自动开通
+   * 获取订单状态
    */
-  async getOrderStatus(orderId: number, userId: number): Promise<{ status: string }> {
+  async getOrderStatus(orderId: number, userId: number): Promise<any> {
     const order = await this.orderRepository.findOne({
       where: { id: orderId, userId },
     });
@@ -443,7 +446,48 @@ export class VipService implements OnModuleInit {
       throw new NotFoundException('订单不存在');
     }
 
-    return { status: order.payStatus };
+    const plan = await this.planRepository.findOne({ where: { id: order.planId } });
+    const isPaid = order.payStatus === 'paid';
+    let vipStatus = null;
+    if (isPaid) {
+      vipStatus = await this.getVipStatus(userId);
+    }
+
+    return {
+      orderId: String(order.id),
+      orderNo: order.orderNo,
+      status: order.payStatus,
+      isPaid,
+      planName: plan?.name || '会员套餐',
+      amount: Number(order.amount),
+      payMethod: order.payMethod,
+      tradeNo: order.tradeNo,
+      paidAt: order.paidAt,
+      vipStatus,
+    };
+  }
+
+  /**
+   * 获取用户最近一笔待审核/待支付订单
+   */
+  async getLatestPendingOrder(userId: number): Promise<any> {
+    const order = await this.orderRepository.findOne({
+      where: { userId, payStatus: 'pending' },
+      order: { createdAt: 'DESC' },
+    });
+    if (!order) return null;
+
+    const plan = await this.planRepository.findOne({ where: { id: order.planId } });
+    return {
+      orderId: String(order.id),
+      orderNo: order.orderNo,
+      planId: String(order.planId),
+      planName: plan?.name || '会员套餐',
+      amount: Number(order.amount),
+      payMethod: order.payMethod,
+      tradeNo: order.tradeNo,
+      createdAt: order.createdAt,
+    };
   }
 
   /**

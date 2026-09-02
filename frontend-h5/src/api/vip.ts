@@ -66,7 +66,7 @@ export function getPaymentChannels() {
   })
 }
 
-export function createOrder(data: { planId?: string | number; type?: string; payMethod?: string }) {
+export function createOrder(data: { planId?: string | number; type?: string; payMethod?: string; remark?: string }) {
   return request<OrderInfo>({
     url: '/vip/order',
     method: 'post',
@@ -75,8 +75,32 @@ export function createOrder(data: { planId?: string | number; type?: string; pay
 }
 
 export function getOrderStatus(orderId: string | number) {
-  return request<{ status: 'pending' | 'paid' | 'failed' }>({
+  return request<{
+    status: string
+    isPaid: boolean
+    orderId: string
+    orderNo: string
+    planName?: string
+    amount?: number
+    vipStatus?: any
+  }>({
     url: `/vip/order/${orderId}/status`,
+    method: 'get',
+  })
+}
+
+export function getLatestPendingOrder() {
+  return request<{
+    orderId: string
+    orderNo: string
+    planId: string
+    planName: string
+    amount: number
+    payMethod: string
+    tradeNo?: string
+    createdAt: string
+  } | null>({
+    url: '/vip/latest-pending-order',
     method: 'get',
   })
 }

@@ -415,7 +415,7 @@
                   已支付
                 </el-tag>
                 <el-tag v-else-if="row.payStatus === 'pending'" type="warning" effect="plain" size="small">
-                  待支付
+                  待确认/待支付
                 </el-tag>
                 <el-tag v-else-if="row.payStatus === 'refunded'" type="info" size="small">
                   已退款
@@ -423,6 +423,18 @@
                 <el-tag v-else type="danger" size="small">
                   {{ row.payStatus }}
                 </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="转账核对信息 / 交易号" min-width="190">
+              <template #default="{ row }">
+                <div v-if="row.tradeNo && row.tradeNo !== '-'" class="trade-no-info">
+                  <el-tag v-if="row.tradeNo.startsWith('REMARK:')" type="warning" size="small" effect="light">
+                    {{ row.tradeNo }}
+                  </el-tag>
+                  <span v-else class="o-num">{{ row.tradeNo }}</span>
+                </div>
+                <span v-else class="text-muted">—</span>
               </template>
             </el-table-column>
 

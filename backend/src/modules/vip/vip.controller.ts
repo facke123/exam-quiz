@@ -47,6 +47,12 @@ export class VipController {
     return this.vipService.getOrderStatus(id, user ? user.id : 1);
   }
 
+  @Get('latest-pending-order')
+  @ApiOperation({ summary: '获取当前用户最近一笔待审核订单' })
+  async getLatestPendingOrder(@CurrentUser() user: UserPayload) {
+    return this.vipService.getLatestPendingOrder(user ? user.id : 1);
+  }
+
   @Public()
   @Post('pay-callback')
   @ApiOperation({ summary: '支付回调' })
