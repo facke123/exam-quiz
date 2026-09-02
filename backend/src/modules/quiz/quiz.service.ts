@@ -770,9 +770,12 @@ export class QuizService {
   }
 
   /**
-   * 获取每日一练及本周打卡实时状态
+   * 获取每日一练及本周打卡状态与趣味成长体系
    */
-  async getDailyStatus(userId: number, subjectId?: number): Promise<{
+  async getDailyStatus(
+    userId: number,
+    subjectId?: number,
+  ): Promise<{
     today: {
       date: string;
       day: number;
@@ -784,6 +787,9 @@ export class QuizService {
       completedCount: number;
       isCompleted: boolean;
       progress: number;
+      todayScore?: number;
+      todayCorrect?: number;
+      todayRecordId?: number;
     };
     weekList: Array<{
       date: string;
@@ -795,8 +801,20 @@ export class QuizService {
       isFuture: boolean;
       done: boolean;
       count: number;
+      score?: number;
     }>;
     streakDays: number;
+    totalCheckinDays: number;
+    milestones: Array<{
+      days: number;
+      title: string;
+      reached: boolean;
+      icon: string;
+    }>;
+    todayTopics: Array<{
+      id: number;
+      name: string;
+    }>;
   }> {
     const now = new Date();
     const year = now.getFullYear();
@@ -808,24 +826,34 @@ export class QuizService {
 
     const todayDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    // 计算本周周一
+    // 计算本周周一 (周一为第0天，周日为第6天)
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const monday = new Date(year, now.getMonth(), day + mondayOffset);
 
     // 查询该用户的所有做题记录
     const records = await this.recordRepository.find({
       where: { userId },
-      order: { startedAt: 'DESC' },
+      order: { startedAt: 'DESC', createdAt: 'DESC' },
     });
 
-    // 统计各日期做题情况
+    // 统计各日期做题情况及当日最好成绩
     const dateCountMap = new Map<string, number>();
+    const dateScoreMap = new Map<string, number>();
+    const dateRecordMap = new Map<string, any>();
+
     for (const r of records) {
-      if (r.startedAt) {
-        const d = new Date(r.startedAt);
+      const recDate = r.startedAt || r.createdAt;
+      if (recDate) {
+        const d = new Date(recDate);
         const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const prev = dateCountMap.get(dStr) || 0;
-        dateCountMap.set(dStr, prev + (r.answeredQuestions || r.totalQuestions || 1));
+        const prevCount = dateCountMap.get(dStr) || 0;
+        dateCountMap.set(dStr, prevCount + (r.answeredQuestions || r.totalQuestions || 1));
+        if (r.score !== undefined && (!dateScoreMap.has(dStr) || (r.score || 0) > (dateScoreMap.get(dStr) || 0))) {
+          dateScoreMap.set(dStr, r.score);
+        }
+        if (!dateRecordMap.has(dStr)) {
+          dateRecordMap.set(dStr, r);
+        }
       }
     }
 
@@ -840,6 +868,7 @@ export class QuizService {
       isFuture: boolean;
       done: boolean;
       count: number;
+      score?: number;
     }> = [];
 
     const todayZero = new Date(year, now.getMonth(), day).getTime();
@@ -858,6 +887,7 @@ export class QuizService {
 
       const count = dateCountMap.get(tDateStr) || 0;
       const done = count > 0;
+      const score = dateScoreMap.get(tDateStr);
 
       weekList.push({
         date: tDateStr,
@@ -869,12 +899,14 @@ export class QuizService {
         isFuture,
         done,
         count,
+        score,
       });
     }
 
     // 今日做题进度
     const todayAnswered = dateCountMap.get(todayDateStr) || 0;
-    const isCompleted = todayAnswered >= 20;
+    const todayRecord = dateRecordMap.get(todayDateStr);
+    const isCompleted = todayAnswered > 0 || Boolean(todayRecord);
     const progress = Math.min(100, Math.round((todayAnswered / 20) * 100));
 
     // 计算连续打卡天数
@@ -893,6 +925,26 @@ export class QuizService {
       }
     }
 
+    const totalCheckinDays = dateCountMap.size;
+    const finalStreak = Math.max(streakDays, todayAnswered > 0 ? 1 : 0);
+
+    // 成就勋章里程碑
+    const milestones = [
+      { days: 3, title: '初露锋芒', reached: finalStreak >= 3 || totalCheckinDays >= 3, icon: '🌱' },
+      { days: 7, title: '七日连胜', reached: finalStreak >= 7 || totalCheckinDays >= 7, icon: '🔥' },
+      { days: 14, title: '备考先锋', reached: finalStreak >= 14 || totalCheckinDays >= 14, icon: '⚡' },
+      { days: 21, title: '习惯养成', reached: finalStreak >= 21 || totalCheckinDays >= 21, icon: '🏅' },
+      { days: 30, title: '考霸传说', reached: finalStreak >= 30 || totalCheckinDays >= 30, icon: '👑' },
+    ];
+
+    // 今日精选考点
+    const chapters = await this.chapterRepository.find({
+      where: subjectId ? { subjectId: Number(subjectId) } : {},
+      take: 4,
+      order: { sort: 'ASC' },
+    });
+    const todayTopics = chapters.map((c) => ({ id: Number(c.id), name: c.name }));
+
     return {
       today: {
         date: todayDateStr,
@@ -905,9 +957,15 @@ export class QuizService {
         completedCount: todayAnswered,
         isCompleted,
         progress,
+        todayScore: todayRecord?.score,
+        todayCorrect: todayRecord?.correctCount,
+        todayRecordId: todayRecord?.id ? Number(todayRecord.id) : undefined,
       },
       weekList,
-      streakDays: Math.max(streakDays, todayAnswered > 0 ? 1 : 0),
+      streakDays: finalStreak,
+      totalCheckinDays,
+      milestones,
+      todayTopics,
     };
   }
 }

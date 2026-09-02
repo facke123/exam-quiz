@@ -103,6 +103,9 @@ export function getDailyStatus(subjectId?: string | number) {
       completedCount: number
       isCompleted: boolean
       progress: number
+      todayScore?: number
+      todayCorrect?: number
+      todayRecordId?: number
     }
     weekList: Array<{
       date: string
@@ -114,8 +117,20 @@ export function getDailyStatus(subjectId?: string | number) {
       isFuture: boolean
       done: boolean
       count: number
+      score?: number
     }>
     streakDays: number
+    totalCheckinDays: number
+    milestones: Array<{
+      days: number
+      title: string
+      reached: boolean
+      icon: string
+    }>
+    todayTopics: Array<{
+      id: number
+      name: string
+    }>
   }>({
     url: '/quiz/daily/status',
     method: 'get',
