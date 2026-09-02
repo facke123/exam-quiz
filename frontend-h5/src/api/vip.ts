@@ -33,6 +33,18 @@ export interface OrderInfo {
   status: 'pending' | 'paid' | 'failed'
 }
 
+export interface PaymentChannels {
+  sandboxEnabled: boolean
+  wechatEnabled: boolean
+  wechatType: string
+  wechatQr: string
+  alipayEnabled: boolean
+  alipayType: string
+  alipayQr: string
+  cardEnabled: boolean
+  noticeText: string
+}
+
 export function getPlans() {
   return request<VipPlan[]>({
     url: '/vip/plans',
@@ -47,7 +59,14 @@ export function getVipStatus() {
   })
 }
 
-export function createOrder(data: { planId?: string | number; type?: string; payMethod?: 'wechat' | 'alipay' }) {
+export function getPaymentChannels() {
+  return request<PaymentChannels>({
+    url: '/vip/payment-channels',
+    method: 'get',
+  })
+}
+
+export function createOrder(data: { planId?: string | number; type?: string; payMethod?: string }) {
   return request<OrderInfo>({
     url: '/vip/order',
     method: 'post',
@@ -61,4 +80,20 @@ export function getOrderStatus(orderId: string | number) {
     method: 'get',
   })
 }
+
+export function mockPayOrder(orderId: string | number) {
+  return request<{ message: string; orderNo: string; vipLevel: number }>({
+    url: `/vip/order/${orderId}/mock-pay`,
+    method: 'post',
+  })
+}
+
+export function redeemVipCard(code: string) {
+  return request<{ message: string; planName: string; duration: number }>({
+    url: '/vip/redeem-card',
+    method: 'post',
+    data: { code },
+  })
+}
+
 

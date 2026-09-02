@@ -5,12 +5,13 @@ import { VipService } from './vip.service';
 import { MemberPlan } from '@/database/entities/member-plan.entity';
 import { Order } from '@/database/entities/order.entity';
 import { User } from '@/database/entities/user.entity';
+import { SystemConfig } from '@/database/entities/system-config.entity';
 
 /**
  * 会员模块
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([MemberPlan, Order, User])],
+  imports: [TypeOrmModule.forFeature([MemberPlan, Order, User, SystemConfig])],
   controllers: [VipController],
   providers: [VipService],
   exports: [VipService],

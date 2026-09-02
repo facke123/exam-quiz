@@ -1601,4 +1601,419 @@ export class AdminService {
       // ignore
     }
   }
+
+  // ==================== 订单与充值流水管理 ====================
+
+  /**
+   * 后台获取订单列表与全局营收统计
+   */
+  async getOrders(query: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    payStatus?: string;
+    payMethod?: string;
+    planId?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<any> {
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 20;
+
+    const qb = this.orderRepository
+      .createQueryBuilder('order')
+      .leftJoinAndSelect(User, 'user', 'user.id = order.userId')
+      .leftJoinAndSelect(MemberPlan, 'plan', 'plan.id = order.planId')
+      .select([
+        'order.id AS id',
+        'order.userId AS userId',
+        'order.planId AS planId',
+        'order.orderNo AS orderNo',
+        'order.amount AS amount',
+        'order.payMethod AS payMethod',
+        'order.payStatus AS payStatus',
+        'order.tradeNo AS tradeNo',
+        'order.paidAt AS paidAt',
+        'order.refundAt AS refundAt',
+        'order.createdAt AS createdAt',
+        'user.username AS username',
+        'user.phone AS phone',
+        'user.nickname AS nickname',
+        'user.email AS email',
+        'plan.name AS planName',
+        'plan.type AS planType',
+        'plan.duration AS duration',
+      ]);
+
+    if (query.keyword && query.keyword.trim()) {
+      const kw = `%${query.keyword.trim()}%`;
+      qb.andWhere(
+        '(order.orderNo LIKE :kw OR order.tradeNo LIKE :kw OR user.username LIKE :kw OR user.phone LIKE :kw OR user.nickname LIKE :kw OR plan.name LIKE :kw)',
+        { kw },
+      );
+    }
+
+    if (query.payStatus) {
+      qb.andWhere('order.payStatus = :payStatus', { payStatus: query.payStatus });
+    }
+
+    if (query.payMethod) {
+      qb.andWhere('order.payMethod = :payMethod', { payMethod: query.payMethod });
+    }
+
+    if (query.planId) {
+      qb.andWhere('order.planId = :planId', { planId: query.planId });
+    }
+
+    if (query.startDate) {
+      qb.andWhere('order.createdAt >= :startDate', { startDate: query.startDate });
+    }
+
+    if (query.endDate) {
+      qb.andWhere('order.createdAt <= :endDate', { endDate: query.endDate });
+    }
+
+    const total = await qb.getCount();
+    const rawList = await qb
+      .orderBy('order.createdAt', 'DESC')
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getRawMany();
+
+    // 统计数据
+    const allOrders = await this.orderRepository.find();
+    const todayStr = dayjs().format('YYYY-MM-DD');
+
+    let totalRevenue = 0;
+    let todayRevenue = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+    let refundedCount = 0;
+
+    for (const o of allOrders) {
+      const amt = Number(o.amount) || 0;
+      if (o.payStatus === 'paid') {
+        totalRevenue += amt;
+        paidCount++;
+        if (o.paidAt && dayjs(o.paidAt).format('YYYY-MM-DD') === todayStr) {
+          todayRevenue += amt;
+        }
+      } else if (o.payStatus === 'pending') {
+        pendingCount++;
+      } else if (o.payStatus === 'refunded') {
+        refundedCount++;
+      }
+    }
+
+    const formattedList = rawList.map((r) => ({
+      id: Number(r.id),
+      orderNo: r.orderNo,
+      userId: Number(r.userId),
+      username: r.username || `用户${r.userId}`,
+      nickname: r.nickname || r.username || '-',
+      phone: r.phone || '-',
+      email: r.email || '-',
+      planId: Number(r.planId),
+      planName: r.planName || (r.planType === 'lifetime' ? '永久尊享会员' : 'VIP会员'),
+      amount: Number(r.amount),
+      payMethod: r.payMethod,
+      payStatus: r.payStatus,
+      tradeNo: r.tradeNo || '-',
+      paidAt: r.paidAt ? dayjs(r.paidAt).format('YYYY-MM-DD HH:mm:ss') : null,
+      refundAt: r.refundAt ? dayjs(r.refundAt).format('YYYY-MM-DD HH:mm:ss') : null,
+      createdAt: dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss'),
+    }));
+
+    return {
+      list: formattedList,
+      total,
+      page,
+      pageSize,
+      stats: {
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        todayRevenue: Math.round(todayRevenue * 100) / 100,
+        paidCount,
+        pendingCount,
+        refundedCount,
+        totalOrders: allOrders.length,
+      },
+    };
+  }
+
+  /**
+   * 管理员手动核销/审核开通订单并为用户激活 VIP
+   */
+  async activateOrder(orderId: number, adminUser?: any): Promise<any> {
+    const order = await this.orderRepository.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('订单不存在');
+    }
+
+    if (order.payStatus === 'paid') {
+      throw new BadRequestException('该订单已经支付成功，无需重复激活');
+    }
+
+    order.payStatus = 'paid';
+    order.paidAt = new Date();
+    order.tradeNo = `MANUAL_AUDIT_${Date.now()}`;
+    await this.orderRepository.save(order);
+
+    const plan = await this.planRepository.findOne({ where: { id: order.planId } });
+    const user = await this.userRepository.findOne({ where: { id: order.userId } });
+
+    if (user && plan) {
+      const isLifetime = plan.type === 'lifetime' || plan.duration >= 30000;
+      if (isLifetime) {
+        user.vipLevel = 4;
+        user.vipExpireAt = new Date('2099-12-31T23:59:59.000Z');
+      } else {
+        const levelMap: Record<string, number> = { monthly: 1, quarterly: 2, yearly: 3 };
+        const lvl = levelMap[plan.type] || 1;
+        user.vipLevel = Math.max(user.vipLevel || 0, lvl);
+
+        const isCurrentVip =
+          user.vipExpireAt &&
+          new Date(user.vipExpireAt).getTime() > Date.now() &&
+          user.vipLevel < 4;
+        const baseDate = isCurrentVip ? new Date(user.vipExpireAt) : new Date();
+        user.vipExpireAt = dayjs(baseDate).add(plan.duration, 'day').toDate();
+      }
+      await this.userRepository.save(user);
+    }
+
+    // 记录操作日志
+    await this.recordLog(
+      adminUser?.id || 1,
+      adminUser?.username || 'admin',
+      'MANUAL_ACTIVATE_ORDER',
+      `管理员手动审核并激活了订单 #${order.orderNo} (用户ID: ${order.userId}, 套餐: ${plan?.name || '-'})`,
+      'order',
+    );
+
+    return { message: '订单已审核通过并成功为用户开通对应 VIP 权益！' };
+  }
+
+  /**
+   * 后台订单退款
+   */
+  async refundOrder(orderId: number, adminUser?: any): Promise<any> {
+    const order = await this.orderRepository.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException('订单不存在');
+    }
+
+    order.payStatus = 'refunded';
+    order.refundAt = new Date();
+    await this.orderRepository.save(order);
+
+    await this.recordLog(
+      adminUser?.id || 1,
+      adminUser?.username || 'admin',
+      'REFUND_ORDER',
+      `管理员对订单 #${order.orderNo} 进行了退款标记 (用户ID: ${order.userId})`,
+      'order',
+    );
+
+    return { message: '订单退款成功，状态已更新' };
+  }
+
+  // ==================== 支付通道与收款配置 ====================
+
+  /**
+   * 获取支付通道配置
+   */
+  async getPaymentConfig(): Promise<any> {
+    const configs = await this.configRepository.find();
+    const map = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      sandboxEnabled: map.get('payment_sandbox_enabled') !== 'false',
+      wechatEnabled: map.get('payment_wechat_enabled') !== 'false',
+      wechatType: map.get('payment_wechat_type') || 'qr_code', // 'merchant' | 'qr_code'
+      wechatAppId: map.get('payment_wechat_appid') || '',
+      wechatMchId: map.get('payment_wechat_mchid') || '',
+      wechatQr: map.get('payment_wechat_qr') || '',
+      alipayEnabled: map.get('payment_alipay_enabled') !== 'false',
+      alipayType: map.get('payment_alipay_type') || 'qr_code', // 'face' | 'qr_code'
+      alipayAppId: map.get('payment_alipay_appid') || '',
+      alipayQr: map.get('payment_alipay_qr') || '',
+      cardEnabled: map.get('payment_card_enabled') !== 'false',
+      noticeText: map.get('payment_notice_text') || '如遇到充值疑问或支付问题，请联系官方客服微信协助处理。',
+    };
+  }
+
+  /**
+   * 保存支付通道配置
+   */
+  async updatePaymentConfig(dto: any, adminUser?: any): Promise<any> {
+    const configItems = [
+      { key: 'payment_sandbox_enabled', value: String(!!dto.sandboxEnabled), description: '沙箱/演示快捷支付开关' },
+      { key: 'payment_wechat_enabled', value: String(!!dto.wechatEnabled), description: '微信支付开关' },
+      { key: 'payment_wechat_type', value: dto.wechatType || 'qr_code', description: '微信支付模式 (商户/收款码)' },
+      { key: 'payment_wechat_appid', value: dto.wechatAppId || '', description: '微信支付 AppID' },
+      { key: 'payment_wechat_mchid', value: dto.wechatMchId || '', description: '微信支付商户号 MchId' },
+      { key: 'payment_wechat_qr', value: dto.wechatQr || '', description: '微信收款二维码图片地址' },
+      { key: 'payment_alipay_enabled', value: String(!!dto.alipayEnabled), description: '支付宝支付开关' },
+      { key: 'payment_alipay_type', value: dto.alipayType || 'qr_code', description: '支付宝模式 (当面付/收款码)' },
+      { key: 'payment_alipay_appid', value: dto.alipayAppId || '', description: '支付宝 AppID' },
+      { key: 'payment_alipay_qr', value: dto.alipayQr || '', description: '支付宝收款二维码图片地址' },
+      { key: 'payment_card_enabled', value: String(!!dto.cardEnabled), description: '卡密兑换开通开关' },
+      { key: 'payment_notice_text', value: dto.noticeText || '', description: '收银台温馨提示说明' },
+    ];
+
+    for (const item of configItems) {
+      let conf = await this.configRepository.findOne({ where: { key: item.key } });
+      if (!conf) {
+        conf = this.configRepository.create({
+          key: item.key,
+          value: item.value,
+          description: item.description,
+          type: 'string',
+        });
+      } else {
+        conf.value = item.value;
+        conf.description = item.description;
+      }
+      await this.configRepository.save(conf);
+    }
+
+    await this.recordLog(
+      adminUser?.id || 1,
+      adminUser?.username || 'admin',
+      'UPDATE_PAYMENT_CONFIG',
+      '管理员更新了系统支付通道与收款配置',
+      'payment',
+    );
+
+    return { message: '支付通道配置已保存' };
+  }
+
+  // ==================== 卡密生成与管理 ====================
+
+  /**
+   * 获取系统卡密列表
+   */
+  async getVipCardList(query?: { type?: string; used?: string; keyword?: string }): Promise<any> {
+    const cardConfig = await this.configRepository.findOne({
+      where: { key: 'vip_redemption_cards' },
+    });
+    let cardList: any[] = [];
+    if (cardConfig && cardConfig.value) {
+      try {
+        cardList = JSON.parse(cardConfig.value);
+      } catch {
+        cardList = [];
+      }
+    }
+
+    if (query?.type) {
+      cardList = cardList.filter((c) => c.type === query.type);
+    }
+    if (query?.used !== undefined && query.used !== '') {
+      const isUsed = query.used === 'true' || query.used === '1';
+      cardList = cardList.filter((c) => !!c.used === isUsed);
+    }
+    if (query?.keyword) {
+      const kw = query.keyword.trim().toUpperCase();
+      cardList = cardList.filter((c) => c.code.includes(kw) || (c.remark && c.remark.includes(kw)));
+    }
+
+    return {
+      list: cardList,
+      total: cardList.length,
+      unusedCount: cardList.filter((c) => !c.used).length,
+      usedCount: cardList.filter((c) => c.used).length,
+    };
+  }
+
+  /**
+   * 批量生成 VIP 卡密
+   */
+  async generateVipCards(dto: { type: string; count: number; remark?: string }, adminUser?: any): Promise<any> {
+    const type = dto.type || 'monthly';
+    const count = Math.min(Math.max(Number(dto.count) || 1, 1), 100);
+    const remark = dto.remark || '后台批量生成';
+
+    const typePrefixMap: Record<string, string> = {
+      monthly: 'MONTH',
+      quarterly: 'QUART',
+      yearly: 'YEAR',
+      lifetime: 'LIFE',
+    };
+    const prefix = typePrefixMap[type] || 'VIP';
+
+    const newCards: any[] = [];
+    for (let i = 0; i < count; i++) {
+      const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const code = `VIP-${prefix}-${randomStr}`;
+      newCards.push({
+        code,
+        type,
+        name: type === 'lifetime' ? '永久尊享会员' : type === 'yearly' ? '年卡会员' : type === 'quarterly' ? '季卡会员' : '月卡会员',
+        duration: type === 'lifetime' ? 36500 : type === 'yearly' ? 365 : type === 'quarterly' ? 90 : 30,
+        used: false,
+        remark,
+        createdAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+      });
+    }
+
+    let cardConfig = await this.configRepository.findOne({
+      where: { key: 'vip_redemption_cards' },
+    });
+    let cardList: any[] = [];
+    if (cardConfig && cardConfig.value) {
+      try {
+        cardList = JSON.parse(cardConfig.value);
+      } catch {
+        cardList = [];
+      }
+    }
+
+    cardList = [...newCards, ...cardList];
+
+    if (!cardConfig) {
+      cardConfig = this.configRepository.create({
+        key: 'vip_redemption_cards',
+        value: JSON.stringify(cardList),
+        description: 'VIP卡密兑换码数据',
+        type: 'json',
+      });
+    } else {
+      cardConfig.value = JSON.stringify(cardList);
+    }
+    await this.configRepository.save(cardConfig);
+
+    await this.recordLog(
+      adminUser?.id || 1,
+      adminUser?.username || 'admin',
+      'GENERATE_VIP_CARDS',
+      `管理员生成了 ${count} 张 [${type}] VIP卡密`,
+      'payment',
+    );
+
+    return {
+      message: `成功批量生成 ${count} 张 VIP 卡密！`,
+      generated: newCards,
+    };
+  }
+
+  /**
+   * 记录操作日志内部辅助方法
+   */
+  private async recordLog(adminId: number, adminName: string, action: string, detail: string, module = 'system') {
+    try {
+      const log = this.logRepository.create({
+        adminId,
+        adminName,
+        action,
+        module,
+        target: action,
+        detail,
+        ip: '127.0.0.1',
+      });
+      await this.logRepository.save(log);
+    } catch {
+      // ignore
+    }
+  }
 }

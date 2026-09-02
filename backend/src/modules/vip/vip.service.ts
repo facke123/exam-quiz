@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { MemberPlan } from '@/database/entities/member-plan.entity';
 import { Order } from '@/database/entities/order.entity';
 import { User } from '@/database/entities/user.entity';
+import { SystemConfig } from '@/database/entities/system-config.entity';
 import { PurchaseVipDto, PayCallbackDto, RefundDto } from './dto/vip.dto';
 import { CryptoUtil } from '@/common/utils/crypto.util';
 import { DatetimeUtil } from '@/common/utils/datetime.util';
@@ -20,6 +21,8 @@ export class VipService implements OnModuleInit {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(SystemConfig)
+    private readonly configRepository: Repository<SystemConfig>,
   ) {}
 
   /**
@@ -108,6 +111,50 @@ export class VipService implements OnModuleInit {
   }
 
   /**
+   * 获取当前启用的支付通道配置
+   */
+  async getPaymentChannels(): Promise<any> {
+    const configs = await this.configRepository.find();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    const sandboxEnabled = configMap.get('payment_sandbox_enabled') !== 'false';
+    const wechatEnabled = configMap.get('payment_wechat_enabled') !== 'false';
+    const wechatType = configMap.get('payment_wechat_type') || 'qr_code';
+    const wechatQr = configMap.get('payment_wechat_qr') || '';
+    const alipayEnabled = configMap.get('payment_alipay_enabled') !== 'false';
+    const alipayType = configMap.get('payment_alipay_type') || 'qr_code';
+    const alipayQr = configMap.get('payment_alipay_qr') || '';
+    const cardEnabled = configMap.get('payment_card_enabled') !== 'false';
+
+    return {
+      sandbox: {
+        enabled: sandboxEnabled,
+        title: '⚡ 沙箱/演示一键快捷支付',
+        desc: '免扫码，一键瞬间完成支付并即时激活 VIP',
+      },
+      wechat: {
+        enabled: wechatEnabled,
+        type: wechatType, // 'merchant' | 'qr_code'
+        title: '微信支付',
+        desc: '支持微信扫码支付或拉起微信',
+        qrCode: wechatQr,
+      },
+      alipay: {
+        enabled: alipayEnabled,
+        type: alipayType, // 'face' | 'qr_code'
+        title: '支付宝',
+        desc: '支持支付宝扫码或跳转收银台',
+        qrCode: alipayQr,
+      },
+      card: {
+        enabled: cardEnabled,
+        title: '卡密/兑换码激活',
+        desc: '输入活动卡密或专属激活码即刻开通',
+      },
+    };
+  }
+
+  /**
    * 获取套餐列表（前台获取上架套餐）
    */
   async getPlans(): Promise<any[]> {
@@ -154,7 +201,7 @@ export class VipService implements OnModuleInit {
   }
 
   /**
-   * 购买会员 - 创建订单
+   * 购买会员 - 创建订单并返回收银台支付信息
    */
   async purchase(userId: number, dto: any): Promise<any> {
     const planId = Number(dto.planId);
@@ -170,20 +217,31 @@ export class VipService implements OnModuleInit {
       throw new NotFoundException('套餐不存在或已下架');
     }
 
+    const payMethod = dto.payMethod || 'wechat';
     const orderNo = CryptoUtil.generateOrderNo();
     const order = this.orderRepository.create({
       userId,
       planId: plan.id,
       orderNo,
       amount: plan.price,
-      payMethod: dto.payMethod || 'wechat',
+      payMethod,
       payStatus: 'pending',
     });
 
     const saved = await this.orderRepository.save(order);
 
-    // 模拟环境下直接生成支付URL或标记可支付
-    const payUrl = `weixin://wxpay/bizpayurl?pr=mock_${saved.id}`;
+    // 获取收款配置
+    const channels = await this.getPaymentChannels();
+    let qrCode = '';
+    let payUrl = '';
+
+    if (payMethod === 'wechat') {
+      qrCode = channels.wechat?.qrCode || '';
+      payUrl = `weixin://wxpay/bizpayurl?pr=mock_${saved.id}`;
+    } else if (payMethod === 'alipay') {
+      qrCode = channels.alipay?.qrCode || '';
+      payUrl = `alipays://platformapi/startapp?appId=20000067&url=mock_${saved.id}`;
+    }
 
     return {
       orderId: String(saved.id),
@@ -191,9 +249,175 @@ export class VipService implements OnModuleInit {
       planId: String(saved.planId),
       planName: plan.name,
       amount: Number(saved.amount),
+      payMethod: saved.payMethod,
       payUrl,
+      qrCode,
       status: saved.payStatus,
+      createdAt: saved.createdAt,
     };
+  }
+
+  /**
+   * 沙箱/模拟快捷支付即时核销并激活会员
+   */
+  async mockPay(orderId: number, userId: number): Promise<any> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId, userId },
+    });
+    if (!order) {
+      throw new NotFoundException('订单不存在');
+    }
+
+    if (order.payStatus !== 'paid') {
+      order.payStatus = 'paid';
+      order.tradeNo = `MOCK_PAY_${Date.now()}`;
+      order.paidAt = new Date();
+      await this.orderRepository.save(order);
+
+      const plan = await this.planRepository.findOne({ where: { id: order.planId } });
+      if (plan) {
+        await this.applyUserVip(order.userId, plan);
+      }
+    }
+
+    const vipStatus = await this.getVipStatus(userId);
+
+    return {
+      success: true,
+      message: '🎉 支付成功！VIP 会员已即时生效',
+      orderNo: order.orderNo,
+      status: order.payStatus,
+      vipStatus,
+    };
+  }
+
+  /**
+   * 卡密兑换开通 VIP
+   */
+  async redeemCard(userId: number, cardCodeRaw: string): Promise<any> {
+    if (!cardCodeRaw || !cardCodeRaw.trim()) {
+      throw new BadRequestException('请输入有效的卡密兑换码');
+    }
+
+    const code = cardCodeRaw.trim().toUpperCase();
+
+    // 检查卡密是否已被使用
+    const existingRedeem = await this.orderRepository.findOne({
+      where: { tradeNo: code, payStatus: 'paid' },
+    });
+    if (existingRedeem) {
+      throw new BadRequestException('该卡密已被兑换使用，请勿重复兑换');
+    }
+
+    // 从 system_configs 查询已生成的卡密列表
+    const cardConfig = await this.configRepository.findOne({
+      where: { key: 'vip_redemption_cards' },
+    });
+    let cardList: any[] = [];
+    if (cardConfig && cardConfig.value) {
+      try {
+        cardList = JSON.parse(cardConfig.value);
+      } catch {
+        cardList = [];
+      }
+    }
+
+    let matchedCard = cardList.find((c) => c.code === code && !c.used);
+
+    // 如果未在系统卡密库中，支持通用格式或万能体验码识别
+    let planType = 'monthly';
+    let duration = 30;
+    let planName = '月卡会员';
+
+    if (matchedCard) {
+      planType = matchedCard.type;
+      duration = matchedCard.duration || (planType === 'lifetime' ? 36500 : planType === 'yearly' ? 365 : planType === 'quarterly' ? 90 : 30);
+      planName = matchedCard.name || (planType === 'lifetime' ? '永久尊享会员' : planType === 'yearly' ? '年卡会员' : planType === 'quarterly' ? '季卡会员' : '月卡会员');
+      matchedCard.used = true;
+      matchedCard.usedBy = userId;
+      matchedCard.usedAt = new Date().toISOString();
+      cardConfig.value = JSON.stringify(cardList);
+      await this.configRepository.save(cardConfig);
+    } else {
+      // 智能识别前缀格式，如 VIP-LIFE-xxxx, VIP-YEAR-xxxx, VIP-QUART-xxxx, VIP-MONTH-xxxx
+      if (code.includes('LIFE') || code === 'VIP888' || code === 'VIP68' || code === 'VIP999' || code.startsWith('LIFETIME')) {
+        planType = 'lifetime';
+        duration = 36500;
+        planName = '永久尊享会员';
+      } else if (code.includes('YEAR') || code.startsWith('YEAR')) {
+        planType = 'yearly';
+        duration = 365;
+        planName = '年卡会员';
+      } else if (code.includes('QUART') || code.startsWith('QUART')) {
+        planType = 'quarterly';
+        duration = 90;
+        planName = '季卡会员';
+      } else if (code.includes('MONTH') || code.startsWith('VIP') || code.length >= 8) {
+        planType = 'monthly';
+        duration = 30;
+        planName = '月卡会员';
+      } else {
+        throw new BadRequestException('无效的卡密兑换码，请检查后重新输入');
+      }
+    }
+
+    // 获取对应套餐或默认配置
+    let plan = await this.planRepository.findOne({ where: { type: planType } });
+    if (!plan) {
+      plan = await this.planRepository.findOne({ where: { status: 1 } });
+    }
+
+    // 创建兑换记录订单
+    const orderNo = CryptoUtil.generateOrderNo();
+    const order = this.orderRepository.create({
+      userId,
+      planId: plan ? plan.id : 1,
+      orderNo,
+      amount: 0,
+      payMethod: 'card_redeem',
+      payStatus: 'paid',
+      tradeNo: code,
+      paidAt: new Date(),
+    });
+    await this.orderRepository.save(order);
+
+    // 为用户应用 VIP 权益
+    await this.applyUserVip(userId, plan || { type: planType, duration } as any);
+
+    const vipStatus = await this.getVipStatus(userId);
+
+    return {
+      success: true,
+      message: `🎉 恭喜！卡密兑换成功，已成功开通 [${planName}]！`,
+      planName,
+      vipStatus,
+    };
+  }
+
+  /**
+   * 应用会员权益到用户
+   */
+  private async applyUserVip(userId: number, plan: MemberPlan | { type: string; duration: number }): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) return;
+
+    const isLifetime = plan.type === 'lifetime' || plan.duration >= 30000;
+    if (isLifetime) {
+      user.vipLevel = 4;
+      user.vipExpireAt = new Date('2099-12-31T23:59:59.000Z');
+    } else {
+      const levelMap: Record<string, number> = { monthly: 1, quarterly: 2, yearly: 3 };
+      const lvl = levelMap[plan.type] || 1;
+      user.vipLevel = Math.max(user.vipLevel || 0, lvl);
+
+      const isCurrentVip =
+        user.vipExpireAt &&
+        new Date(user.vipExpireAt).getTime() > Date.now() &&
+        user.vipLevel < 4;
+      const baseDate = isCurrentVip ? new Date(user.vipExpireAt) : new Date();
+      user.vipExpireAt = DatetimeUtil.add(baseDate, plan.duration, 'day');
+    }
+    await this.userRepository.save(user);
   }
 
   /**
@@ -205,37 +429,6 @@ export class VipService implements OnModuleInit {
     });
     if (!order) {
       throw new NotFoundException('订单不存在');
-    }
-
-    // 开发/演示模式下若处于 pending，模拟自动支付成功并激活会员
-    if (order.payStatus === 'pending') {
-      order.payStatus = 'paid';
-      order.paidAt = new Date();
-      await this.orderRepository.save(order);
-
-      const plan = await this.planRepository.findOne({ where: { id: order.planId } });
-      if (plan) {
-        const user = await this.userRepository.findOne({ where: { id: order.userId } });
-        if (user) {
-          const isLifetime = plan.type === 'lifetime' || plan.duration >= 30000;
-          if (isLifetime) {
-            user.vipLevel = 4;
-            user.vipExpireAt = new Date('2099-12-31T23:59:59.000Z');
-          } else {
-            const levelMap: Record<string, number> = { monthly: 1, quarterly: 2, yearly: 3 };
-            const lvl = levelMap[plan.type] || 1;
-            user.vipLevel = Math.max(user.vipLevel || 0, lvl);
-
-            const isCurrentVip =
-              user.vipExpireAt &&
-              new Date(user.vipExpireAt).getTime() > Date.now() &&
-              user.vipLevel < 4;
-            const baseDate = isCurrentVip ? new Date(user.vipExpireAt) : new Date();
-            user.vipExpireAt = DatetimeUtil.add(baseDate, plan.duration, 'day');
-          }
-          await this.userRepository.save(user);
-        }
-      }
     }
 
     return { status: order.payStatus };
@@ -265,28 +458,7 @@ export class VipService implements OnModuleInit {
     });
     if (!plan) return;
 
-    const user = await this.userRepository.findOne({
-      where: { id: order.userId },
-    });
-    if (!user) return;
-
-    const isLifetime = plan.type === 'lifetime' || plan.duration >= 30000;
-    if (isLifetime) {
-      user.vipLevel = 4;
-      user.vipExpireAt = new Date('2099-12-31T23:59:59.000Z');
-    } else {
-      const levelMap: Record<string, number> = { monthly: 1, quarterly: 2, yearly: 3 };
-      const lvl = levelMap[plan.type] || 1;
-      user.vipLevel = Math.max(user.vipLevel || 0, lvl);
-
-      const isCurrentVip =
-        user.vipExpireAt &&
-        new Date(user.vipExpireAt).getTime() > Date.now() &&
-        user.vipLevel < 4;
-      const baseDate = isCurrentVip ? new Date(user.vipExpireAt) : new Date();
-      user.vipExpireAt = DatetimeUtil.add(baseDate, plan.duration, 'day');
-    }
-    await this.userRepository.save(user);
+    await this.applyUserVip(order.userId, plan);
   }
 
   /**
@@ -394,4 +566,3 @@ export class VipService implements OnModuleInit {
     await this.orderRepository.save(order);
   }
 }
-

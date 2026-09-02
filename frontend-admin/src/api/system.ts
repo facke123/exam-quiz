@@ -217,3 +217,126 @@ export function deleteDatabaseBackup(filename: string) {
     method: 'delete',
   })
 }
+
+// 订单管理
+export interface OrderItem {
+  id: number
+  orderNo: string
+  userId: number
+  username: string
+  nickname: string
+  phone: string
+  email: string
+  planId: number
+  planName: string
+  amount: number
+  payMethod: string
+  payStatus: 'pending' | 'paid' | 'refunded' | 'refund_failed'
+  tradeNo: string
+  paidAt: string | null
+  refundAt: string | null
+  createdAt: string
+}
+
+export interface OrderQuery {
+  page?: number
+  pageSize?: number
+  keyword?: string
+  payStatus?: string
+  payMethod?: string
+  planId?: number
+  startDate?: string
+  endDate?: string
+}
+
+export interface OrderStats {
+  totalRevenue: number
+  todayRevenue: number
+  paidCount: number
+  pendingCount: number
+  refundedCount: number
+  totalOrders: number
+}
+
+export function getAdminOrders(params: OrderQuery) {
+  return request<{ list: OrderItem[]; total: number; page: number; pageSize: number; stats: OrderStats }>({
+    url: '/admin/orders',
+    method: 'get',
+    params,
+  })
+}
+
+export function activateAdminOrder(orderId: number) {
+  return request<{ message: string }>({
+    url: `/admin/orders/${orderId}/activate`,
+    method: 'post',
+  })
+}
+
+export function refundAdminOrder(orderId: number) {
+  return request<{ message: string }>({
+    url: `/admin/orders/${orderId}/refund`,
+    method: 'post',
+  })
+}
+
+// 支付配置
+export interface PaymentConfig {
+  sandboxEnabled: boolean
+  wechatEnabled: boolean
+  wechatType: 'merchant' | 'qr_code'
+  wechatAppId: string
+  wechatMchId: string
+  wechatQr: string
+  alipayEnabled: boolean
+  alipayType: 'face' | 'qr_code'
+  alipayAppId: string
+  alipayQr: string
+  cardEnabled: boolean
+  noticeText: string
+}
+
+export function getAdminPaymentConfig() {
+  return request<PaymentConfig>({
+    url: '/admin/settings/payment',
+    method: 'get',
+  })
+}
+
+export function updateAdminPaymentConfig(data: PaymentConfig) {
+  return request<{ message: string }>({
+    url: '/admin/settings/payment',
+    method: 'put',
+    data,
+  })
+}
+
+// 卡密管理
+export interface VipCardItem {
+  code: string
+  type: 'monthly' | 'quarterly' | 'yearly' | 'lifetime'
+  name: string
+  duration: number
+  used: boolean
+  usedBy?: number
+  usedAt?: string
+  remark?: string
+  createdAt: string
+}
+
+export function getAdminVipCards(params?: { type?: string; used?: string; keyword?: string }) {
+  return request<{ list: VipCardItem[]; total: number; unusedCount: number; usedCount: number }>({
+    url: '/admin/member/cards',
+    method: 'get',
+    params,
+  })
+}
+
+export function generateAdminVipCards(data: { type: string; count: number; remark?: string }) {
+  return request<{ message: string; generated: VipCardItem[] }>({
+    url: '/admin/member/cards/generate',
+    method: 'post',
+    data,
+  })
+}
+

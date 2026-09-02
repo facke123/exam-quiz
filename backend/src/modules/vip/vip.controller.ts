@@ -75,6 +75,31 @@ export class VipController {
     );
   }
 
+  @Public()
+  @Get('payment-channels')
+  @ApiOperation({ summary: '获取当前可用的支付通道' })
+  async getPaymentChannels() {
+    return this.vipService.getPaymentChannels();
+  }
+
+  @Post('order/:id/mock-pay')
+  @ApiOperation({ summary: '沙箱/模拟快捷支付确认' })
+  async mockPay(
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.vipService.mockPay(id, user ? user.id : 1);
+  }
+
+  @Post('redeem-card')
+  @ApiOperation({ summary: '卡密兑换 VIP' })
+  async redeemCard(
+    @CurrentUser() user: UserPayload,
+    @Body() body: { cardCode: string },
+  ) {
+    return this.vipService.redeemCard(user ? user.id : 1, body?.cardCode);
+  }
+
   @Post('refund')
   @ApiOperation({ summary: '退款' })
   async refund(
@@ -85,3 +110,4 @@ export class VipController {
     return { message: '退款申请已提交' };
   }
 }
+

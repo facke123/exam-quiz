@@ -202,6 +202,85 @@ export class AdminController {
     return this.adminService.getVipStats();
   }
 
+  // ==================== 订单流水与支付配置 ====================
+
+  @Get('orders')
+  @ApiOperation({ summary: '查询充值与VIP订单流水列表' })
+  async getOrders(
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+    @Query('keyword') keyword?: string,
+    @Query('payStatus') payStatus?: string,
+    @Query('payMethod') payMethod?: string,
+    @Query('planId') planId?: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.adminService.getOrders({
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 20,
+      keyword,
+      payStatus,
+      payMethod,
+      planId: planId ? Number(planId) : undefined,
+      startDate,
+      endDate,
+    });
+  }
+
+  @Post('orders/:id/activate')
+  @ApiOperation({ summary: '手动审核通过订单并激活VIP' })
+  async activateOrder(
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.activateOrder(id, user);
+  }
+
+  @Post('orders/:id/refund')
+  @ApiOperation({ summary: '订单退款' })
+  async refundOrder(
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.refundOrder(id, user);
+  }
+
+  @Get('settings/payment')
+  @ApiOperation({ summary: '获取支付通道配置' })
+  async getPaymentConfig() {
+    return this.adminService.getPaymentConfig();
+  }
+
+  @Put('settings/payment')
+  @ApiOperation({ summary: '保存支付通道配置' })
+  async updatePaymentConfig(
+    @CurrentUser() user: UserPayload,
+    @Body() body: any,
+  ) {
+    return this.adminService.updatePaymentConfig(body, user);
+  }
+
+  @Get('member/cards')
+  @ApiOperation({ summary: '获取系统卡密列表' })
+  async getVipCardList(
+    @Query('type') type?: string,
+    @Query('used') used?: string,
+    @Query('keyword') keyword?: string,
+  ) {
+    return this.adminService.getVipCardList({ type, used, keyword });
+  }
+
+  @Post('member/cards/generate')
+  @ApiOperation({ summary: '批量生成 VIP 卡密' })
+  async generateVipCards(
+    @CurrentUser() user: UserPayload,
+    @Body() body: { type: string; count: number; remark?: string },
+  ) {
+    return this.adminService.generateVipCards(body, user);
+  }
+
+
   @Get('users/:id/records')
   @ApiOperation({ summary: '获取用户做题记录' })
   async getUserPracticeRecords(

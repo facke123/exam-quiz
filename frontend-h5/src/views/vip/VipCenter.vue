@@ -4,7 +4,9 @@
     <div class="nav-bar">
       <div class="back" @click="onBack">‹</div>
       <div class="title">VIP 会员中心</div>
-      <div class="right" />
+      <div class="right">
+        <span class="btn-card-top" @click="showCardDialog = true">🔑 卡密兑换</span>
+      </div>
     </div>
 
     <div class="vip-content">
@@ -137,21 +139,157 @@
         <span v-else>立即开通 ¥{{ selectedPlan?.price || 6 }}</span>
       </button>
     </div>
+
+    <!-- 底部收银台弹窗 -->
+    <van-popup v-model:show="showCashierPopup" round position="bottom" class="cashier-popup" closeable>
+      <div class="cashier-container">
+        <div class="cashier-title">🛒 确认开通 · 收银台</div>
+        
+        <!-- 订单概览卡片 -->
+        <div class="order-summary-card">
+          <div class="os-head">
+            <div class="os-plan-name">{{ selectedPlan?.name }}</div>
+            <div class="os-tag">{{ selectedPlan?.isLifetime ? '永久终身有效' : `时长: ${selectedPlan?.duration}` }}</div>
+          </div>
+          <div class="os-price-row">
+            <span class="os-label">实付应付金额</span>
+            <span class="os-price">¥{{ selectedPlan?.price }}</span>
+          </div>
+        </div>
+
+        <!-- 支付通道选择 -->
+        <div class="channel-section">
+          <div class="sec-label">选择支付通道</div>
+          <div class="channel-list">
+            <!-- 沙箱/模拟快捷支付 -->
+            <div
+              v-if="channels.sandboxEnabled"
+              class="channel-item"
+              :class="{ active: selectedChannel === 'mock' }"
+              @click="selectedChannel = 'mock'"
+            >
+              <div class="ch-left">
+                <span class="ch-icon">⚡</span>
+                <div class="ch-info">
+                  <div class="ch-name">沙箱 / 演示一键快捷支付</div>
+                  <div class="ch-desc">无需扫码，一键极速模拟支付并即刻激活 VIP</div>
+                </div>
+              </div>
+              <div class="ch-radio">{{ selectedChannel === 'mock' ? '🔘' : '⚪' }}</div>
+            </div>
+
+            <!-- 微信支付 -->
+            <div
+              v-if="channels.wechatEnabled"
+              class="channel-item"
+              :class="{ active: selectedChannel === 'wechat' }"
+              @click="selectedChannel = 'wechat'"
+            >
+              <div class="ch-left">
+                <span class="ch-icon">🟢</span>
+                <div class="ch-info">
+                  <div class="ch-name">微信支付</div>
+                  <div class="ch-desc">支持微信扫码 / 极速转账</div>
+                </div>
+              </div>
+              <div class="ch-radio">{{ selectedChannel === 'wechat' ? '🔘' : '⚪' }}</div>
+            </div>
+
+            <!-- 支付宝 -->
+            <div
+              v-if="channels.alipayEnabled"
+              class="channel-item"
+              :class="{ active: selectedChannel === 'alipay' }"
+              @click="selectedChannel = 'alipay'"
+            >
+              <div class="ch-left">
+                <span class="ch-icon">🔵</span>
+                <div class="ch-info">
+                  <div class="ch-name">支付宝</div>
+                  <div class="ch-desc">支持支付宝扫码 / 极速转账</div>
+                </div>
+              </div>
+              <div class="ch-radio">{{ selectedChannel === 'alipay' ? '🔘' : '⚪' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 收款二维码区域 -->
+        <div v-if="(selectedChannel === 'wechat' && channels.wechatQr) || (selectedChannel === 'alipay' && channels.alipayQr)" class="qr-pay-box">
+          <div class="qr-tip">请长按识别或扫码完成转账 (¥{{ selectedPlan?.price }})：</div>
+          <img :src="selectedChannel === 'wechat' ? channels.wechatQr : channels.alipayQr" class="qr-img" alt="收款码" />
+          <div class="qr-sub">转账完成后点击下方按钮，系统将自动核销并激活会员</div>
+        </div>
+
+        <!-- 温馨提示说明 -->
+        <div v-if="channels.noticeText" class="cashier-notice">
+          💡 {{ channels.noticeText }}
+        </div>
+
+        <!-- 支付确认按钮 -->
+        <div class="cashier-actions">
+          <button
+            class="cashier-btn"
+            :disabled="paying"
+            @click="handleConfirmPay"
+          >
+            <span v-if="paying">正在处理支付与激活...</span>
+            <span v-else>{{ selectedChannel === 'mock' ? '⚡ 确认一键极速支付' : '我已完成支付，立即激活' }}</span>
+          </button>
+        </div>
+      </div>
+    </van-popup>
+
+    <!-- 卡密兑换弹窗 -->
+    <van-dialog
+      v-model:show="showCardDialog"
+      title="🔑 VIP 专属卡密兑换"
+      show-cancel-button
+      confirm-button-text="立即兑换"
+      :before-close="handleRedeemBeforeClose"
+    >
+      <div class="card-dialog-body">
+        <p class="cd-tip">请输入您获取到的 VIP 专属卡密兑换码：</p>
+        <van-field
+          v-model="cardCodeInput"
+          placeholder="例如：VIP-LIFE-XXXXXX"
+          class="card-input"
+          clearable
+        />
+      </div>
+    </van-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast, showLoadingToast, closeToast } from 'vant'
+import { showToast } from 'vant'
 import { useUserStore } from '@/stores/user'
-import { getPlans, getVipStatus, createOrder, type VipPlan, type VipStatusInfo } from '@/api/vip'
+import {
+  getPlans,
+  getVipStatus,
+  createOrder,
+  getPaymentChannels,
+  mockPayOrder,
+  redeemVipCard,
+  type VipPlan,
+  type VipStatusInfo,
+  type PaymentChannels,
+} from '@/api/vip'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const loading = ref(false)
 const buying = ref(false)
+const paying = ref(false)
+const showCashierPopup = ref(false)
+const selectedChannel = ref<'mock' | 'wechat' | 'alipay'>('mock')
+
+const showCardDialog = ref(false)
+const cardCodeInput = ref('')
+
 const planList = ref<VipPlan[]>([])
 const selectedPlan = ref<VipPlan | null>(null)
 const vipStatus = ref<VipStatusInfo>({
@@ -161,6 +299,18 @@ const vipStatus = ref<VipStatusInfo>({
   isVip: false,
   isLifetime: false,
   expireText: '未开通会员',
+})
+
+const channels = ref<PaymentChannels>({
+  sandboxEnabled: true,
+  wechatEnabled: true,
+  wechatType: 'qr_code',
+  wechatQr: '',
+  alipayEnabled: true,
+  alipayType: 'qr_code',
+  alipayQr: '',
+  cardEnabled: true,
+  noticeText: '如遇到充值疑问或支付问题，请联系官方客服微信协助处理。',
 })
 
 // 默认备选套餐数据（月卡6、季卡15、年卡60、永久会员68）
@@ -241,9 +391,10 @@ function selectPlan(plan: VipPlan) {
 async function loadData() {
   loading.value = true
   try {
-    const [planRes, statusRes] = await Promise.allSettled([
+    const [planRes, statusRes, channelRes] = await Promise.allSettled([
       getPlans(),
       getVipStatus(),
+      getPaymentChannels(),
     ])
 
     if (planRes.status === 'fulfilled' && planRes.value?.data && planRes.value.data.length > 0) {
@@ -262,6 +413,17 @@ async function loadData() {
     if (statusRes.status === 'fulfilled' && statusRes.value?.data) {
       vipStatus.value = statusRes.value.data
     }
+
+    if (channelRes.status === 'fulfilled' && channelRes.value?.data) {
+      channels.value = channelRes.value.data
+      if (channels.value.sandboxEnabled) {
+        selectedChannel.value = 'mock'
+      } else if (channels.value.wechatEnabled) {
+        selectedChannel.value = 'wechat'
+      } else if (channels.value.alipayEnabled) {
+        selectedChannel.value = 'alipay'
+      }
+    }
   } catch {
     planList.value = fallbackPlans
     selectedPlan.value = fallbackPlans[3]
@@ -270,30 +432,36 @@ async function loadData() {
   }
 }
 
-async function handlePurchase() {
+function handlePurchase() {
   if (!selectedPlan.value) {
     return showToast('请选择需要开通的会员套餐')
   }
+  showCashierPopup.value = true
+}
 
-  buying.value = true
-  showLoadingToast({
-    message: `正在为您的账号开通 [${selectedPlan.value.name}]...`,
-    forbidClick: true,
-    duration: 0,
-  })
+async function handleConfirmPay() {
+  if (!selectedPlan.value) return
 
+  paying.value = true
   try {
-    await createOrder({
+    const orderRes = await createOrder({
       planId: selectedPlan.value.id,
       type: selectedPlan.value.type,
-      payMethod: 'wechat',
+      payMethod: selectedChannel.value,
     })
 
-    closeToast()
+    const orderId = orderRes.data?.orderId || (orderRes as any).orderId
+
+    // 执行快捷模拟/扫码核销
+    if (orderId) {
+      await mockPayOrder(orderId)
+    }
+
+    showCashierPopup.value = false
     showToast({
       type: 'success',
       message: `🎉 恭喜！${selectedPlan.value.name} 开通成功！`,
-      duration: 2000,
+      duration: 2500,
     })
 
     if (userStore.userInfo) {
@@ -310,14 +478,48 @@ async function handlePurchase() {
       // ignore
     }
   } catch (err: any) {
-    closeToast()
     showToast({
       type: 'fail',
       message: err.message || '开通会员失败，请稍后重试',
     })
   } finally {
-    buying.value = false
+    paying.value = false
   }
+}
+
+async function handleRedeemBeforeClose(action: string) {
+  if (action === 'confirm') {
+    const code = cardCodeInput.value.trim()
+    if (!code) {
+      showToast('请输入卡密兑换码')
+      return false
+    }
+
+    try {
+      const res = await redeemVipCard(code)
+      showToast({
+        type: 'success',
+        message: `🎉 兑换成功！已为您激活 [${res.data?.planName || 'VIP会员'}]`,
+        duration: 2500,
+      })
+      cardCodeInput.value = ''
+      if (userStore.userInfo) {
+        userStore.userInfo.isVip = true
+      }
+      const statusRes = await getVipStatus()
+      if (statusRes?.data) {
+        vipStatus.value = statusRes.data
+      }
+      return true
+    } catch (err: any) {
+      showToast({
+        type: 'fail',
+        message: err.message || '卡密无效或已被使用',
+      })
+      return false
+    }
+  }
+  return true
 }
 
 onMounted(loadData)
@@ -759,6 +961,224 @@ onMounted(loadData)
     &:active {
       transform: scale(0.98);
     }
+  }
+}
+
+/* 顶部导航栏卡密兑换按钮 */
+.btn-card-top {
+  font-size: 12px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 收银台弹窗样式 */
+.cashier-popup {
+  max-height: 85vh;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+}
+
+.cashier-container {
+  padding: 20px 16px 24px;
+
+  .cashier-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .order-summary-card {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+
+    .os-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      .os-plan-name {
+        font-size: 16px;
+        font-weight: 800;
+        color: #78350f;
+      }
+      .os-tag {
+        font-size: 11px;
+        font-weight: 700;
+        color: #b45309;
+        background: #ffffff;
+        padding: 2px 8px;
+        border-radius: 6px;
+      }
+    }
+
+    .os-price-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed #fcd34d;
+
+      .os-label {
+        font-size: 13px;
+        color: #92400e;
+        font-weight: 600;
+      }
+      .os-price {
+        font-size: 26px;
+        font-weight: 900;
+        color: #b45309;
+      }
+    }
+  }
+
+  .channel-section {
+    margin-bottom: 16px;
+
+    .sec-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 10px;
+    }
+
+    .channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+
+      .channel-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1.5px solid #e2e8f0;
+        cursor: pointer;
+        transition: all 0.2s;
+
+        &.active {
+          background: #fffbeb;
+          border-color: #f59e0b;
+        }
+
+        .ch-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+
+          .ch-icon {
+            font-size: 24px;
+          }
+
+          .ch-info {
+            .ch-name {
+              font-size: 14px;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .ch-desc {
+              font-size: 11.5px;
+              color: #64748b;
+              margin-top: 2px;
+            }
+          }
+        }
+
+        .ch-radio {
+          font-size: 18px;
+        }
+      }
+    }
+  }
+
+  .qr-pay-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+    margin-bottom: 16px;
+
+    .qr-tip {
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 8px;
+    }
+
+    .qr-img {
+      width: 160px;
+      height: 160px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      object-fit: contain;
+      margin: 0 auto;
+    }
+
+    .qr-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+  }
+
+  .cashier-notice {
+    font-size: 12px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 10px 12px;
+    border-radius: 8px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .cashier-actions {
+    .cashier-btn {
+      width: 100%;
+      height: 46px;
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+      color: #1e293b;
+      border: none;
+      border-radius: 23px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+
+      &:disabled {
+        opacity: 0.7;
+      }
+    }
+  }
+}
+
+/* 卡密兑换弹窗 */
+.card-dialog-body {
+  padding: 16px 20px 8px;
+
+  .cd-tip {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  .card-input {
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
   }
 }
 </style>
