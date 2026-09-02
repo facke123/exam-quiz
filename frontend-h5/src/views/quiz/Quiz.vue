@@ -109,6 +109,7 @@ import { useSubjectStore } from '@/stores/subject'
 import { getQuestions, type Question } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
 import { recordWrong, getWrongList } from '@/api/wrong'
+import { submit, createPractice } from '@/api/quiz'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
@@ -122,6 +123,7 @@ const loading = ref(false)
 const mode = computed(() => (route.params.mode as string) || (route.query.mode as string) || 'practice')
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
 const remainingSeconds = ref(9000)
+const currentRecordId = ref<string | number | undefined>(route.query.recordId ? String(route.query.recordId) : undefined)
 let timer: any = null
 
 const questions = ref<any[]>([])
@@ -206,7 +208,7 @@ async function onSubmit() {
       const formattedUserAns = Array.isArray(userAns)
         ? userAns.sort().join('').toUpperCase().trim()
         : String(userAns || '').toUpperCase().trim()
-      if (formattedUserAns !== rightAns) {
+      if (formattedUserAns && formattedUserAns !== rightAns) {
         try {
           await recordWrong({
             questionId: q.id,
@@ -222,7 +224,29 @@ async function onSubmit() {
 
     const dParam = route.query.duration ? Number(route.query.duration) : undefined
     const durationVal = dParam ? dParam * 60 : (needCountdown.value ? (9000 - remainingSeconds.value) : 180)
+    let submittedRecordId = currentRecordId.value
+
+    try {
+      const submitRes = await submit({
+        recordId: currentRecordId.value,
+        answers: answers.value,
+        subjectId: route.query.subjectId ? String(route.query.subjectId) : (subjectStore.currentSubjectId || 1),
+        chapterId: route.query.chapterId ? String(route.query.chapterId) : undefined,
+        mode: mode.value,
+        paperId: route.query.paperId ? String(route.query.paperId) : (['real', 'mock'].includes(mode.value) ? String(route.query.examId || '') : undefined),
+        duration: durationVal,
+        totalCount: questions.value.length,
+        questions: questions.value,
+      })
+      if (submitRes?.data?.recordId) {
+        submittedRecordId = submitRes.data.recordId
+      }
+    } catch {
+      // ignore
+    }
+
     const reportData = {
+      recordId: submittedRecordId || '1',
       answers: answers.value,
       questions: questions.value,
       duration: durationVal,
@@ -234,7 +258,7 @@ async function onSubmit() {
     }
 
     router.push({
-      path: '/quiz/report/1',
+      path: `/quiz/report/${submittedRecordId || 1}`,
       state: reportData,
     })
   })

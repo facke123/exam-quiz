@@ -48,7 +48,17 @@ export function saveProgress(data: { recordId: string; answers: Record<string, a
   })
 }
 
-export function submit(data: { recordId: string; answers: Record<string, any> }) {
+export function submit(data: {
+  recordId?: string | number
+  answers?: Record<string, any>
+  subjectId?: string | number
+  chapterId?: string | number
+  mode?: string
+  paperId?: string | number
+  duration?: number
+  totalCount?: number
+  questions?: any[]
+}) {
   return request<{
     recordId: string
     score: number

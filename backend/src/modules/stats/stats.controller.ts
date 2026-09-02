@@ -28,8 +28,16 @@ export class StatsController {
 
   @Get('stats/trend')
   @ApiOperation({ summary: '前台统计 - 趋势' })
-  async getTrend(@CurrentUser() user: UserPayload) {
-    return this.statsService.getTrend(user ? user.id : 1);
+  async getTrend(
+    @CurrentUser() user: UserPayload,
+    @Query('days') days?: number,
+    @Query('subjectId') subjectId?: number,
+  ) {
+    return this.statsService.getTrend(
+      user ? user.id : 1,
+      days ? Number(days) : 7,
+      subjectId ? Number(subjectId) : undefined,
+    );
   }
 
   @Get('stats/radar')

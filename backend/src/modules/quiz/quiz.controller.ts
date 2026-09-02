@@ -66,11 +66,11 @@ export class QuizController {
   @ApiOperation({ summary: '交卷判分' })
   async submitPractice(
     @CurrentUser() user: UserPayload,
-    @Body() body: { recordId?: string | number; answers?: Record<string, any> },
+    @Body() body: any,
     @Param('id') paramId?: string,
   ) {
     const rId = Number(body.recordId || paramId);
-    return this.quizService.submitPractice(rId, user ? user.id : 1, body.answers);
+    return this.quizService.submitPractice(rId, user ? user.id : 1, body.answers, body);
   }
 
   @Get(['quiz/report/:id', 'quiz/practice/:id/report'])

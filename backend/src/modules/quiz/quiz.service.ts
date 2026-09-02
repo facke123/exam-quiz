@@ -286,16 +286,39 @@ export class QuizService {
     recordId: number,
     userId: number,
     answersMap?: Record<string, any>,
+    dto?: any,
   ): Promise<any> {
-    const record = await this.recordRepository.findOne({
+    let record = recordId ? await this.recordRepository.findOne({
       where: { id: recordId, userId },
-    });
+    }) : null;
+
+    const answersObj = answersMap || dto?.answers || {};
+    const questionIdsList: number[] = Array.isArray(dto?.questionIds)
+      ? dto.questionIds.map((id: any) => Number(id))
+      : (dto?.questions ? dto.questions.map((q: any) => Number(q.id)) : []);
+
+    const totalQCount = dto?.total || dto?.totalCount || dto?.questionCount || questionIdsList.length || Object.keys(answersObj).length || 20;
+
     if (!record) {
-      throw new NotFoundException('做题记录不存在');
+      record = this.recordRepository.create({
+        userId,
+        subjectId: dto?.subjectId ? Number(dto.subjectId) : 1,
+        mode: dto?.mode || 'practice',
+        paperId: dto?.paperId ? Number(dto.paperId) : null,
+        totalQuestions: totalQCount,
+        answeredQuestions: Object.keys(answersObj).length,
+        correctCount: 0,
+        score: 0,
+        duration: dto?.duration || 120,
+        status: 'ongoing',
+        startedAt: new Date(Date.now() - (dto?.duration ? dto.duration * 1000 : 120000)),
+      });
+      record = await this.recordRepository.save(record);
+      recordId = Number(record.id);
     }
 
-    if (answersMap && Object.keys(answersMap).length > 0) {
-      await this.saveProgress(recordId, userId, answersMap);
+    if (answersObj && Object.keys(answersObj).length > 0) {
+      await this.saveProgress(recordId, userId, answersObj);
     }
 
     const answers = await this.answerRepository.find({

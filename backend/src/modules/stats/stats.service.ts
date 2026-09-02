@@ -72,32 +72,70 @@ export class StatsService {
     });
 
     const records = await this.recordRepository.find({
-      where: { userId },
+      where: {
+        userId,
+        ...(subjectId ? { subjectId: Number(subjectId) } : {}),
+      },
+      order: { startedAt: 'DESC', createdAt: 'DESC' },
     });
-    const totalAnswered = records.reduce(
-      (sum, r) => sum + (r.answeredQuestions || 0),
+
+    let totalAnswered = records.reduce(
+      (sum, r) => sum + (r.answeredQuestions || r.totalQuestions || 0),
       0,
     );
     const totalCorrect = records.reduce(
       (sum, r) => sum + (r.correctCount || 0),
       0,
     );
+
+    const wrongCount = await this.wrongQuestionRepository.count({
+      where: {
+        userId,
+        ...(subjectId ? { subjectId: Number(subjectId) } : {}),
+      },
+    });
+
+    // 如果做题记录总数小于错题库数，使用错题数作为基底以确保数据一致性
+    if (totalAnswered < wrongCount) {
+      totalAnswered = Math.max(totalAnswered, wrongCount);
+    }
+
     const correctRate =
       totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const todayRecords = records.filter(
-      (r) => r.createdAt && new Date(r.createdAt) >= startOfToday,
-    );
-    const todayCount = todayRecords.reduce(
-      (sum, r) => sum + (r.answeredQuestions || 0),
-      0,
-    );
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    const wrongCount = await this.wrongQuestionRepository.count({
-      where: { userId },
-    });
+    // 统计各日期做题数及连续打卡
+    const dateCountMap = new Map<string, number>();
+    for (const r of records) {
+      const recDate = r.startedAt || r.createdAt;
+      if (recDate) {
+        const d = new Date(recDate);
+        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const prev = dateCountMap.get(dStr) || 0;
+        dateCountMap.set(dStr, prev + (r.answeredQuestions || r.totalQuestions || 1));
+      }
+    }
+
+    const todayCount = dateCountMap.get(todayStr) || 0;
+
+    // 计算连续打卡天数
+    let streakDays = 0;
+    let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (!dateCountMap.has(todayStr)) {
+      checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    }
+    while (true) {
+      const cStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+      if ((dateCountMap.get(cStr) || 0) > 0) {
+        streakDays++;
+        checkDate = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
     const favoriteCount = await this.favoriteRepository.count({
       where: { userId },
     });
@@ -105,46 +143,66 @@ export class StatsService {
     return {
       totalQuestions: totalQuestions || 0,
       totalAnswered,
-      correctRate: correctRate || 0,
+      correctRate: Math.min(100, correctRate || 0),
       wrongCount,
       favoriteCount,
-      streakDays: records.length > 0 ? 1 : 0,
+      streakDays: Math.max(streakDays, todayCount > 0 ? 1 : 0),
       todayCount,
     };
   }
 
   /**
-   * 前台统计 - 趋势（最近7天做题数据）
+   * 前台统计 - 趋势（支持最近7天或30天做题数据）
    */
-  async getTrend(userId: number): Promise<{
+  async getTrend(
+    userId: number,
+    days: number = 7,
+    subjectId?: number,
+  ): Promise<{
     date: string;
     count: number;
     correct: number;
+    correctRate: number;
   }[]> {
-    const sevenDaysAgo = DatetimeUtil.subtract(new Date(), 7, 'day');
+    const daysCount = Math.max(7, Math.min(30, Number(days) || 7));
+    const startDate = DatetimeUtil.subtract(new Date(), daysCount - 1, 'day');
+
     const records = await this.recordRepository.find({
       where: {
         userId,
-        startedAt: Between(sevenDaysAgo, new Date()),
+        ...(subjectId ? { subjectId: Number(subjectId) } : {}),
       },
-      order: { startedAt: 'ASC' },
+      order: { startedAt: 'ASC', createdAt: 'ASC' },
     });
 
-    const trend: { date: string; count: number; correct: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = DatetimeUtil.format(
-        DatetimeUtil.subtract(new Date(), i, 'day'),
-        'YYYY-MM-DD',
-      );
-      const dayRecords = records.filter(
-        (r) => DatetimeUtil.format(r.startedAt, 'YYYY-MM-DD') === date,
-      );
+    const dateRecordsMap = new Map<string, { count: number; correct: number }>();
+    for (const r of records) {
+      const recDate = r.startedAt || r.createdAt;
+      if (recDate) {
+        const d = new Date(recDate);
+        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const prev = dateRecordsMap.get(dStr) || { count: 0, correct: 0 };
+        dateRecordsMap.set(dStr, {
+          count: prev.count + (r.answeredQuestions || r.totalQuestions || 1),
+          correct: prev.correct + (r.correctCount || 0),
+        });
+      }
+    }
+
+    const trend: Array<{ date: string; count: number; correct: number; correctRate: number }> = [];
+    for (let i = daysCount - 1; i >= 0; i--) {
+      const targetDate = DatetimeUtil.subtract(new Date(), i, 'day');
+      const dStr = DatetimeUtil.format(targetDate, 'YYYY-MM-DD');
+      const dayData = dateRecordsMap.get(dStr) || { count: 0, correct: 0 };
+      const rate = dayData.count > 0 ? Math.round((dayData.correct / dayData.count) * 100) : 0;
       trend.push({
-        date,
-        count: dayRecords.reduce((s, r) => s + (r.answeredQuestions || 0), 0),
-        correct: dayRecords.reduce((s, r) => s + (r.correctCount || 0), 0),
+        date: dStr,
+        count: dayData.count,
+        correct: dayData.correct,
+        correctRate: rate,
       });
     }
+
     return trend;
   }
 
@@ -160,24 +218,31 @@ export class StatsService {
     score?: number;
     full: number;
   }[]> {
-    const chapters = await this.chapterRepository.find({
-      where: subjectId ? { subjectId: Number(subjectId) } : undefined,
+    let chapters = await this.chapterRepository.find({
+      where: subjectId ? { subjectId: Number(subjectId) } : {},
       take: 6,
       order: { sort: 'ASC' },
     });
 
     if (chapters.length === 0) {
+      chapters = await this.chapterRepository.find({
+        take: 6,
+        order: { sort: 'ASC' },
+      });
+    }
+
+    if (chapters.length === 0) {
       return [
-        { dimension: '项目管理基础', value: 78, score: 78, full: 100 },
-        { dimension: '项目范围管理', value: 85, score: 85, full: 100 },
-        { dimension: '项目进度管理', value: 52, score: 52, full: 100 },
-        { dimension: '项目成本管理', value: 65, score: 65, full: 100 },
-        { dimension: '项目质量管理', value: 80, score: 80, full: 100 },
-        { dimension: '信息系统安全', value: 70, score: 70, full: 100 },
+        { dimension: '项目管理基础', value: 80, score: 80, full: 100 },
+        { dimension: '项目范围管理', value: 75, score: 75, full: 100 },
+        { dimension: '项目进度管理', value: 65, score: 65, full: 100 },
+        { dimension: '项目成本管理', value: 70, score: 70, full: 100 },
+        { dimension: '项目质量管理', value: 85, score: 85, full: 100 },
+        { dimension: '信息安全管理', value: 78, score: 78, full: 100 },
       ];
     }
 
-    // 统计该用户在各章节的做题情况
+    // 统计该用户在各章节的做题情况与错题情况
     const result: Array<{ dimension: string; value: number; score: number; full: number }> = [];
     for (const c of chapters) {
       const qCount = await this.questionRepository.count({
@@ -187,10 +252,17 @@ export class StatsService {
         where: { userId, chapterId: c.id },
       });
 
-      let mastery = 70;
+      let mastery = 0;
       if (qCount > 0) {
-        mastery = Math.max(30, Math.min(100, Math.round(((qCount - wrongCount) / qCount) * 100)));
+        if (wrongCount === 0) {
+          mastery = 95; // 未出错默认高掌握度
+        } else {
+          mastery = Math.max(15, Math.min(100, Math.round(((qCount - wrongCount) / qCount) * 100)));
+        }
+      } else {
+        mastery = 80;
       }
+
       result.push({
         dimension: c.name.length > 8 ? c.name.slice(0, 7) + '...' : c.name,
         value: mastery,

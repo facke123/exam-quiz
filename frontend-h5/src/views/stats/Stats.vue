@@ -101,7 +101,7 @@
         <span
           v-for="(t, idx) in trendList"
           :key="idx"
-        >{{ t.date }}</span>
+        >{{ formatTrendLabel(t.date) }}</span>
       </div>
     </div>
 
@@ -162,7 +162,7 @@
             class="dot"
             :style="{ background: legendColors[idx % legendColors.length] }"
           />
-          {{ r.dimension }} {{ r.value || r.score || 70 }}%
+          {{ r.dimension }} {{ r.value !== undefined ? r.value : (r.score !== undefined ? r.score : 0) }}%
         </div>
       </div>
     </div>
@@ -233,13 +233,19 @@ const wrongDistList = ref<Array<{ chapter: string; count: number }>>([])
 
 const legendColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
 
+function formatTrendLabel(dStr: string) {
+  if (!dStr) return ''
+  if (dStr.length >= 10) return dStr.slice(5) // '08-27'
+  return dStr
+}
+
 const radarPolygonPoints = computed(() => {
   if (radarList.value.length === 0) return '100,35 155,72 148,130 100,165 45,135 38,68'
   const count = radarList.value.length
   return radarList.value.map((item, i) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * i) / count
     const val = item.value !== undefined ? item.value : (item.score || 70)
-    const ratio = Math.max(0.2, Math.min(1, val / 100))
+    const ratio = Math.max(0.15, Math.min(1, val / 100))
     const r = 68 * ratio
     const x = Math.round(100 + r * Math.cos(angle))
     const y = Math.round(100 + r * Math.sin(angle))
@@ -288,15 +294,7 @@ async function fetchStats() {
     if (tRes?.data && Array.isArray(tRes.data)) {
       trendList.value = tRes.data
     } else {
-      trendList.value = [
-        { date: '周一', count: 0 },
-        { date: '周二', count: 0 },
-        { date: '周三', count: 0 },
-        { date: '周四', count: 0 },
-        { date: '周五', count: 0 },
-        { date: '周六', count: 0 },
-        { date: '今天', count: overview.todayCount || 0 },
-      ]
+      trendList.value = []
     }
   } catch {
     trendList.value = []
@@ -307,17 +305,10 @@ async function fetchStats() {
     if (rRes?.data && Array.isArray(rRes.data) && rRes.data.length > 0) {
       radarList.value = rRes.data
     } else {
-      radarList.value = [
-        { dimension: '项目管理', value: overview.correctRate || 60 },
-        { dimension: '范围管理', value: 75 },
-        { dimension: '进度管理', value: 70 },
-        { dimension: '成本管理', value: 65 },
-        { dimension: '质量管理', value: 80 },
-        { dimension: '信息安全', value: 70 },
-      ]
+      radarList.value = []
     }
   } catch {
-    // ignore
+    radarList.value = []
   }
 
   try {
@@ -346,7 +337,16 @@ onMounted(() => {
 })
 
 function onExport() {
-  showToast('统计报告已生成')
+  const text = `📊 【软考通】个人做题学情报告\n📚 累计刷题：${overview.totalAnswered} 题\n🎯 平均正确率：${overview.correctRate}%\n📌 错题记录：${overview.wrongCount} 题\n🔥 连续打卡：${overview.streakDays} 天\n📈 今日刷题：${overview.todayCount || 0} 题`
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('🎉 学情报告已复制到剪贴板！')
+    }).catch(() => {
+      showToast('🎉 学情报告生成成功！')
+    })
+  } else {
+    showToast('🎉 学情报告生成成功！')
+  }
 }
 </script>
 
