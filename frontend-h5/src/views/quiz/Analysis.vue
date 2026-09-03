@@ -236,6 +236,13 @@
         <span>📓</span>
         <span>笔记</span>
       </div>
+      <div
+        class="footer-icon"
+        @click="reportPopupVisible = true"
+      >
+        <span>⚠️</span>
+        <span>纠错</span>
+      </div>
       <button
         class="btn-submit"
         @click="onBack"
@@ -247,6 +254,13 @@
     <!-- 题目笔记弹窗 -->
     <NotePopup
       v-model:show="notePopupVisible"
+      :question-id="currentQuestionId"
+      :question-title="analysis?.question?.title || analysis?.question?.content"
+    />
+
+    <!-- 题目纠错弹窗 -->
+    <ReportPopup
+      v-model:show="reportPopupVisible"
       :question-id="currentQuestionId"
       :question-title="analysis?.question?.title || analysis?.question?.content"
     />
@@ -262,6 +276,7 @@ import { getAnalysis } from '@/api/question'
 import { questionTypeText } from '@/utils/format'
 import { renderWithFormula } from '@/utils/katex'
 import NotePopup from '@/components/NotePopup.vue'
+import ReportPopup from '@/components/ReportPopup.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -271,6 +286,7 @@ const currentIndex = ref(0)
 const totalCount = ref(1)
 const loading = ref(false)
 const notePopupVisible = ref(false)
+const reportPopupVisible = ref(false)
 
 const currentQuestionId = computed(() => String(route.params.id || analysis.value?.question?.id || '1'))
 const favorited = computed(() => quizStore.isFavorited(currentQuestionId.value))

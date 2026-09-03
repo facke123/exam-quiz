@@ -107,6 +107,13 @@
       @saved="handleNoteSaved"
       @deleted="handleNoteDeleted"
     />
+
+    <!-- 题目纠错弹窗 -->
+    <ReportPopup
+      v-model:show="reportPopupVisible"
+      :question-id="currentQuestion?.id"
+      :question-title="currentQuestion?.title || currentQuestion?.content"
+    />
   </div>
 </template>
 
@@ -125,6 +132,7 @@ import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
 import NotePopup from '@/components/NotePopup.vue'
+import ReportPopup from '@/components/ReportPopup.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -143,6 +151,7 @@ const currentIndex = ref(0)
 const answers = ref<Record<string, string | string[]>>({})
 const sheetVisible = ref(false)
 const notePopupVisible = ref(false)
+const reportPopupVisible = ref(false)
 
 const total = computed(() => questions.value.length)
 const currentQuestion = computed(() => questions.value[currentIndex.value])
@@ -194,10 +203,7 @@ function handleNoteDeleted(questionId: string | number) {
 }
 
 function onReport() {
-  showDialog({
-    title: '题目报错',
-    message: '感谢您的反馈，已将该题加入纠错队列。',
-  })
+  reportPopupVisible.value = true
 }
 
 function onPrev() {

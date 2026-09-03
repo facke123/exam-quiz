@@ -59,23 +59,26 @@ export class QuestionController {
     return this.questionService.findAdminList(dto);
   }
 
-  @Get('admin/questions/error-reports')
+  @Get(['admin/questions/error-reports', 'admin/error-reports', 'questions/admin/error-reports'])
   @ApiOperation({ summary: '后台-获取纠错列表' })
   async getErrorReportList(
     @Query('page') page?: number,
     @Query('pageSize') pageSize?: number,
     @Query('status') status?: string,
     @Query('keyword') keyword?: string,
+    @Query('type') type?: string,
   ) {
     return this.questionService.getErrorReportList(
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 10,
       status,
       keyword,
+      type,
     );
   }
 
-  @Put('admin/questions/error-reports/:id')
+  @Put(['admin/questions/error-reports/:id', 'admin/error-reports/:id'])
+  @Patch(['admin/questions/error-reports/:id', 'admin/error-reports/:id'])
   @ApiOperation({ summary: '后台-处理纠错' })
   async handleErrorReport(
     @Param('id', ParseIntPipe) id: number,
@@ -83,6 +86,13 @@ export class QuestionController {
   ) {
     await this.questionService.handleErrorReport(id, body);
     return { message: '处理成功' };
+  }
+
+  @Delete(['admin/questions/error-reports/:id', 'admin/error-reports/:id'])
+  @ApiOperation({ summary: '后台-删除纠错记录' })
+  async deleteErrorReport(@Param('id', ParseIntPipe) id: number) {
+    await this.questionService.deleteErrorReport(id);
+    return { message: '删除成功' };
   }
 
   @Get('admin/questions/import-records')
@@ -163,13 +173,32 @@ export class QuestionController {
 
   // ==================== 纠错反馈提交（用户端） ====================
 
-  @Post(['user/feedback', 'questions/error-report', 'question/feedback'])
+  @Post([
+    'user/feedback',
+    'questions/error-report',
+    'questions/error-reports',
+    'question/feedback',
+    'question/error-reports',
+    'quiz/report-error',
+  ])
   @ApiOperation({ summary: '用户提交纠错反馈' })
   async createErrorReport(
     @CurrentUser() user: UserPayload,
-    @Body() body: { questionId?: number; type?: string; content?: string; description?: string },
+    @Body() body: {
+      questionId?: number | string;
+      type?: string;
+      errorType?: string;
+      content?: string;
+      description?: string;
+      contact?: string;
+    },
   ) {
-    return this.questionService.createErrorReport(user ? user.id : 1, body);
+    const userId = user?.id ? Number(user.id) : 1;
+    const report = await this.questionService.createErrorReport(userId, body);
+    return {
+      id: Number(report.id),
+      message: '反馈提交成功，教研团队将尽快核实处理！',
+    };
   }
 
   // ==================== 动态参数路由 (:id) ====================

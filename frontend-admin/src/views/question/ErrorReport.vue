@@ -354,13 +354,26 @@ onMounted(fetchList)
     background: #fef2f2;
     color: #ef4444;
   }
-  &.typo {
+  &.typo,
+  &.content {
     background: #eef2ff;
     color: #4a6cf7;
   }
   &.analysis {
     background: #fff7ed;
     color: #f97316;
+  }
+  &.options {
+    background: #fdf4ff;
+    color: #c026d3;
+  }
+  &.image_formula {
+    background: #ecfeff;
+    color: #0891b2;
+  }
+  &.other {
+    background: #f1f5f9;
+    color: #64748b;
   }
 }
 

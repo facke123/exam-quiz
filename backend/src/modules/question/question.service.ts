@@ -979,13 +979,26 @@ export class QuestionService implements OnModuleInit {
    */
   async createErrorReport(
     userId: number,
-    dto: { questionId?: number; type?: string; content?: string; description?: string },
+    dto: {
+      questionId?: number | string;
+      type?: string;
+      errorType?: string;
+      content?: string;
+      description?: string;
+      contact?: string;
+    },
   ): Promise<ErrorReport> {
+    const qId = Number(dto.questionId) || 1;
+    const type = dto.type || dto.errorType || 'content';
+    let description = (dto.description || dto.content || '').trim();
+    if (dto.contact && dto.contact.trim()) {
+      description = `[联系方式: ${dto.contact.trim()}]\n${description}`;
+    }
     const report = this.errorReportRepository.create({
-      userId,
-      questionId: dto.questionId || 1,
-      type: dto.type || 'content',
-      description: dto.content || dto.description || '',
+      userId: Number(userId) || 1,
+      questionId: qId,
+      type,
+      description,
       status: 'pending',
     });
     return this.errorReportRepository.save(report);
@@ -999,9 +1012,18 @@ export class QuestionService implements OnModuleInit {
     pageSize: number = 10,
     status?: string,
     keyword?: string,
-  ): Promise<{ list: any[]; total: number }> {
+    type?: string,
+  ): Promise<{ list: any[]; total: number; page: number; pageSize: number }> {
     const qb = this.errorReportRepository.createQueryBuilder('er');
-    if (status) qb.andWhere('er.status = :status', { status });
+    if (status && status !== 'all') {
+      qb.andWhere('er.status = :status', { status });
+    }
+    if (type && type !== 'all') {
+      qb.andWhere('er.type = :type', { type });
+    }
+    if (keyword && keyword.trim()) {
+      qb.andWhere('(er.description LIKE :kw OR er.adminReply LIKE :kw)', { kw: `%${keyword.trim()}%` });
+    }
 
     qb.skip((page - 1) * pageSize)
       .take(pageSize)
@@ -1009,25 +1031,52 @@ export class QuestionService implements OnModuleInit {
 
     const [list, total] = await qb.getManyAndCount();
 
-    const questions = await this.questionRepository.find();
-    const qMap = new Map(questions.map((q) => [Number(q.id), q.content]));
-    const users = await this.userRepository.find();
-    const uMap = new Map(users.map((u) => [Number(u.id), u.username]));
+    const questionIds = Array.from(new Set(list.map((r) => Number(r.questionId)).filter(Boolean)));
+    const userIds = Array.from(new Set(list.map((r) => Number(r.userId)).filter(Boolean)));
 
-    const formatted = list.map((r) => ({
-      id: Number(r.id),
-      questionId: Number(r.questionId),
-      questionTitle: qMap.get(Number(r.questionId)) || '题目详情',
-      userId: Number(r.userId),
-      username: uMap.get(Number(r.userId)) || `用户_${r.userId}`,
-      content: r.description,
-      description: r.description,
-      status: r.status,
-      reply: r.adminReply || '',
-      createdAt: r.createdAt,
-    }));
+    const questions = questionIds.length > 0
+      ? await this.questionRepository.find({ where: { id: In(questionIds) } })
+      : [];
+    const users = userIds.length > 0
+      ? await this.userRepository.find({ where: { id: In(userIds) } })
+      : [];
 
-    return { list: formatted, total };
+    const qMap = new Map(questions.map((q) => [Number(q.id), q]));
+    const uMap = new Map(users.map((u) => [Number(u.id), u]));
+
+    const typeMap: Record<string, string> = {
+      answer: '参考答案错误',
+      analysis: '解析有误/不完整',
+      content: '题目错字/排版有误',
+      typo: '题目错字/排版有误',
+      options: '选项缺失/重复',
+      image_formula: '图片/公式显示异常',
+      other: '其他问题',
+    };
+
+    const formatted = list.map((r) => {
+      const q = qMap.get(Number(r.questionId));
+      const u = uMap.get(Number(r.userId));
+      return {
+        id: Number(r.id),
+        questionId: Number(r.questionId),
+        questionTitle: q?.content || `试题 #${r.questionId}`,
+        userId: Number(r.userId),
+        username: u?.username || u?.nickname || `学员_${r.userId}`,
+        type: r.type,
+        errorType: r.type,
+        errorTypeText: typeMap[r.type] || r.type || '试题疑问',
+        content: r.description,
+        description: r.description,
+        status: r.status || 'pending',
+        adminReply: r.adminReply || '',
+        reply: r.adminReply || '',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      };
+    });
+
+    return { list: formatted, total, page, pageSize };
   }
 
   /**
@@ -1044,5 +1093,12 @@ export class QuestionService implements OnModuleInit {
     report.status = data.status;
     if (data.reply) report.adminReply = data.reply;
     await this.errorReportRepository.save(report);
+  }
+
+  /**
+   * 删除纠错反馈（后台）
+   */
+  async deleteErrorReport(id: number): Promise<void> {
+    await this.errorReportRepository.delete(id);
   }
 }

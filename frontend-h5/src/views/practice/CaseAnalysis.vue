@@ -80,6 +80,13 @@
         <span>📓</span>
         <span>笔记</span>
       </div>
+      <div
+        class="footer-icon"
+        @click="reportPopupVisible = true"
+      >
+        <span>⚠️</span>
+        <span>纠错</span>
+      </div>
       <button
         class="btn-submit"
         @click="onSubmit"
@@ -94,6 +101,13 @@
       :question-id="currentCase?.id"
       :question-title="currentCase?.background || '案例分析题'"
     />
+
+    <!-- 题目纠错弹窗 -->
+    <ReportPopup
+      v-model:show="reportPopupVisible"
+      :question-id="currentCase?.id"
+      :question-title="currentCase?.background || '案例分析题'"
+    />
   </div>
 </template>
 
@@ -105,6 +119,7 @@ import { useSubjectStore } from '@/stores/subject'
 import { useQuizStore } from '@/stores/quiz'
 import { getQuestions, type Question } from '@/api/question'
 import NotePopup from '@/components/NotePopup.vue'
+import ReportPopup from '@/components/ReportPopup.vue'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
@@ -114,6 +129,7 @@ const currentCaseIdx = ref(0)
 const answers = ref<Record<number, string>>({})
 const loading = ref(false)
 const notePopupVisible = ref(false)
+const reportPopupVisible = ref(false)
 
 const isFavorited = computed(() => {
   return currentCase.value ? quizStore.isFavorited(currentCase.value.id) : false

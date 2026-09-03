@@ -18,6 +18,7 @@ declare module 'vue' {
     PcDesktopSidebarRight: typeof import('./src/components/PcDesktopSidebarRight.vue')['default']
     QuestionCard: typeof import('./src/components/QuestionCard.vue')['default']
     QuizFooter: typeof import('./src/components/QuizFooter.vue')['default']
+    ReportPopup: typeof import('./src/components/ReportPopup.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SubjectPicker: typeof import('./src/components/SubjectPicker.vue')['default']

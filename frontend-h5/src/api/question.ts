@@ -73,3 +73,18 @@ export function getAnalysis(id: string) {
     method: 'get'
   })
 }
+
+export interface ErrorReportParams {
+  questionId: string | number
+  type: string
+  description: string
+  contact?: string
+}
+
+export function submitErrorReport(data: ErrorReportParams) {
+  return request<{ id: number; message: string }>({
+    url: '/user/feedback',
+    method: 'post',
+    data
+  })
+}
