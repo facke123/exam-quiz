@@ -108,3 +108,43 @@
   --tabbar-height: 56px;
   --safe-bottom: env(safe-area-inset-bottom);
 }
+
+// 深色模式 (Dark Theme)
+[data-theme='dark'],
+.dark {
+  --gray-0: #1e293b;
+  --gray-1: #0f172a;
+  --gray-2: #1e293b;
+  --gray-3: #334155;
+  --gray-4: #475569;
+  --gray-5: #64748b;
+  --gray-6: #94a3b8;
+  --gray-7: #cbd5e1;
+  --gray-8: #e2e8f0;
+  --gray-9: #f8fafc;
+
+  --text-primary: #f8fafc;
+  --text-regular: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-placeholder: #64748b;
+
+  --bg-page: #0b0f19;
+  --bg-card: #151d2e;
+  --bg-glass: rgba(21, 29, 46, 0.85);
+  --border-light: #1e293b;
+  --border-regular: #334155;
+
+  --van-background: #0b0f19;
+  --van-background-2: #151d2e;
+  --van-text-color: #f8fafc;
+  --van-text-color-2: #cbd5e1;
+  --van-text-color-3: #64748b;
+  --van-border-color: #1e293b;
+  --van-cell-background: #151d2e;
+  --van-cell-border-color: #1e293b;
+  --van-tabbar-background: rgba(21, 29, 46, 0.95);
+  --van-dialog-background: #151d2e;
+  --van-popup-background: #151d2e;
+  --van-action-sheet-item-background: #151d2e;
+}
+

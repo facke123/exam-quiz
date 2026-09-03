@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -6,6 +6,7 @@ import { LoginDto } from './dto/login.dto';
 import { SendCodeDto } from './dto/send-code.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser, UserPayload } from '@/common/decorators/current-user.decorator';
 
@@ -61,12 +62,15 @@ export class AuthController {
   @ApiOperation({ summary: '修改密码' })
   async changePassword(
     @CurrentUser() user: UserPayload,
-    @Body() body: { oldPassword: string; newPassword: string },
+    @Body() dto: ChangePasswordDto,
   ) {
+    if (!user || !user.id) {
+      throw new UnauthorizedException('未登录或登录已过期');
+    }
     await this.authService.changePassword(
       user.id,
-      body.oldPassword,
-      body.newPassword,
+      dto.oldPassword,
+      dto.newPassword,
     );
     return { message: '密码修改成功' };
   }

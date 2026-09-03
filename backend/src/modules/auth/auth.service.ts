@@ -327,6 +327,16 @@ export class AuthService {
     oldPassword: string,
     newPassword: string,
   ): Promise<void> {
+    if (!oldPassword || !newPassword) {
+      throw new BadRequestException('原密码和新密码不能为空');
+    }
+    if (newPassword.length < 6 || newPassword.length > 50) {
+      throw new BadRequestException('新密码长度需在 6 到 50 个字符之间');
+    }
+    if (oldPassword === newPassword) {
+      throw new BadRequestException('新密码不能与原密码相同');
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -336,13 +346,13 @@ export class AuthService {
 
     const isValid = await CryptoUtil.comparePassword(oldPassword, user.password);
     if (!isValid) {
-      throw new UnauthorizedException('原密码错误');
+      throw new BadRequestException('原密码错误，请重新输入');
     }
 
     user.password = await CryptoUtil.hashPassword(newPassword);
     await this.userRepository.save(user);
 
-    // 需重新登录，清除当前 Token
+    // 密码修改成功，需重新登录，清除当前 Token
     await this.redisService.del(`token:${userId}`);
   }
 

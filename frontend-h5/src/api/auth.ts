@@ -54,7 +54,15 @@ export function forgotPassword(data: { account: string; code: string; newPasswor
   })
 }
 
-export function resetPassword(data: { oldPassword: string; newPassword: string }) {
+export function changePassword(data: { oldPassword: string; newPassword: string }) {
+  return request<{ message: string }>({
+    url: '/auth/change-password',
+    method: 'post',
+    data
+  })
+}
+
+export function resetPassword(data: { account: string; code: string; newPassword: string }) {
   return request({
     url: '/auth/reset-password',
     method: 'post',

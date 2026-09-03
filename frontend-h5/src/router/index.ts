@@ -170,8 +170,8 @@ router.beforeEach((to, _from, next) => {
   document.title = (to.meta.title as string) || '软考刷题'
 
   if (to.meta.requiresAuth === false || WHITE_LIST.includes(to.path)) {
-    // 已登录不能进入登录页
-    if (hasToken && ['/auth/login', '/auth/register', '/auth/forgot'].includes(to.path)) {
+    // 已登录状态下不能重复进入登录/注册页
+    if (hasToken && ['/auth/login', '/auth/register'].includes(to.path)) {
       return next('/')
     }
     return next()
