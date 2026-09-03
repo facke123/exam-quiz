@@ -569,6 +569,9 @@ const maskedEmail = computed(() => {
   return email
 })
 
+// 初始化标记：防止组件加载初始化数据时误触发 switch 的 @change 事件弹出 Toast
+const isInitialized = ref(false)
+
 // 初始化设置
 onMounted(() => {
   // 加载持久化设置
@@ -596,6 +599,11 @@ onMounted(() => {
 
   // 计算估算缓存大小
   calcCacheSize()
+
+  // 状态稳定后再允许用户交互触发 Toast 提示
+  setTimeout(() => {
+    isInitialized.value = true
+  }, 200)
 })
 
 function calcCacheSize() {
@@ -617,8 +625,8 @@ function calcCacheSize() {
 // 切换提醒开关
 function onToggleSetting(key: 'notify' | 'dailyRemind' | 'reviewRemind', name: string) {
   storage.set(SETTINGS_STORAGE_KEY, settings)
+  if (!isInitialized.value) return
   showToast({
-    type: 'success',
     message: `${settings[key] ? '已开启' : '已关闭'}${name}`
   })
 }
@@ -628,8 +636,8 @@ function onToggleDarkMode(val: boolean) {
   applyDarkMode(val)
   storage.set(THEME_STORAGE_KEY, val ? 'dark' : 'light')
   storage.set(SETTINGS_STORAGE_KEY, settings)
+  if (!isInitialized.value) return
   showToast({
-    type: 'success',
     message: val ? '已开启夜间模式' : '已恢复明亮模式'
   })
 }
