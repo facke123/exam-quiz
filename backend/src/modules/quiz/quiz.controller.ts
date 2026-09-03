@@ -137,32 +137,37 @@ export class QuizController {
   @ApiOperation({ summary: '收藏列表' })
   async getFavorites(
     @CurrentUser() user: UserPayload,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query() query: any,
   ) {
     return this.quizService.getFavorites(
-      user.id,
-      page ? Number(page) : 1,
-      pageSize ? Number(pageSize) : 20,
+      user ? user.id : 1,
+      query,
     );
+  }
+
+  @Get('quiz/favorites/ids')
+  @ApiOperation({ summary: '已收藏题目ID列表' })
+  async getFavoriteIds(@CurrentUser() user: UserPayload) {
+    const ids = await this.quizService.getFavoriteIds(user ? user.id : 1);
+    return { ids };
   }
 
   @Post('quiz/favorites')
   @ApiOperation({ summary: '收藏题目' })
   async addFavorite(
     @CurrentUser() user: UserPayload,
-    @Body() dto: FavoriteDto,
+    @Body() dto: any,
   ) {
-    return this.quizService.addFavorite(user.id, dto);
+    return this.quizService.addFavorite(user ? user.id : 1, dto);
   }
 
-  @Delete('quiz/favorites/:questionId')
+  @Delete(['quiz/favorites/:questionId', 'user/favorites/:questionId'])
   @ApiOperation({ summary: '取消收藏' })
   async removeFavorite(
     @CurrentUser() user: UserPayload,
     @Param('questionId', ParseIntPipe) questionId: number,
   ) {
-    await this.quizService.removeFavorite(user.id, questionId);
+    await this.quizService.removeFavorite(user ? user.id : 1, questionId);
     return { message: '取消收藏成功' };
   }
 
@@ -178,7 +183,7 @@ export class QuizController {
     return this.quizService.getNotes(
       user ? user.id : 1,
       page ? Number(page) : 1,
-      pageSize ? Number(pageSize) : 20,
+      pageSize ? Number(pageSize) : 50,
     );
   }
 
@@ -201,13 +206,13 @@ export class QuizController {
     return { message: '删除成功' };
   }
 
-  @Get('quiz/notes/:questionId')
+  @Get(['quiz/notes/:questionId', 'user/notes/:questionId'])
   @ApiOperation({ summary: '获取单题笔记' })
   async getNote(
     @CurrentUser() user: UserPayload,
     @Param('questionId', ParseIntPipe) questionId: number,
   ) {
-    return this.quizService.getNote(user.id, questionId);
+    return this.quizService.getNote(user ? user.id : 1, questionId);
   }
 
   // ==================== 做题记录 ====================

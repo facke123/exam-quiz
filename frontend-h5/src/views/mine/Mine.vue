@@ -89,6 +89,26 @@
         </div>
         <div
           class="uc-item"
+          @click="$router.push('/favorites')"
+        >
+          <div
+            class="uci-icon"
+            style="background: #fef3c7; color: #d97706"
+          >
+            ⭐
+          </div>
+          <div class="uci-text">
+            我的收藏
+          </div>
+          <div class="uci-value">
+            {{ overview.favoriteCount || 0 }}题
+          </div>
+          <div class="uci-arrow">
+            ›
+          </div>
+        </div>
+        <div
+          class="uc-item"
           @click="$router.push('/notes')"
         >
           <div
@@ -294,6 +314,7 @@ import { useSubjectStore } from '@/stores/subject'
 import { getOverview } from '@/api/stats'
 import { getAnnouncements, type AnnouncementItem } from '@/api/content'
 import { getNotes } from '@/api/user'
+import { getFavorites } from '@/api/favorite'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -326,9 +347,10 @@ function handleOpenAnnouncements() {
 
 async function fetchStats() {
   try {
-    const [oRes, nRes] = await Promise.allSettled([
+    const [oRes, nRes, fRes] = await Promise.allSettled([
       getOverview(subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined),
       getNotes({ page: 1, pageSize: 1 }),
+      getFavorites({ page: 1, pageSize: 1 }),
     ])
     if (oRes.status === 'fulfilled' && oRes.value?.data) {
       overview.totalAnswered = oRes.value.data.totalAnswered || 0
@@ -337,6 +359,9 @@ async function fetchStats() {
     }
     if (nRes.status === 'fulfilled' && nRes.value?.data) {
       notesCount.value = nRes.value.data.total || 0
+    }
+    if (fRes.status === 'fulfilled' && fRes.value?.data) {
+      overview.favoriteCount = fRes.value.data.total || overview.favoriteCount || 0
     }
   } catch {
     // ignore

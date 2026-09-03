@@ -67,15 +67,15 @@
     <div class="quiz-footer">
       <div
         class="footer-icon"
-        :class="{ active: favorited }"
-        @click="favorited = !favorited"
+        :class="{ active: isFavorited }"
+        @click="onToggleFavorite"
       >
-        <span>{{ favorited ? '⭐' : '☆' }}</span>
-        <span>{{ favorited ? '已收藏' : '收藏' }}</span>
+        <span>{{ isFavorited ? '⭐' : '☆' }}</span>
+        <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
       </div>
       <div
         class="footer-icon"
-        @click="showToast('笔记已保存')"
+        @click="notePopupVisible = true"
       >
         <span>📓</span>
         <span>笔记</span>
@@ -87,6 +87,13 @@
         提交答案
       </button>
     </div>
+
+    <!-- 题目笔记弹窗 -->
+    <NotePopup
+      v-model:show="notePopupVisible"
+      :question-id="currentCase?.id"
+      :question-title="currentCase?.background || '案例分析题'"
+    />
   </div>
 </template>
 
@@ -95,14 +102,29 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
+import { useQuizStore } from '@/stores/quiz'
 import { getQuestions, type Question } from '@/api/question'
+import NotePopup from '@/components/NotePopup.vue'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+const quizStore = useQuizStore()
+
 const currentCaseIdx = ref(0)
-const favorited = ref(false)
 const answers = ref<Record<number, string>>({})
 const loading = ref(false)
+const notePopupVisible = ref(false)
+
+const isFavorited = computed(() => {
+  return currentCase.value ? quizStore.isFavorited(currentCase.value.id) : false
+})
+
+async function onToggleFavorite() {
+  if (currentCase.value) {
+    const isNowFav = await quizStore.toggleFavorite(currentCase.value.id)
+    showToast(isNowFav ? '已加入收藏' : '已取消收藏')
+  }
+}
 
 function onBack() {
   if (window.history.state?.back) {
@@ -197,6 +219,7 @@ watch(
 )
 
 onMounted(() => {
+  quizStore.fetchFavorites()
   fetchCaseQuestions()
 })
 </script>

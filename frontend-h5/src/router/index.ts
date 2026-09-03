@@ -117,6 +117,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '笔记管理', requiresAuth: true }
   },
   {
+    path: '/favorites',
+    name: 'Favorites',
+    component: () => import('@/views/user/Favorites.vue'),
+    meta: { title: '我的收藏', requiresAuth: true }
+  },
+  {
     path: '/records',
     name: 'Records',
     component: () => import('@/views/user/Records.vue'),

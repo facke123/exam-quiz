@@ -12,6 +12,7 @@ declare module 'vue' {
     CountdownTimer: typeof import('./src/components/CountdownTimer.vue')['default']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']
     LoadingState: typeof import('./src/components/LoadingState.vue')['default']
+    NotePopup: typeof import('./src/components/NotePopup.vue')['default']
     OptionItem: typeof import('./src/components/OptionItem.vue')['default']
     PcDesktopSidebarLeft: typeof import('./src/components/PcDesktopSidebarLeft.vue')['default']
     PcDesktopSidebarRight: typeof import('./src/components/PcDesktopSidebarRight.vue')['default']

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import type { Question } from '@/api/question'
+import { getFavoriteIds, addFavorite, removeFavorite } from '@/api/favorite'
 
 export const useQuizStore = defineStore('quiz', () => {
   const recordId = ref<string>('')
@@ -10,6 +11,7 @@ export const useQuizStore = defineStore('quiz', () => {
   const answers = reactive<Record<string, string | string[]>>({})
   const duration = ref<number>(0)
   const favoritedIds = ref<string[]>([])
+  const notesMap = reactive<Record<string, string>>({})
 
   const total = () => questionList.value.length
   const currentQuestion = () => questionList.value[currentIndex.value]
@@ -44,13 +46,57 @@ export const useQuizStore = defineStore('quiz', () => {
     currentIndex.value = Math.min(Math.max(0, index), questionList.value.length - 1)
   }
 
-  function toggleFavorite(questionId: string) {
-    const idx = favoritedIds.value.indexOf(questionId)
-    if (idx > -1) {
-      favoritedIds.value.splice(idx, 1)
-    } else {
-      favoritedIds.value.push(questionId)
+  async function fetchFavorites() {
+    try {
+      const res = await getFavoriteIds()
+      if (res?.data?.ids && Array.isArray(res.data.ids)) {
+        favoritedIds.value = res.data.ids.map(String)
+      }
+    } catch {
+      // ignore
     }
+  }
+
+  function isFavorited(questionId: string | number) {
+    const sId = String(questionId)
+    return favoritedIds.value.includes(sId)
+  }
+
+  async function toggleFavorite(questionId: string | number): Promise<boolean> {
+    const sId = String(questionId)
+    const idx = favoritedIds.value.indexOf(sId)
+    const currentlyFavorited = idx > -1
+
+    if (currentlyFavorited) {
+      favoritedIds.value.splice(idx, 1)
+      try {
+        await removeFavorite(questionId)
+      } catch {
+        // rollback if failed
+        favoritedIds.value.push(sId)
+        return true
+      }
+      return false
+    } else {
+      favoritedIds.value.push(sId)
+      try {
+        await addFavorite(questionId)
+      } catch {
+        // rollback if failed
+        const rollbackIdx = favoritedIds.value.indexOf(sId)
+        if (rollbackIdx > -1) favoritedIds.value.splice(rollbackIdx, 1)
+        return false
+      }
+      return true
+    }
+  }
+
+  function setNote(questionId: string | number, note: string) {
+    notesMap[String(questionId)] = note
+  }
+
+  function hasNote(questionId: string | number) {
+    return !!notesMap[String(questionId)]
   }
 
   function reset() {
@@ -61,6 +107,7 @@ export const useQuizStore = defineStore('quiz', () => {
     Object.keys(answers).forEach((k) => delete answers[k])
     duration.value = 0
     favoritedIds.value = []
+    Object.keys(notesMap).forEach((k) => delete notesMap[k])
   }
 
   return {
@@ -71,6 +118,7 @@ export const useQuizStore = defineStore('quiz', () => {
     answers,
     duration,
     favoritedIds,
+    notesMap,
     total,
     currentQuestion,
     answeredCount,
@@ -81,7 +129,11 @@ export const useQuizStore = defineStore('quiz', () => {
     next,
     prev,
     goTo,
+    fetchFavorites,
+    isFavorited,
     toggleFavorite,
+    setNote,
+    hasNote,
     reset
   }
 })

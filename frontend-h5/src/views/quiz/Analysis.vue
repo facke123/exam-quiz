@@ -224,7 +224,7 @@
       <div
         class="footer-icon"
         :class="{ active: favorited }"
-        @click="favorited = !favorited"
+        @click="onToggleFavorite"
       >
         <span>{{ favorited ? '⭐' : '☆' }}</span>
         <span>{{ favorited ? '已收藏' : '收藏' }}</span>
@@ -243,23 +243,37 @@
         返回继续学习
       </button>
     </div>
+
+    <!-- 题目笔记弹窗 -->
+    <NotePopup
+      v-model:show="notePopupVisible"
+      :question-id="currentQuestionId"
+      :question-title="analysis?.question?.title || analysis?.question?.content"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast, showDialog } from 'vant'
+import { showToast } from 'vant'
+import { useQuizStore } from '@/stores/quiz'
 import { getAnalysis } from '@/api/question'
 import { questionTypeText } from '@/utils/format'
 import { renderWithFormula } from '@/utils/katex'
+import NotePopup from '@/components/NotePopup.vue'
 
 const route = useRoute()
 const router = useRouter()
+const quizStore = useQuizStore()
+
 const currentIndex = ref(0)
 const totalCount = ref(1)
-const favorited = ref(false)
 const loading = ref(false)
+const notePopupVisible = ref(false)
+
+const currentQuestionId = computed(() => String(route.params.id || analysis.value?.question?.id || '1'))
+const favorited = computed(() => quizStore.isFavorited(currentQuestionId.value))
 
 function onBack() {
   if (window.history.state?.back) {
@@ -300,10 +314,12 @@ function onRegenAI() {
 }
 
 function onNote() {
-  showDialog({
-    title: '添加题目笔记',
-    message: '笔记已保存至“我的笔记”。',
-  })
+  notePopupVisible.value = true
+}
+
+async function onToggleFavorite() {
+  const isNowFav = await quizStore.toggleFavorite(currentQuestionId.value)
+  showToast(isNowFav ? '已加入收藏' : '已取消收藏')
 }
 
 async function loadAnalysisData() {
@@ -334,6 +350,7 @@ async function loadAnalysisData() {
 }
 
 onMounted(() => {
+  quizStore.fetchFavorites()
   loadAnalysisData()
 })
 </script>

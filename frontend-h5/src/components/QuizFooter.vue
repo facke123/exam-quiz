@@ -11,10 +11,11 @@
       </div>
       <div
         class="footer-icon"
+        :class="{ active: hasNote }"
         @click="$emit('note')"
       >
         <span>📓</span>
-        <span>笔记</span>
+        <span>{{ hasNote ? '有笔记' : '笔记' }}</span>
       </div>
       <div
         class="footer-icon"
@@ -56,6 +57,7 @@ defineProps<{
   current: number
   total: number
   favorited?: boolean
+  hasNote?: boolean
 }>()
 
 defineEmits<{

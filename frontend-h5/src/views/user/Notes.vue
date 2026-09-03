@@ -10,35 +10,99 @@
       <div class="title">
         我的笔记
       </div>
-      <div class="right" />
+      <div class="right">
+        <span class="total-badge">{{ filteredList.length }}条</span>
+      </div>
     </div>
 
+    <!-- 搜索栏 -->
+    <div v-if="list.length > 0" class="search-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="搜索考点笔记或题目关键词..."
+          class="search-input"
+        >
+        <span
+          v-if="searchKeyword"
+          class="clear-icon"
+          @click="searchKeyword = ''"
+        >✕</span>
+      </div>
+    </div>
+
+    <!-- 加载中 -->
     <div
-      v-if="list.length"
+      v-if="loading"
+      class="loading-state"
+      style="padding: 60px 16px; text-align: center"
+    >
+      <van-loading
+        type="spinner"
+        color="var(--primary)"
+      >
+        加载笔记数据中...
+      </van-loading>
+    </div>
+
+    <!-- 笔记列表 -->
+    <div
+      v-else-if="filteredList.length > 0"
       class="notes-list"
     >
       <div
-        v-for="note in list"
+        v-for="note in filteredList"
         :key="note.id"
         class="note-card"
       >
         <div class="nc-head">
-          <span class="nc-tag">考点笔记</span>
+          <span class="nc-tag">{{ note.chapterName || note.subjectName || '考点笔记' }}</span>
           <span class="nc-time">{{ formatTime(note.updatedAt || note.createdAt) }}</span>
           <span
             class="nc-del"
             @click="onDelete(note.id)"
-          >删除</span>
+          >✕ 删除</span>
         </div>
-        <div class="nc-title">
-          {{ note.title }}
-        </div>
+
+        <!-- 关联试题标题 -->
+        <div class="nc-title" v-html="renderWithFormula(note.title || '关联试题')" />
+
+        <!-- 笔记正文 -->
         <div class="nc-content">
-          {{ note.content }}
+          <div class="nc-content-text">
+            {{ note.content }}
+          </div>
+        </div>
+
+        <!-- 底部快捷操作 -->
+        <div class="nc-footer">
+          <div class="nc-actions">
+            <div
+              class="nca primary"
+              @click="goAnalysis(note.questionId)"
+            >
+              📖 查看解析
+            </div>
+            <div
+              class="nca"
+              @click="redoSingle(note.questionId)"
+            >
+              🎯 单题攻关
+            </div>
+          </div>
+          <div
+            class="nca edit-btn"
+            @click="editNote(note)"
+          >
+            ✏️ 修改笔记
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- 空状态 -->
     <div
       v-else
       class="empty-state"
@@ -47,36 +111,72 @@
         📓
       </div>
       <div class="es-text">
-        还没有笔记
+        {{ searchKeyword ? '未找到相关笔记' : '还没有备考笔记' }}
       </div>
       <div class="es-sub">
-        做题时点击“笔记”按钮即可随时记录备考心得
+        {{ searchKeyword ? '请尝试更换搜索关键词' : '做题或看解析时点击“📓 笔记”按钮即可随时记录备考心得' }}
       </div>
       <button
+        v-if="!searchKeyword"
         class="es-btn"
         @click="$router.push('/chapter')"
       >
         去刷题记录
       </button>
+      <button
+        v-else
+        class="es-btn"
+        @click="searchKeyword = ''"
+      >
+        清空搜索条件
+      </button>
     </div>
+
+    <!-- 笔记编辑弹窗 -->
+    <NotePopup
+      v-model:show="editPopupVisible"
+      :question-id="currentEditingNote?.questionId"
+      :question-title="currentEditingNote?.title"
+      @saved="onNoteSaved"
+      @deleted="onNoteDeleted"
+    />
+
+    <div style="height: 40px" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showConfirmDialog, showToast } from 'vant'
 import { getNotes, deleteNote, type Note } from '@/api/user'
+import { renderWithFormula } from '@/utils/katex'
+import NotePopup from '@/components/NotePopup.vue'
 
 const router = useRouter()
 const list = ref<Note[]>([])
 const loading = ref(false)
+const searchKeyword = ref('')
+
+const editPopupVisible = ref(false)
+const currentEditingNote = ref<Note | null>(null)
+
+const filteredList = computed(() => {
+  const kw = searchKeyword.value.trim().toLowerCase()
+  if (!kw) return list.value
+  return list.value.filter(
+    (n) =>
+      (n.content && n.content.toLowerCase().includes(kw)) ||
+      (n.title && n.title.toLowerCase().includes(kw)) ||
+      (n.chapterName && n.chapterName.toLowerCase().includes(kw))
+  )
+})
 
 function onBack() {
   if (window.history.state?.back) {
     router.back()
   } else {
-    router.push('/')
+    router.push('/mine')
   }
 }
 
@@ -93,7 +193,7 @@ function formatTime(t?: string) {
 async function fetchNotesList() {
   loading.value = true
   try {
-    const res = await getNotes({ page: 1, pageSize: 50 })
+    const res = await getNotes({ page: 1, pageSize: 100 })
     if (res?.data?.list) {
       list.value = res.data.list
     } else if (Array.isArray(res?.data)) {
@@ -106,6 +206,27 @@ async function fetchNotesList() {
   } finally {
     loading.value = false
   }
+}
+
+function editNote(note: Note) {
+  currentEditingNote.value = note
+  editPopupVisible.value = true
+}
+
+function onNoteSaved() {
+  fetchNotesList()
+}
+
+function onNoteDeleted(qId: string | number) {
+  list.value = list.value.filter((n) => String(n.questionId) !== String(qId))
+}
+
+function goAnalysis(questionId: string | number) {
+  router.push(`/quiz/analysis/${questionId}`)
+}
+
+function redoSingle(questionId: string | number) {
+  router.push(`/quiz/practice?mode=practice&questionId=${questionId}`)
 }
 
 async function onDelete(id: string) {
@@ -143,9 +264,10 @@ onMounted(() => {
   z-index: 50;
 
   .back {
-    font-size: 24px;
+    font-size: 26px;
     color: var(--gray-7);
     cursor: pointer;
+    line-height: 1;
   }
 
   .title {
@@ -155,7 +277,46 @@ onMounted(() => {
   }
 
   .right {
-    width: 24px;
+    .total-badge {
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 600;
+    }
+  }
+}
+
+.search-bar {
+  padding: 10px 14px;
+  background: var(--gray-0);
+  border-bottom: 1px solid var(--gray-2);
+
+  .search-input-wrap {
+    background: var(--gray-1);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    gap: 8px;
+
+    .search-icon {
+      font-size: 14px;
+      color: var(--gray-4);
+    }
+
+    .search-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      color: var(--gray-8);
+      outline: none;
+    }
+
+    .clear-icon {
+      font-size: 12px;
+      color: var(--gray-4);
+      cursor: pointer;
+    }
   }
 }
 
@@ -169,8 +330,9 @@ onMounted(() => {
 .note-card {
   background: var(--gray-0);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 16px;
   box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-2);
 
   .nc-head {
     display: flex;
@@ -185,6 +347,10 @@ onMounted(() => {
       background: #fef3c7;
       padding: 2px 6px;
       border-radius: 4px;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .nc-time {
@@ -194,26 +360,68 @@ onMounted(() => {
     }
 
     .nc-del {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--gray-4);
       cursor: pointer;
+
+      &:hover {
+        color: var(--danger);
+      }
     }
   }
 
   .nc-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--gray-8);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    line-height: 1.5;
   }
 
   .nc-content {
-    font-size: 13px;
-    line-height: 1.6;
-    color: var(--gray-6);
-    background: var(--gray-1);
+    background: #f8fafc;
     padding: 10px 12px;
     border-radius: var(--radius-xs);
+    border-left: 3px solid #6366f1;
+    margin-bottom: 12px;
+
+    .nc-content-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--gray-7);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  .nc-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--gray-2);
+    padding-top: 10px;
+    font-size: 12px;
+
+    .nc-actions {
+      display: flex;
+      gap: 12px;
+
+      .nca {
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--gray-6);
+
+        &.primary {
+          color: var(--primary);
+        }
+      }
+    }
+
+    .edit-btn {
+      color: #4f46e5;
+      font-weight: 700;
+      cursor: pointer;
+    }
   }
 }
 
@@ -236,6 +444,7 @@ onMounted(() => {
     font-size: 13px;
     color: var(--gray-5);
     margin-top: 6px;
+    line-height: 1.5;
   }
 
   .es-btn {
@@ -252,3 +461,4 @@ onMounted(() => {
   }
 }
 </style>
+

@@ -151,6 +151,12 @@ export class QuizService {
         });
       }
       questionIds = questions.map((q) => Number(q.id));
+    } else if (dto.mode === 'favorite') {
+      const favorites = await this.favoriteRepository.find({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+      });
+      questionIds = favorites.map((f) => Number(f.questionId));
     } else {
       const questions = await this.questionRepository
         .createQueryBuilder('q')
@@ -613,35 +619,115 @@ export class QuizService {
   }
 
   /**
-   * 获取收藏列表
+   * 获取收藏列表（包含题目详细信息）
    */
   async getFavorites(
     userId: number,
-    page: number = 1,
-    pageSize: number = 20,
+    query: any = {},
   ): Promise<{ list: any[]; total: number }> {
-    const [list, total] = await this.favoriteRepository.findAndCount({
-      where: { userId },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { createdAt: 'DESC' },
+    const { page = 1, pageSize = 50, subjectId, chapterId, type } = query;
+    const qb = this.favoriteRepository
+      .createQueryBuilder('f')
+      .where('f.userId = :userId', { userId });
+
+    qb.skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('f.createdAt', 'DESC');
+
+    const [favorites, total] = await qb.getManyAndCount();
+
+    if (favorites.length === 0) {
+      return { list: [], total: 0 };
+    }
+
+    const qIds = favorites.map((f) => Number(f.questionId)).filter(Boolean);
+    const questions = qIds.length > 0 ? await this.questionRepository.find({ where: { id: In(qIds) } }) : [];
+    const qMap = new Map(questions.map((q) => [Number(q.id), q]));
+
+    const chapters = await this.chapterRepository.find();
+    const cMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+    const subjects = await this.subjectRepository.find();
+    const sMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+
+    const typeTextMap: Record<string, string> = {
+      single: '单选题',
+      multiple: '多选题',
+      judge: '判断题',
+      case: '案例分析',
+      subjective: '主观题',
+    };
+
+    let formatted = favorites.map((item) => {
+      const q = qMap.get(Number(item.questionId));
+      const qType = q ? fromDbType(q.type) : 'single';
+      let options = q ? q.options : [];
+      if (typeof options === 'string') {
+        try {
+          options = JSON.parse(options);
+        } catch {
+          options = [];
+        }
+      }
+      return {
+        id: String(item.id),
+        questionId: String(item.questionId),
+        type: qType,
+        typeText: typeTextMap[qType] || '单选题',
+        title: q ? q.content : '题目详情',
+        content: q ? q.content : '',
+        options: Array.isArray(options) ? options : [],
+        answer: q ? q.answer : 'A',
+        correctAnswer: q ? q.answer : 'A',
+        analysis: q ? (q.analysis || '详见官方解析与考点分析。') : '详见官方解析',
+        subjectId: q ? Number(q.subjectId) : 1,
+        chapterId: q ? Number(q.chapterId) : 1,
+        subjectName: sMap.get(Number(q ? q.subjectId : 1)) || '系统集成项目管理工程师',
+        chapterName: cMap.get(Number(q ? q.chapterId : 1)) || '核心考点章节',
+        createdAt: item.createdAt,
+      };
     });
-    return { list, total };
+
+    if (subjectId) {
+      formatted = formatted.filter((item) => String(item.subjectId) === String(subjectId));
+    }
+    if (chapterId) {
+      formatted = formatted.filter((item) => String(item.chapterId) === String(chapterId));
+    }
+    if (type && type !== 'all') {
+      formatted = formatted.filter((item) => item.type === type || item.typeText?.includes(type));
+    }
+
+    return { list: formatted, total };
+  }
+
+  /**
+   * 获取用户收藏的所有题目ID列表
+   */
+  async getFavoriteIds(userId: number): Promise<string[]> {
+    const list = await this.favoriteRepository.find({
+      where: { userId },
+      select: ['questionId'],
+    });
+    return list.map((f) => String(f.questionId));
   }
 
   /**
    * 收藏题目
    */
-  async addFavorite(userId: number, dto: FavoriteDto): Promise<Favorite> {
+  async addFavorite(userId: number, dto: any): Promise<Favorite> {
+    const qId = Number(dto.questionId);
+    if (!qId) {
+      throw new BadRequestException('题目ID不能为空');
+    }
     const exists = await this.favoriteRepository.findOne({
-      where: { userId, questionId: dto.questionId },
+      where: { userId, questionId: qId },
     });
     if (exists) {
       return exists;
     }
     const favorite = this.favoriteRepository.create({
       userId,
-      questionId: dto.questionId,
+      questionId: qId,
     });
     return this.favoriteRepository.save(favorite);
   }
@@ -650,7 +736,12 @@ export class QuizService {
    * 取消收藏
    */
   async removeFavorite(userId: number, questionId: number): Promise<void> {
-    await this.favoriteRepository.delete({ userId, questionId });
+    await this.favoriteRepository
+      .createQueryBuilder()
+      .delete()
+      .where('userId = :userId', { userId })
+      .andWhere('(questionId = :id OR id = :id)', { id: questionId })
+      .execute();
   }
 
   /**
@@ -659,7 +750,7 @@ export class QuizService {
   async getNotes(
     userId: number,
     page: number = 1,
-    pageSize: number = 20,
+    pageSize: number = 50,
   ): Promise<{ list: any[]; total: number }> {
     const [list, total] = await this.noteRepository.findAndCount({
       where: { userId },
@@ -668,17 +759,45 @@ export class QuizService {
       order: { updatedAt: 'DESC' },
     });
 
-    const questions = await this.questionRepository.find();
-    const qMap = new Map(questions.map((q) => [Number(q.id), q.content]));
+    if (list.length === 0) {
+      return { list: [], total: 0 };
+    }
 
-    const formatted = list.map((n) => ({
-      id: String(n.id),
-      questionId: String(n.questionId),
-      title: qMap.get(Number(n.questionId)) || '笔记关联题目',
-      content: n.content,
-      createdAt: n.createdAt,
-      updatedAt: n.updatedAt,
-    }));
+    const qIds = list.map((n) => Number(n.questionId)).filter(Boolean);
+    const questions = qIds.length > 0 ? await this.questionRepository.find({ where: { id: In(qIds) } }) : [];
+    const qMap = new Map(questions.map((q) => [Number(q.id), q]));
+
+    const chapters = await this.chapterRepository.find();
+    const cMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+    const subjects = await this.subjectRepository.find();
+    const sMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+
+    const formatted = list.map((n) => {
+      const q = qMap.get(Number(n.questionId));
+      let options = q ? q.options : [];
+      if (typeof options === 'string') {
+        try {
+          options = JSON.parse(options);
+        } catch {
+          options = [];
+        }
+      }
+      return {
+        id: String(n.id),
+        questionId: String(n.questionId),
+        title: q ? q.content : '笔记关联题目',
+        content: n.content,
+        options: Array.isArray(options) ? options : [],
+        answer: q ? q.answer : '',
+        analysis: q ? q.analysis : '',
+        subjectId: q ? Number(q.subjectId) : 1,
+        chapterId: q ? Number(q.chapterId) : 1,
+        subjectName: sMap.get(Number(q ? q.subjectId : 1)) || '系统集成项目管理工程师',
+        chapterName: cMap.get(Number(q ? q.chapterId : 1)) || '核心考点章节',
+        createdAt: n.createdAt,
+        updatedAt: n.updatedAt,
+      };
+    });
 
     return { list: formatted, total };
   }
@@ -688,36 +807,62 @@ export class QuizService {
    */
   async saveNote(userId: number, dto: any): Promise<any> {
     const qId = Number(dto.questionId);
+    if (!qId) {
+      throw new BadRequestException('题目ID不能为空');
+    }
+    const content = (dto.content || '').trim();
     let note = await this.noteRepository.findOne({
       where: { userId, questionId: qId },
     });
+
+    if (!content) {
+      if (note) {
+        await this.noteRepository.delete({ id: note.id });
+      }
+      return { id: note ? String(note.id) : '', questionId: String(qId), content: '', message: '笔记已清空' };
+    }
+
     if (note) {
-      note.content = dto.content;
+      note.content = content;
     } else {
       note = this.noteRepository.create({
         userId,
         questionId: qId,
-        content: dto.content,
+        content,
       });
     }
     const saved = await this.noteRepository.save(note);
-    return { id: String(saved.id) };
+    return { id: String(saved.id), questionId: String(saved.questionId), content: saved.content };
   }
 
   /**
    * 删除笔记
    */
   async deleteNote(userId: number, id: number): Promise<void> {
-    await this.noteRepository.delete({ id, userId });
+    await this.noteRepository
+      .createQueryBuilder()
+      .delete()
+      .where('userId = :userId', { userId })
+      .andWhere('(id = :id OR questionId = :id)', { id })
+      .execute();
   }
 
   /**
    * 获取笔记
    */
-  async getNote(userId: number, questionId: number): Promise<Note | null> {
-    return this.noteRepository.findOne({
+  async getNote(userId: number, questionId: number): Promise<any> {
+    const note = await this.noteRepository.findOne({
       where: { userId, questionId },
     });
+    return note
+      ? {
+          id: String(note.id),
+          questionId: String(note.questionId),
+          content: note.content,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+        }
+      : null;
   }
 
   /**

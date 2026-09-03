@@ -5,6 +5,13 @@ export interface Note {
   questionId: string
   title: string
   content: string
+  options?: any[]
+  answer?: string | string[]
+  analysis?: string
+  subjectId?: number
+  chapterId?: number
+  subjectName?: string
+  chapterName?: string
   createdAt: string
   updatedAt: string
 }
@@ -28,11 +35,18 @@ export function updateProfile(data: { username?: string; avatar?: string }) {
   })
 }
 
-export function getNotes(params: { page?: number; pageSize?: number }) {
+export function getNotes(params?: { page?: number; pageSize?: number; subjectId?: string | number }) {
   return request<{ list: Note[]; total: number }>({
     url: '/user/notes',
     method: 'get',
     params
+  })
+}
+
+export function getNote(questionId: string | number) {
+  return request<{ id?: string; questionId: string | number; content: string; createdAt?: string; updatedAt?: string } | null>({
+    url: `/quiz/notes/${questionId}`,
+    method: 'get'
   })
 }
 
@@ -44,15 +58,22 @@ export function getRecords(params: { page?: number; pageSize?: number; mode?: st
   })
 }
 
-export function addNote(data: { questionId: string; content: string }) {
-  return request<{ id: string }>({
+export function saveNote(data: { questionId: string | number; content: string }) {
+  return request<{ id: string; questionId?: string; content?: string }>({
     url: '/user/notes',
     method: 'post',
-    data
+    data: {
+      questionId: Number(data.questionId),
+      content: data.content
+    }
   })
 }
 
-export function deleteNote(id: string) {
+export function addNote(data: { questionId: string | number; content: string }) {
+  return saveNote(data)
+}
+
+export function deleteNote(id: string | number) {
   return request({
     url: `/user/notes/${id}`,
     method: 'delete'

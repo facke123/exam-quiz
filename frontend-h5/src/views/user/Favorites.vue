@@ -1,5 +1,5 @@
 <template>
-  <div class="wrong-page">
+  <div class="fav-page">
     <div class="nav-bar">
       <div
         class="back"
@@ -8,7 +8,7 @@
         ‹
       </div>
       <div class="title">
-        错题本攻关
+        我的题目收藏
       </div>
       <div
         class="right"
@@ -18,19 +18,19 @@
       </div>
     </div>
 
-    <!-- 科目与错题总览 -->
+    <!-- 科目与收藏总览 -->
     <div class="subject-bar">
       <div class="sub-info">
-        <span class="sub-icon">📚</span>
+        <span class="sub-icon">⭐</span>
         <span class="sub-name">{{ currentSubjectName }}</span>
       </div>
       <div class="sub-toggle" @click="toggleSubjectFilter">
-        {{ showAllSubjects ? '查看当前科目' : '查看全科错题' }} ⇋
+        {{ showAllSubjects ? '查看当前科目' : '查看全科收藏' }} ⇋
       </div>
     </div>
 
     <!-- 题型过滤器 -->
-    <div class="wrong-header">
+    <div class="fav-header">
       <div
         v-for="t in typeTabs"
         :key="t.value"
@@ -43,34 +43,34 @@
       </div>
     </div>
 
-    <!-- 错题统计与集中攻关 -->
-    <div class="wrong-stats">
-      <div class="ws-info">
-        <div class="ws-num">
+    <!-- 收藏统计与集中攻关 -->
+    <div class="fav-stats">
+      <div class="fs-info">
+        <div class="fs-num">
           {{ filteredList.length }}
         </div>
-        <div class="ws-label">
-          道待攻克错题
+        <div class="fs-label">
+          道收藏试题
         </div>
       </div>
-      <div class="ws-actions">
+      <div class="fs-actions">
         <div
           v-if="editMode && filteredList.length > 0"
-          class="ws-btn danger"
+          class="fs-btn danger"
           @click="clearAllCurrent"
         >
           一键清空
         </div>
         <div
-          class="ws-btn"
+          class="fs-btn"
           @click="startRedo"
         >
-          🚀 开始错题重练
+          🚀 开始收藏重练
         </div>
       </div>
     </div>
 
-    <!-- 错题卡片列表 -->
+    <!-- 收藏卡片列表 -->
     <div
       v-if="loading"
       class="loading-state"
@@ -80,7 +80,7 @@
         type="spinner"
         color="var(--primary)"
       >
-        加载错题数据中...
+        加载收藏题目数据中...
       </van-loading>
     </div>
     <div
@@ -88,53 +88,53 @@
       class="empty-state"
       style="padding: 50px 16px; text-align: center"
     >
-      <van-empty description="暂无待攻克的错题记录，太棒了！" />
-      <div class="empty-tip">在平时刷题做错时，系统将自动汇总至错题本中</div>
+      <van-empty description="暂无收藏的试题记录" />
+      <div class="empty-tip">在平时刷题做题或查看解析时，点击“⭐ 收藏”即可汇总至此</div>
       <van-button
         type="primary"
         round
         size="small"
         style="margin-top: 14px; padding: 0 20px"
-        @click="$router.push('/quiz/practice')"
+        @click="$router.push('/chapter')"
       >
-        去刷题巩固
+        去题库刷题
       </van-button>
     </div>
     <div
       v-else
-      class="wrong-list"
+      class="fav-list"
     >
       <div
         v-for="(item, idx) in filteredList"
         :key="item.id || item.questionId"
-        class="wrong-card"
+        class="fav-card"
       >
-        <div class="wc-header">
-          <div class="wc-tags">
-            <span class="wc-idx">#{{ idx + 1 }}</span>
-            <span class="wc-type">{{ item.typeText || '单选题' }}</span>
-            <span class="wc-chapter">{{ item.chapterName || item.subjectName || '核心考点' }}</span>
+        <div class="fc-header">
+          <div class="fc-tags">
+            <span class="fc-idx">#{{ idx + 1 }}</span>
+            <span class="fc-type">{{ item.typeText || '单选题' }}</span>
+            <span class="fc-chapter">{{ item.chapterName || item.subjectName || '核心考点' }}</span>
           </div>
-          <div class="wc-time">
-            已错 <strong class="danger-text">{{ item.wrongCount || 1 }}</strong> 次
+          <div class="fc-time">
+            {{ formatTime(item.createdAt) }}
           </div>
         </div>
 
         <!-- 题干富文本渲染（含公式与图片） -->
         <div
-          class="wc-content"
+          class="fc-content"
           v-html="renderWithFormula(item.content || item.title || '题目内容加载中...')"
         />
 
         <!-- 选项简览（展开时展示） -->
         <div
           v-if="item.options && item.options.length > 0 && expandedIds.includes(item.questionId || item.id)"
-          class="wc-options-box"
+          class="fc-options-box"
         >
           <div
             v-for="opt in item.options"
             :key="opt.key"
-            class="wc-opt-row"
+            class="fc-opt-row"
             :class="{ 'is-correct': isOptionCorrect(item, opt.key) }"
           >
             <span class="opt-key">{{ opt.key }}.</span>
@@ -143,7 +143,7 @@
         </div>
 
         <!-- 正确答案与解析摘要 -->
-        <div class="wc-answer-bar">
+        <div class="fc-answer-bar">
           <div class="ans-left">
             <span class="ans-badge correct">正确答案：{{ item.correctAnswer || item.answer || 'A' }}</span>
           </div>
@@ -156,32 +156,32 @@
         </div>
 
         <!-- 底部操作区 -->
-        <div class="wc-footer">
-          <div class="wc-actions">
+        <div class="fc-footer">
+          <div class="fc-actions">
             <div
-              class="wca primary"
+              class="fca primary"
               @click.stop="goAnalysis(item.questionId || item.id)"
             >
               📖 深度解析
             </div>
             <div
-              class="wca"
+              class="fca"
               @click.stop="redoSingle(item)"
             >
               🎯 单题攻关
             </div>
             <div
-              class="wca note-btn"
+              class="fca note-btn"
               @click.stop="openNote(item)"
             >
               📓 笔记
             </div>
           </div>
           <div
-            class="wca remove"
+            class="fca remove"
             @click.stop="remove(item.questionId || item.id)"
           >
-            ✕ 移出错题本
+            ✕ 取消收藏
           </div>
         </div>
       </div>
@@ -191,7 +191,7 @@
     <NotePopup
       v-model:show="notePopupVisible"
       :question-id="currentNoteQuestion?.questionId || currentNoteQuestion?.id"
-      :question-title="currentNoteQuestion?.content || currentNoteQuestion?.title"
+      :question-title="currentNoteQuestion?.title || currentNoteQuestion?.content"
     />
 
     <div style="height: 80px" />
@@ -203,17 +203,20 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
-import { getWrongList, removeWrong } from '@/api/wrong'
+import { useQuizStore } from '@/stores/quiz'
+import { getFavorites, removeFavorite, type FavoriteItem } from '@/api/favorite'
 import { renderWithFormula } from '@/utils/katex'
 import NotePopup from '@/components/NotePopup.vue'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
+const quizStore = useQuizStore()
+
 const editMode = ref(false)
 const showAllSubjects = ref(false)
 const currentType = ref('all')
 const loading = ref(false)
-const wrongList = ref<any[]>([])
+const favList = ref<FavoriteItem[]>([])
 const expandedIds = ref<string[]>([])
 
 // 笔记弹窗状态
@@ -234,16 +237,26 @@ const currentSubjectName = computed(() => {
 })
 
 const filteredList = computed(() => {
-  let list = wrongList.value
+  let list = favList.value
   if (currentType.value !== 'all') {
-    list = list.filter((i) => (i.type === currentType.value || i.typeText?.includes(currentType.value)))
+    list = list.filter((i) => i.type === currentType.value || i.typeText?.includes(currentType.value))
   }
   return list
 })
 
 function getTypeCount(typeKey: string) {
-  if (typeKey === 'all') return wrongList.value.length
-  return wrongList.value.filter((i) => i.type === typeKey || i.typeText?.includes(typeKey)).length
+  if (typeKey === 'all') return favList.value.length
+  return favList.value.filter((i) => i.type === typeKey || i.typeText?.includes(typeKey)).length
+}
+
+function formatTime(t?: string) {
+  if (!t) return '近期'
+  try {
+    const d = new Date(t)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  } catch {
+    return t
+  }
 }
 
 function isOptionCorrect(item: any, optKey: string) {
@@ -266,29 +279,29 @@ function toggleEdit() {
 
 function toggleSubjectFilter() {
   showAllSubjects.value = !showAllSubjects.value
-  fetchWrongList()
+  fetchFavoritesList()
 }
 
 function onBack() {
   if (window.history.state?.back) {
     router.back()
   } else {
-    router.push('/')
+    router.push('/mine')
   }
 }
 
-async function fetchWrongList() {
+async function fetchFavoritesList() {
   loading.value = true
   try {
     const subId = showAllSubjects.value ? undefined : (subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined)
-    const res = await getWrongList({ subjectId: subId })
+    const res = await getFavorites({ subjectId: subId, pageSize: 100 })
     if (res?.data?.list) {
-      wrongList.value = res.data.list
+      favList.value = res.data.list
     } else {
-      wrongList.value = []
+      favList.value = []
     }
   } catch {
-    wrongList.value = []
+    favList.value = []
   } finally {
     loading.value = false
   }
@@ -298,13 +311,13 @@ watch(
   () => subjectStore.currentSubjectId,
   () => {
     if (!showAllSubjects.value) {
-      fetchWrongList()
+      fetchFavoritesList()
     }
   }
 )
 
 onMounted(() => {
-  fetchWrongList()
+  fetchFavoritesList()
 })
 
 function goAnalysis(id: string | number) {
@@ -322,43 +335,47 @@ function openNote(item: any) {
 
 function startRedo() {
   if (filteredList.value.length === 0) {
-    return showToast('当前暂无错题需要重做')
+    return showToast('当前暂无收藏题目')
   }
-  const subId = subjectStore.currentSubjectId || '4'
-  router.push(`/quiz/practice?mode=wrong&subjectId=${subId}`)
+  const subId = subjectStore.currentSubjectId || '1'
+  router.push(`/quiz/practice?mode=favorite&subjectId=${subId}`)
 }
 
 async function clearAllCurrent() {
   if (filteredList.value.length === 0) return
   showDialog({
     title: '清空确认',
-    message: `确定要清空当前的 ${filteredList.value.length} 道错题记录吗？`,
+    message: `确定要清空当前的 ${filteredList.value.length} 道题目收藏吗？`,
     showCancelButton: true,
   }).then(async () => {
     const ids = filteredList.value.map((i) => i.questionId || i.id)
-    try {
-      await removeWrong(ids)
-    } catch {
-      // ignore
+    for (const qId of ids) {
+      try {
+        await removeFavorite(qId)
+      } catch {
+        // ignore
+      }
     }
-    wrongList.value = []
-    showToast('已清空错题本')
+    favList.value = []
+    quizStore.fetchFavorites()
+    showToast('已清空题目收藏')
   })
 }
 
-async function remove(id: string) {
+async function remove(id: string | number) {
   try {
-    await removeWrong([id])
-  } catch {
-    // ignore
+    await removeFavorite(id)
+    favList.value = favList.value.filter((i) => String(i.id) !== String(id) && String(i.questionId) !== String(id))
+    quizStore.fetchFavorites()
+    showToast('已取消收藏')
+  } catch (err: any) {
+    showToast(err?.message || '操作失败')
   }
-  wrongList.value = wrongList.value.filter((i) => String(i.id) !== String(id) && String(i.questionId) !== String(id))
-  showToast('已移出错题本')
 }
 </script>
 
 <style scoped lang="scss">
-.wrong-page {
+.fav-page {
   min-height: 100vh;
   background: var(--gray-1);
   padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 20px);
@@ -412,6 +429,10 @@ async function remove(id: string) {
     font-size: 13px;
     font-weight: 600;
     color: var(--gray-8);
+
+    .sub-icon {
+      color: #f59e0b;
+    }
   }
 
   .sub-toggle {
@@ -422,7 +443,7 @@ async function remove(id: string) {
   }
 }
 
-.wrong-header {
+.fav-header {
   display: flex;
   gap: 8px;
   padding: 10px 14px;
@@ -455,19 +476,19 @@ async function remove(id: string) {
     }
 
     &.active {
-      background: var(--primary-bg);
-      color: var(--primary);
+      background: #fef3c7;
+      color: #d97706;
       font-weight: 700;
 
       .chip-count {
-        background: var(--primary);
+        background: #f59e0b;
         color: #fff;
       }
     }
   }
 }
 
-.wrong-stats {
+.fav-stats {
   margin: 12px 14px;
   background: var(--gray-0);
   border-radius: var(--radius);
@@ -477,38 +498,38 @@ async function remove(id: string) {
   justify-content: space-between;
   box-shadow: var(--shadow-sm);
 
-  .ws-info {
+  .fs-info {
     display: flex;
     flex-direction: column;
 
-    .ws-num {
+    .fs-num {
       font-size: 26px;
       font-weight: 800;
-      color: var(--danger);
+      color: #f59e0b;
       line-height: 1.1;
     }
 
-    .ws-label {
+    .fs-label {
       font-size: 12px;
       color: var(--gray-5);
       margin-top: 2px;
     }
   }
 
-  .ws-actions {
+  .fs-actions {
     display: flex;
     gap: 8px;
   }
 
-  .ws-btn {
-    background: var(--primary);
+  .fs-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
     color: #fff;
     font-size: 13px;
     font-weight: 700;
     padding: 8px 16px;
     border-radius: 20px;
     cursor: pointer;
-    box-shadow: 0 3px 8px var(--primary-glow);
+    box-shadow: 0 3px 8px rgba(245, 158, 11, 0.3);
     display: flex;
     align-items: center;
 
@@ -527,47 +548,47 @@ async function remove(id: string) {
   }
 }
 
-.wrong-list {
+.fav-list {
   padding: 0 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.wrong-card {
+.fav-card {
   background: var(--gray-0);
   border-radius: var(--radius);
   padding: 16px;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--gray-2);
 
-  .wc-header {
+  .fc-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
 
-    .wc-tags {
+    .fc-tags {
       display: flex;
       gap: 6px;
       align-items: center;
 
-      .wc-idx {
+      .fc-idx {
         font-size: 11px;
         font-weight: 800;
         color: var(--gray-4);
       }
 
-      .wc-type {
+      .fc-type {
         font-size: 11px;
         font-weight: 700;
         padding: 2px 6px;
         border-radius: 4px;
-        background: var(--primary-bg);
-        color: var(--primary);
+        background: #fef3c7;
+        color: #d97706;
       }
 
-      .wc-chapter {
+      .fc-chapter {
         font-size: 11px;
         padding: 2px 6px;
         border-radius: 4px;
@@ -580,17 +601,13 @@ async function remove(id: string) {
       }
     }
 
-    .wc-time {
+    .fc-time {
       font-size: 11px;
-      color: var(--gray-5);
-
-      .danger-text {
-        color: var(--danger);
-      }
+      color: var(--gray-4);
     }
   }
 
-  .wc-content {
+  .fc-content {
     font-size: 14px;
     font-weight: 600;
     color: var(--gray-8);
@@ -607,7 +624,7 @@ async function remove(id: string) {
     }
   }
 
-  .wc-options-box {
+  .fc-options-box {
     background: #f8fafc;
     border-radius: 8px;
     padding: 10px 12px;
@@ -616,7 +633,7 @@ async function remove(id: string) {
     flex-direction: column;
     gap: 8px;
 
-    .wc-opt-row {
+    .fc-opt-row {
       font-size: 13px;
       color: var(--gray-7);
       line-height: 1.4;
@@ -639,7 +656,7 @@ async function remove(id: string) {
     }
   }
 
-  .wc-answer-bar {
+  .fc-answer-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -662,7 +679,7 @@ async function remove(id: string) {
     }
   }
 
-  .wc-footer {
+  .fc-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -670,11 +687,11 @@ async function remove(id: string) {
     padding-top: 10px;
     font-size: 12px;
 
-    .wc-actions {
+    .fc-actions {
       display: flex;
       gap: 12px;
 
-      .wca {
+      .fca {
         cursor: pointer;
         font-weight: 600;
         color: var(--gray-6);

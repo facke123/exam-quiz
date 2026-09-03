@@ -343,10 +343,26 @@
       </div>
     </div>
 
-    <!-- 快捷入口卡片 (笔记与记录) -->
+    <!-- 快捷入口卡片 (收藏、笔记与记录) -->
     <div class="note-record-section">
       <div
-        class="note-card"
+        class="quick-card fav-entry"
+        @click="$router.push('/favorites')"
+      >
+        <div class="nr-icon">
+          ⭐
+        </div>
+        <div class="nr-text">
+          <div class="t">
+            我的收藏
+          </div>
+          <div class="d">
+            重点试题标记
+          </div>
+        </div>
+      </div>
+      <div
+        class="quick-card"
         @click="$router.push('/notes')"
       >
         <div class="nr-icon">
@@ -357,12 +373,12 @@
             我的笔记
           </div>
           <div class="d">
-            高频知识点随记
+            高频知识随记
           </div>
         </div>
       </div>
       <div
-        class="record-card"
+        class="quick-card"
         @click="$router.push('/records')"
       >
         <div class="nr-icon">
@@ -1011,39 +1027,46 @@ onMounted(async () => {
   }
 }
 
-/* 笔记与记录双卡片 */
+/* 快捷入口三卡片 (收藏、笔记、记录) */
 .note-record-section {
   margin: 0 14px;
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
-.note-card,
-.record-card {
-  flex: 1;
+.quick-card {
   background: var(--gray-0);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 12px 8px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  box-shadow: var(--shadow-md);
+  text-align: center;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
+  transition: transform 0.15s;
+
+  &:active {
+    transform: scale(0.98);
+  }
 
   .nr-icon {
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .nr-text {
     .t {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       color: var(--gray-8);
     }
     .d {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--gray-5);
       margin-top: 2px;
+      white-space: nowrap;
     }
   }
 }

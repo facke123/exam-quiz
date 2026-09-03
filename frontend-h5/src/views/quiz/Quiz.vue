@@ -80,6 +80,7 @@
       :current="currentIndex"
       :total="total"
       :favorited="isFavorited()"
+      :has-note="hasNoteForCurrent"
       @toggle-favorite="onFavorite"
       @note="onNote"
       @report="onReport"
@@ -97,6 +98,15 @@
       @select="goTo"
       @submit="onSubmit"
     />
+
+    <!-- 题目笔记弹窗 -->
+    <NotePopup
+      v-model:show="notePopupVisible"
+      :question-id="currentQuestion?.id"
+      :question-title="currentQuestion?.title || currentQuestion?.content"
+      @saved="handleNoteSaved"
+      @deleted="handleNoteDeleted"
+    />
   </div>
 </template>
 
@@ -109,10 +119,12 @@ import { useSubjectStore } from '@/stores/subject'
 import { getQuestions, type Question } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
 import { recordWrong, getWrongList } from '@/api/wrong'
+import { getFavorites } from '@/api/favorite'
 import { submit, createPractice } from '@/api/quiz'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
 import AnswerSheet from '@/components/AnswerSheet.vue'
+import NotePopup from '@/components/NotePopup.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -130,9 +142,11 @@ const questions = ref<any[]>([])
 const currentIndex = ref(0)
 const answers = ref<Record<string, string | string[]>>({})
 const sheetVisible = ref(false)
+const notePopupVisible = ref(false)
 
 const total = computed(() => questions.value.length)
 const currentQuestion = computed(() => questions.value[currentIndex.value])
+const hasNoteForCurrent = computed(() => currentQuestion.value ? quizStore.hasNote(currentQuestion.value.id) : false)
 
 const currentAnswer = computed<string | string[]>({
   get: () => answers.value[currentQuestion.value?.id] || (currentQuestion.value?.type === 'multiple' ? [] : ''),
@@ -146,7 +160,7 @@ const currentAnswer = computed<string | string[]>({
 const sheetList = computed(() =>
   questions.value.map((q) => ({
     answered: !!answers.value[q.id],
-    marked: quizStore.favoritedIds.includes(q.id),
+    marked: quizStore.favoritedIds.includes(String(q.id)),
   }))
 )
 
@@ -157,18 +171,26 @@ function formatTime(s: number) {
 }
 
 function isFavorited() {
-  return currentQuestion.value ? quizStore.favoritedIds.includes(currentQuestion.value.id) : false
+  return currentQuestion.value ? quizStore.isFavorited(currentQuestion.value.id) : false
 }
 
-function onFavorite() {
+async function onFavorite() {
   if (currentQuestion.value) {
-    quizStore.toggleFavorite(currentQuestion.value.id)
-    showToast(isFavorited() ? '已加入收藏' : '已取消收藏')
+    const isNowFav = await quizStore.toggleFavorite(currentQuestion.value.id)
+    showToast(isNowFav ? '已加入收藏' : '已取消收藏')
   }
 }
 
 function onNote() {
-  showToast('可在解析页记录笔记')
+  notePopupVisible.value = true
+}
+
+function handleNoteSaved(data: { questionId: string | number; content: string }) {
+  quizStore.setNote(data.questionId, data.content)
+}
+
+function handleNoteDeleted(questionId: string | number) {
+  quizStore.setNote(questionId, '')
 }
 
 function onReport() {
@@ -265,6 +287,8 @@ async function onSubmit() {
 }
 
 onMounted(async () => {
+  quizStore.fetchFavorites()
+
   const paperId = route.query.paperId || (['real', 'mock'].includes(mode.value) ? route.query.examId : undefined)
   const durationParam = route.query.duration ? Number(route.query.duration) : undefined
 
@@ -286,6 +310,26 @@ onMounted(async () => {
           analysis: item.analysis,
           difficulty: item.difficulty || 3,
           score: item.score || 1,
+        }))
+      } else {
+        questions.value = []
+      }
+    } else if (mode.value === 'favorite') {
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+      const fRes = await getFavorites({ subjectId: String(targetSubjectId), pageSize: 100 })
+      if (fRes?.data?.list && Array.isArray(fRes.data.list) && fRes.data.list.length > 0) {
+        questions.value = fRes.data.list.map((item: any) => ({
+          id: item.questionId || item.id,
+          subjectId: item.subjectId,
+          chapterId: item.chapterId,
+          type: item.type,
+          title: item.title || item.content,
+          content: item.content || item.title,
+          options: item.options || [],
+          answer: item.answer || item.correctAnswer,
+          analysis: item.analysis,
+          difficulty: 3,
+          score: 1,
         }))
       } else {
         questions.value = []
