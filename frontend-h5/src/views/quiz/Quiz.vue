@@ -127,6 +127,7 @@ import { getQuestions, type Question } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
 import { recordWrong, getWrongList } from '@/api/wrong'
 import { getFavorites } from '@/api/favorite'
+import { getReviewQuestions } from '@/api/review'
 import { submit, createPractice } from '@/api/quiz'
 import QuestionCard from '@/components/QuestionCard.vue'
 import QuizFooter from '@/components/QuizFooter.vue'
@@ -325,6 +326,31 @@ onMounted(async () => {
       const fRes = await getFavorites({ subjectId: String(targetSubjectId), pageSize: 100 })
       if (fRes?.data?.list && Array.isArray(fRes.data.list) && fRes.data.list.length > 0) {
         questions.value = fRes.data.list.map((item: any) => ({
+          id: item.questionId || item.id,
+          subjectId: item.subjectId,
+          chapterId: item.chapterId,
+          type: item.type,
+          title: item.title || item.content,
+          content: item.content || item.title,
+          options: item.options || [],
+          answer: item.answer || item.correctAnswer,
+          analysis: item.analysis,
+          difficulty: 3,
+          score: 1,
+        }))
+      } else {
+        questions.value = []
+      }
+    } else if (mode.value === 'review') {
+      const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
+      const targetStage = (route.query.stage as any) || 'due'
+      const rRes = await getReviewQuestions({
+        subjectId: String(targetSubjectId),
+        stage: targetStage,
+        pageSize: 50,
+      })
+      if (rRes?.data?.list && Array.isArray(rRes.data.list) && rRes.data.list.length > 0) {
+        questions.value = rRes.data.list.map((item: any) => ({
           id: item.questionId || item.id,
           subjectId: item.subjectId,
           chapterId: item.chapterId,

@@ -233,20 +233,75 @@ export class QuizController {
 
   // ==================== 艾宾浩斯复习 ====================
 
-  @Get('quiz/review-queue')
-  @ApiOperation({ summary: '复习队列（艾宾浩斯）' })
-  async getReviewQueue(@CurrentUser() user: UserPayload) {
-    return this.quizService.getReviewQueue(user.id);
+  @Get(['quiz/review/overview', 'quiz/review-overview', 'review/overview', 'review/stats'])
+  @ApiOperation({ summary: '艾宾浩斯复习总览与统计' })
+  async getReviewOverview(
+    @CurrentUser() user: UserPayload,
+    @Query('subjectId') subjectId?: number,
+  ) {
+    return this.quizService.getReviewOverview(user ? user.id : 1, subjectId ? Number(subjectId) : undefined);
+  }
+
+  @Get(['quiz/review/questions', 'quiz/review-queue', 'quiz/review/list', 'review/list'])
+  @ApiOperation({ summary: '艾宾浩斯复习题目列表' })
+  async getReviewQuestions(
+    @CurrentUser() user: UserPayload,
+    @Query() query: any,
+  ) {
+    return this.quizService.getReviewQuestions(user ? user.id : 1, query);
+  }
+
+  @Post(['quiz/review/sync-wrong', 'quiz/review/sync', 'review/sync'])
+  @ApiOperation({ summary: '从错题本同步到艾宾浩斯复习库' })
+  async syncWrongToReview(
+    @CurrentUser() user: UserPayload,
+    @Body('subjectId') subjectId?: number,
+  ) {
+    return this.quizService.syncWrongToReview(user ? user.id : 1, subjectId ? Number(subjectId) : undefined);
+  }
+
+  @Post(['quiz/review/master', 'quiz/review/:questionId/master'])
+  @ApiOperation({ summary: '标记已掌握/长效巩固' })
+  async markReviewMastered(
+    @CurrentUser() user: UserPayload,
+    @Param('questionId') paramQId?: number,
+    @Body('questionId') bodyQId?: number,
+  ) {
+    const qId = Number(paramQId || bodyQId);
+    await this.quizService.updateReviewStatus(user ? user.id : 1, qId, true);
+    return { message: '已标记为长效掌握' };
+  }
+
+  @Post(['quiz/review/reset', 'quiz/review/:questionId/reset'])
+  @ApiOperation({ summary: '重置单题复习进度' })
+  async resetReviewItem(
+    @CurrentUser() user: UserPayload,
+    @Param('questionId') paramQId?: number,
+    @Body('questionId') bodyQId?: number,
+  ) {
+    const qId = Number(paramQId || bodyQId);
+    await this.quizService.updateReviewStatus(user ? user.id : 1, qId, false);
+    return { message: '复习进度已重置' };
+  }
+
+  @Delete(['quiz/review/:questionId', 'quiz/review-queue/:questionId'])
+  @ApiOperation({ summary: '移除复习题目' })
+  async removeReviewItem(
+    @CurrentUser() user: UserPayload,
+    @Param('questionId', ParseIntPipe) questionId: number,
+  ) {
+    await this.quizService.removeReviewItem(user ? user.id : 1, questionId);
+    return { message: '已从复习库移除' };
   }
 
   @Post('quiz/review-queue/:questionId')
-  @ApiOperation({ summary: '更新复习状态' })
+  @ApiOperation({ summary: '更新复习状态（兼容旧接口）' })
   async updateReviewStatus(
     @CurrentUser() user: UserPayload,
     @Param('questionId', ParseIntPipe) questionId: number,
     @Body() body: { mastered: boolean },
   ) {
-    await this.quizService.updateReviewStatus(user.id, questionId, body.mastered);
+    await this.quizService.updateReviewStatus(user ? user.id : 1, questionId, body.mastered);
     return { message: '复习状态已更新' };
   }
 }

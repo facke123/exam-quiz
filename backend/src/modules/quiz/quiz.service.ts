@@ -157,6 +157,45 @@ export class QuizService {
         order: { createdAt: 'DESC' },
       });
       questionIds = favorites.map((f) => Number(f.questionId));
+    } else if (dto.mode === 'review') {
+      const now = new Date();
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      let reviewItems = await this.reviewQueueRepository
+        .createQueryBuilder('rq')
+        .where('rq.userId = :userId', { userId })
+        .andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd })
+        .orderBy('rq.nextReviewAt', 'ASC')
+        .take(dto.count || 20)
+        .getMany();
+
+      if (reviewItems.length === 0) {
+        reviewItems = await this.reviewQueueRepository
+          .createQueryBuilder('rq')
+          .where('rq.userId = :userId', { userId })
+          .andWhere('rq.status = :status', { status: 'pending' })
+          .orderBy('rq.nextReviewAt', 'ASC')
+          .take(dto.count || 20)
+          .getMany();
+      }
+
+      if (reviewItems.length === 0) {
+        await this.syncWrongToReview(userId, dto.subjectId ? Number(dto.subjectId) : undefined);
+        reviewItems = await this.reviewQueueRepository.find({
+          where: { userId, status: 'pending' },
+          take: dto.count || 20,
+        });
+      }
+
+      questionIds = reviewItems.map((r) => Number(r.questionId));
+
+      if (questionIds.length === 0) {
+        const questions = await this.questionRepository.find({
+          where: { status: 'published' },
+          take: dto.count || 10,
+        });
+        questionIds = questions.map((q) => Number(q.id));
+      }
     } else {
       const questions = await this.questionRepository
         .createQueryBuilder('q')
@@ -398,6 +437,66 @@ export class QuizService {
         });
       }
       await this.wrongQuestionRepository.save(wrongQ);
+
+      // 同步进入艾宾浩斯复习队列（若未入队或已重错）
+      try {
+        let rItem = await this.reviewQueueRepository.findOne({
+          where: { userId, questionId: wa.questionId },
+        });
+        if (!rItem) {
+          rItem = this.reviewQueueRepository.create({
+            userId,
+            questionId: wa.questionId,
+            interval: 1,
+            step: 0,
+            nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
+            status: 'pending',
+          });
+        } else {
+          rItem.step = 0;
+          rItem.interval = 1;
+          rItem.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
+          rItem.status = 'pending';
+        }
+        await this.reviewQueueRepository.save(rItem);
+      } catch {
+        // ignore
+      }
+    }
+
+    // 若当前为艾宾浩斯复习模式，推进或重置各题复习周期
+    if (record.mode === 'review') {
+      const INTERVALS = [1, 2, 4, 7, 15, 30];
+      for (const a of answers) {
+        try {
+          let rItem = await this.reviewQueueRepository.findOne({
+            where: { userId, questionId: a.questionId },
+          });
+          if (rItem) {
+            rItem.lastReviewedAt = new Date();
+            if (a.isCorrect === 1) {
+              rItem.step = (rItem.step || 0) + 1;
+              if (rItem.step >= 5) {
+                rItem.status = 'completed';
+                rItem.interval = 30;
+                rItem.nextReviewAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+              } else {
+                rItem.interval = INTERVALS[rItem.step] || 1;
+                rItem.nextReviewAt = new Date(Date.now() + rItem.interval * 24 * 3600 * 1000);
+                rItem.status = 'pending';
+              }
+            } else {
+              rItem.step = 0;
+              rItem.interval = 1;
+              rItem.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
+              rItem.status = 'pending';
+            }
+            await this.reviewQueueRepository.save(rItem);
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
 
     return {
@@ -901,43 +1000,6 @@ export class QuizService {
   }
 
   /**
-   * 获取复习队列（艾宾浩斯）
-   */
-  async getReviewQueue(userId: number): Promise<ReviewQueue[]> {
-    return this.reviewQueueRepository.find({
-      where: { userId, status: 'pending' },
-      order: { nextReviewAt: 'ASC' },
-    });
-  }
-
-  /**
-   * 更新复习状态
-   */
-  async updateReviewStatus(
-    userId: number,
-    questionId: number,
-    mastered: boolean,
-  ): Promise<void> {
-    const item = await this.reviewQueueRepository.findOne({
-      where: { userId, questionId },
-    });
-    if (!item) {
-      throw new NotFoundException('复习项不存在');
-    }
-    if (mastered) {
-      item.status = 'completed';
-    } else {
-      item.step += 1;
-      const intervals = [1, 2, 4, 7, 15, 30];
-      const nextInterval = intervals[item.step] || 30;
-      item.interval = nextInterval;
-      item.nextReviewAt = new Date(Date.now() + nextInterval * 24 * 60 * 60 * 1000);
-    }
-    item.lastReviewedAt = new Date();
-    await this.reviewQueueRepository.save(item);
-  }
-
-  /**
    * 获取每日一练及本周打卡状态与趣味成长体系
    */
   async getDailyStatus(
@@ -1135,5 +1197,345 @@ export class QuizService {
       milestones,
       todayTopics,
     };
+  }
+
+  // ==================== 艾宾浩斯复习系统 ====================
+
+  /**
+   * 获取艾宾浩斯复习总览及各阶段统计
+   */
+  async getReviewOverview(
+    userId: number,
+    subjectId?: number,
+  ): Promise<{
+    totalDue: number;
+    urgentCount: number;
+    todayCount: number;
+    tomorrowCount: number;
+    futureCount: number;
+    completedCount: number;
+    totalQueue: number;
+    averageRound: string;
+    consolidationRate: number;
+    stageDistribution: Record<string, number>;
+  }> {
+    // 若用户复习队列为空，自动从错题本与高频题中导入
+    const totalCount = await this.reviewQueueRepository.count({ where: { userId } });
+    if (totalCount === 0) {
+      await this.syncWrongToReview(userId, subjectId);
+    }
+
+    const items = await this.reviewQueueRepository.find({
+      where: { userId },
+      order: { nextReviewAt: 'ASC' },
+    });
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const tomorrowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 23, 59, 59, 999).getTime();
+
+    let urgentCount = 0;
+    let todayCount = 0;
+    let tomorrowCount = 0;
+    let futureCount = 0;
+    let completedCount = 0;
+    let totalRounds = 0;
+
+    const stageDistribution: Record<string, number> = {
+      step0: 0,
+      step1: 0,
+      step2: 0,
+      step3: 0,
+      step4: 0,
+      completed: 0,
+    };
+
+    for (const item of items) {
+      const stepKey = `step${Math.min(4, item.step || 0)}`;
+      if (item.status === 'completed' || (item.step || 0) >= 5) {
+        completedCount++;
+        stageDistribution.completed++;
+        totalRounds += 5;
+      } else {
+        totalRounds += ((item.step || 0) + 1);
+        stageDistribution[stepKey] = (stageDistribution[stepKey] || 0) + 1;
+        const reviewTime = item.nextReviewAt ? new Date(item.nextReviewAt).getTime() : now.getTime();
+
+        if (reviewTime < todayStart) {
+          urgentCount++;
+        } else if (reviewTime <= todayEnd) {
+          todayCount++;
+        } else if (reviewTime <= tomorrowEnd) {
+          tomorrowCount++;
+        } else {
+          futureCount++;
+        }
+      }
+    }
+
+    const totalQueue = items.length;
+    const totalDue = urgentCount + todayCount;
+    const avgRoundNum = totalQueue > 0 ? (totalRounds / totalQueue).toFixed(1) : '1.0';
+    const consolidationRate = totalQueue > 0 ? Math.round((completedCount / totalQueue) * 100) : 0;
+
+    return {
+      totalDue,
+      urgentCount,
+      todayCount,
+      tomorrowCount,
+      futureCount,
+      completedCount,
+      totalQueue,
+      averageRound: avgRoundNum,
+      consolidationRate,
+      stageDistribution,
+    };
+  }
+
+  /**
+   * 获取艾宾浩斯待复习题目列表
+   */
+  async getReviewQuestions(
+    userId: number,
+    query: any = {},
+  ): Promise<{
+    list: any[];
+    total: number;
+    page: number;
+    pageSize: number;
+    overview: any;
+  }> {
+    const { page = 1, pageSize = 20, stage = 'due', subjectId } = query;
+
+    const overview = await this.getReviewOverview(userId, subjectId ? Number(subjectId) : undefined);
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const tomorrowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 23, 59, 59, 999);
+
+    const qb = this.reviewQueueRepository
+      .createQueryBuilder('rq')
+      .where('rq.userId = :userId', { userId });
+
+    if (stage === 'due') {
+      qb.andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
+    } else if (stage === 'urgent') {
+      qb.andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.nextReviewAt < :todayStart', { todayStart: todayStart.toISOString() });
+    } else if (stage === 'today') {
+      qb.andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.nextReviewAt >= :todayStart', { todayStart: todayStart.toISOString() })
+        .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
+    } else if (stage === 'tomorrow') {
+      qb.andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.nextReviewAt > :todayEnd', { todayEnd: todayEnd.toISOString() })
+        .andWhere('rq.nextReviewAt <= :tomorrowEnd', { tomorrowEnd: tomorrowEnd.toISOString() });
+    } else if (stage === 'completed') {
+      qb.andWhere('(rq.status = :cStatus OR rq.step >= 5)', { cStatus: 'completed' });
+    }
+
+    qb.skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('rq.nextReviewAt', 'ASC');
+
+    const [items, total] = await qb.getManyAndCount();
+
+    if (items.length === 0) {
+      return { list: [], total: 0, page: Number(page), pageSize: Number(pageSize), overview };
+    }
+
+    const qIds = items.map((i) => Number(i.questionId)).filter(Boolean);
+    const questions = qIds.length > 0 ? await this.questionRepository.find({ where: { id: In(qIds) } }) : [];
+    const qMap = new Map(questions.map((q) => [Number(q.id), q]));
+
+    const chapters = await this.chapterRepository.find();
+    const cMap = new Map(chapters.map((c) => [Number(c.id), c.name]));
+    const subjects = await this.subjectRepository.find();
+    const sMap = new Map(subjects.map((s) => [Number(s.id), s.name]));
+
+    const stageNames = [
+      { text: '阶段1: 第1天记忆', icon: '🌱' },
+      { text: '阶段2: 第2天巩固', icon: '🌿' },
+      { text: '阶段3: 第4天强化', icon: '🌳' },
+      { text: '阶段4: 第7天深化', icon: '🌲' },
+      { text: '阶段5: 第15天抗遗忘', icon: '👑' },
+      { text: '长效固化完成', icon: '✨' },
+    ];
+
+    const typeTextMap: Record<string, string> = {
+      single: '单选题',
+      multiple: '多选题',
+      judge: '判断题',
+      case: '案例分析',
+      subjective: '主观题',
+    };
+
+    const formatted = items.map((item) => {
+      const q = qMap.get(Number(item.questionId));
+      const qType = q ? fromDbType(q.type) : 'single';
+      let options = q ? q.options : [];
+      if (typeof options === 'string') {
+        try {
+          options = JSON.parse(options);
+        } catch {
+          options = [];
+        }
+      }
+
+      const step = Math.min(5, Math.max(0, item.step || 0));
+      const isCompleted = item.status === 'completed' || step >= 5;
+      const stageInfo = stageNames[isCompleted ? 5 : step] || stageNames[0];
+
+      // 计算逾期或剩余天数
+      const reviewTime = item.nextReviewAt ? new Date(item.nextReviewAt).getTime() : now.getTime();
+      let dueStatus = 'today';
+      let dueText = '今日待复习';
+
+      if (isCompleted) {
+        dueStatus = 'completed';
+        dueText = '已长效掌握';
+      } else if (reviewTime < todayStart.getTime()) {
+        dueStatus = 'urgent';
+        const overdueDays = Math.max(1, Math.ceil((todayStart.getTime() - reviewTime) / (24 * 3600 * 1000)));
+        dueText = `已逾期 ${overdueDays} 天`;
+      } else if (reviewTime <= todayEnd.getTime()) {
+        dueStatus = 'today';
+        dueText = '今日内复习';
+      } else if (reviewTime <= tomorrowEnd.getTime()) {
+        dueStatus = 'tomorrow';
+        dueText = '明日任务';
+      } else {
+        dueStatus = 'future';
+        const daysLeft = Math.ceil((reviewTime - todayEnd.getTime()) / (24 * 3600 * 1000));
+        dueText = `${daysLeft}天后复习`;
+      }
+
+      return {
+        id: String(item.id),
+        questionId: String(item.questionId),
+        step,
+        interval: item.interval || 1,
+        status: item.status,
+        stageText: stageInfo.text,
+        stageIcon: stageInfo.icon,
+        dueStatus,
+        dueText,
+        nextReviewAt: item.nextReviewAt,
+        lastReviewedAt: item.lastReviewedAt,
+        type: qType,
+        typeText: typeTextMap[qType] || '单选题',
+        title: q ? q.content : '题目详情',
+        content: q ? q.content : '',
+        options: Array.isArray(options) ? options : [],
+        answer: q ? q.answer : 'A',
+        correctAnswer: q ? q.answer : 'A',
+        analysis: q ? (q.analysis || '详见官方解析与考点分析。') : '详见官方解析',
+        subjectName: sMap.get(Number(q ? q.subjectId : 1)) || '系统集成项目管理工程师',
+        chapterName: cMap.get(Number(q ? q.chapterId : 1)) || '核心考点章节',
+      };
+    });
+
+    return { list: formatted, total, page: Number(page), pageSize: Number(pageSize), overview };
+  }
+
+  /**
+   * 从错题本同步题目到艾宾浩斯复习队列
+   */
+  async syncWrongToReview(
+    userId: number,
+    subjectId?: number,
+  ): Promise<{ syncedCount: number; totalCount: number }> {
+    const wrongList = await this.wrongQuestionRepository.find({
+      where: { userId },
+      order: { lastWrongAt: 'DESC' },
+    });
+
+    let syncedCount = 0;
+    for (const w of wrongList) {
+      const exists = await this.reviewQueueRepository.findOne({
+        where: { userId, questionId: Number(w.questionId) },
+      });
+      if (!exists) {
+        const item = this.reviewQueueRepository.create({
+          userId,
+          questionId: Number(w.questionId),
+          interval: 1,
+          step: 0,
+          nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
+          status: 'pending',
+        });
+        await this.reviewQueueRepository.save(item);
+        syncedCount++;
+      }
+    }
+
+    // 若错题本为空，抓取 15 道精选已发布试题初始化复习库
+    if (syncedCount === 0 && (await this.reviewQueueRepository.count({ where: { userId } })) === 0) {
+      const qb = this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.status = :status', { status: 'published' });
+      if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
+      const questions = await qb.take(15).getMany();
+
+      for (const q of questions) {
+        const item = this.reviewQueueRepository.create({
+          userId,
+          questionId: Number(q.id),
+          interval: 1,
+          step: 0,
+          nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
+          status: 'pending',
+        });
+        await this.reviewQueueRepository.save(item);
+        syncedCount++;
+      }
+    }
+
+    const totalCount = await this.reviewQueueRepository.count({ where: { userId } });
+    return { syncedCount, totalCount };
+  }
+
+  /**
+   * 标记复习题目状态（如掌握或重置）
+   */
+  async updateReviewStatus(
+    userId: number,
+    questionId: number,
+    mastered: boolean,
+  ): Promise<void> {
+    const item = await this.reviewQueueRepository.findOne({
+      where: { userId, questionId },
+    });
+    if (item) {
+      if (mastered) {
+        item.status = 'completed';
+        item.step = 5;
+        item.interval = 30;
+        item.lastReviewedAt = new Date();
+      } else {
+        item.status = 'pending';
+        item.step = 0;
+        item.interval = 1;
+        item.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
+      }
+      await this.reviewQueueRepository.save(item);
+    }
+  }
+
+  /**
+   * 移除复习队列中的某题
+   */
+  async removeReviewItem(userId: number, questionId: number): Promise<void> {
+    await this.reviewQueueRepository.delete({ userId, questionId });
+  }
+
+  /**
+   * 旧版兼容：获取复习队列
+   */
+  async getReviewQueue(userId: number): Promise<any> {
+    return this.getReviewQuestions(userId, { stage: 'due', pageSize: 50 });
   }
 }
