@@ -225,72 +225,56 @@ function goTo(idx: number) {
 }
 
 async function onSubmit() {
-  showDialog({
-    title: '交卷确认',
-    message: `您已答 ${Object.keys(answers.value).length} / ${total.value} 题，确定要交卷吗？`,
-    showCancelButton: true,
-  }).then(async () => {
-    // 自动持久化保存错题到数据库
-    for (const q of questions.value) {
-      const userAns = answers.value[q.id]
-      const rightAns = String(q.answer || '').toUpperCase().trim()
-      const formattedUserAns = Array.isArray(userAns)
-        ? userAns.sort().join('').toUpperCase().trim()
-        : String(userAns || '').toUpperCase().trim()
-      if (formattedUserAns && formattedUserAns !== rightAns) {
-        try {
-          await recordWrong({
-            questionId: q.id,
-            subjectId: q.subjectId || subjectStore.currentSubjectId || 4,
-            chapterId: q.chapterId,
-            userAnswer: formattedUserAns || '未作答',
-          })
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    const dParam = route.query.duration ? Number(route.query.duration) : undefined
-    const durationVal = dParam ? dParam * 60 : (needCountdown.value ? (9000 - remainingSeconds.value) : 180)
-    let submittedRecordId = currentRecordId.value
-
-    try {
-      const submitRes = await submit({
-        recordId: currentRecordId.value,
-        answers: answers.value,
-        subjectId: route.query.subjectId ? String(route.query.subjectId) : (subjectStore.currentSubjectId || 1),
-        chapterId: route.query.chapterId ? String(route.query.chapterId) : undefined,
-        mode: mode.value,
-        paperId: route.query.paperId ? String(route.query.paperId) : (['real', 'mock'].includes(mode.value) ? String(route.query.examId || '') : undefined),
-        duration: durationVal,
-        totalCount: questions.value.length,
-        questions: questions.value,
-      })
-      if (submitRes?.data?.recordId) {
-        submittedRecordId = submitRes.data.recordId
-      }
-    } catch {
-      // ignore
-    }
-
-    const reportData = {
-      recordId: submittedRecordId || '1',
-      answers: answers.value,
-      questions: questions.value,
-      duration: durationVal,
-      mode: mode.value,
-    }
-    try {
-      sessionStorage.setItem('last_quiz_report', JSON.stringify(reportData))
-    } catch {
-      // ignore
-    }
-
-    router.push({
-      path: `/quiz/report/${submittedRecordId || 1}`,
-      state: reportData,
+  try {
+    await showDialog({
+      title: '交卷确认',
+      message: `您已答 ${Object.keys(answers.value).length} / ${total.value} 题，确定要交卷吗？`,
+      showCancelButton: true,
     })
+  } catch {
+    // 用户取消或关闭确认弹窗
+    return
+  }
+
+  const dParam = route.query.duration ? Number(route.query.duration) : undefined
+  const durationVal = dParam ? dParam * 60 : (needCountdown.value ? (9000 - remainingSeconds.value) : 180)
+  let submittedRecordId = currentRecordId.value
+
+  try {
+    const submitRes = await submit({
+      recordId: currentRecordId.value,
+      answers: answers.value,
+      subjectId: route.query.subjectId ? String(route.query.subjectId) : (subjectStore.currentSubjectId || 1),
+      chapterId: route.query.chapterId ? String(route.query.chapterId) : undefined,
+      mode: mode.value,
+      paperId: route.query.paperId ? String(route.query.paperId) : (['real', 'mock'].includes(mode.value) ? String(route.query.examId || '') : undefined),
+      duration: durationVal,
+      totalCount: questions.value.length,
+      questions: questions.value,
+    })
+    if (submitRes?.data?.recordId) {
+      submittedRecordId = submitRes.data.recordId
+    }
+  } catch {
+    // 即使网络微波波动，本地成绩依然可展示
+  }
+
+  const reportData = {
+    recordId: submittedRecordId || '1',
+    answers: answers.value,
+    questions: questions.value,
+    duration: durationVal,
+    mode: mode.value,
+  }
+  try {
+    sessionStorage.setItem('last_quiz_report', JSON.stringify(reportData))
+  } catch {
+    // ignore
+  }
+
+  router.push({
+    path: `/quiz/report/${submittedRecordId || 1}`,
+    state: reportData,
   })
 }
 
