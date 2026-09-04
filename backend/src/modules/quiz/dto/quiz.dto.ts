@@ -12,11 +12,11 @@ export class CreatePracticeDto {
   subjectId: number;
 
   @ApiProperty({
-    description: '模式: chapter/real/mock/daily/case',
+    description: '模式: chapter/real/mock/daily/case/review/wrong/favorite/knowledge/practice',
     example: 'chapter',
   })
   @IsString()
-  @IsIn(['chapter', 'real', 'mock', 'daily', 'case'])
+  @IsIn(['chapter', 'real', 'mock', 'daily', 'case', 'review', 'wrong', 'favorite', 'knowledge', 'practice'])
   mode: string;
 
   @ApiPropertyOptional({ description: '试卷ID' })

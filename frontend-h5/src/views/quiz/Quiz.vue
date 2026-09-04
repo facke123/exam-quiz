@@ -141,7 +141,7 @@ const quizStore = useQuizStore()
 const subjectStore = useSubjectStore()
 
 const loading = ref(false)
-const mode = computed(() => (route.params.mode as string) || (route.query.mode as string) || 'practice')
+const mode = computed(() => (route.query.mode as string) || (route.params.mode as string) || 'practice')
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
 const remainingSeconds = ref(9000)
 const currentRecordId = ref<string | number | undefined>(route.query.recordId ? String(route.query.recordId) : undefined)
@@ -279,6 +279,7 @@ async function onSubmit() {
       answers: answers.value,
       questions: questions.value,
       duration: durationVal,
+      mode: mode.value,
     }
     try {
       sessionStorage.setItem('last_quiz_report', JSON.stringify(reportData))
@@ -344,10 +345,13 @@ onMounted(async () => {
     } else if (mode.value === 'review') {
       const targetSubjectId = route.query.subjectId || subjectStore.currentSubjectId || '1'
       const targetStage = (route.query.stage as any) || 'due'
+      const targetQuestionIds = route.query.questionIds ? String(route.query.questionIds) : (route.query.questionId ? String(route.query.questionId) : undefined)
+      const countParam = route.query.count ? Number(route.query.count) : 50
       const rRes = await getReviewQuestions({
         subjectId: String(targetSubjectId),
         stage: targetStage,
-        pageSize: 50,
+        questionIds: targetQuestionIds,
+        pageSize: countParam,
       })
       if (rRes?.data?.list && Array.isArray(rRes.data.list) && rRes.data.list.length > 0) {
         questions.value = rRes.data.list.map((item: any) => ({

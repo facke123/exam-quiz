@@ -1225,10 +1225,18 @@ export class QuizService {
       await this.syncWrongToReview(userId, subjectId);
     }
 
-    const items = await this.reviewQueueRepository.find({
-      where: { userId },
-      order: { nextReviewAt: 'ASC' },
-    });
+    const qb = this.reviewQueueRepository
+      .createQueryBuilder('rq')
+      .innerJoin(Question, 'q', 'q.id = rq.questionId')
+      .where('rq.userId = :userId', { userId });
+
+    if (subjectId) {
+      qb.andWhere('(q.subjectId = :subjectId OR q.subjectId IS NULL OR q.subjectId = 0)', {
+        subjectId: Number(subjectId),
+      });
+    }
+
+    const items = await qb.orderBy('rq.nextReviewAt', 'ASC').getMany();
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
@@ -1306,7 +1314,7 @@ export class QuizService {
     pageSize: number;
     overview: any;
   }> {
-    const { page = 1, pageSize = 20, stage = 'due', subjectId } = query;
+    const { page = 1, pageSize = 20, stage = 'due', subjectId, questionIds } = query;
 
     const overview = await this.getReviewOverview(userId, subjectId ? Number(subjectId) : undefined);
 
@@ -1317,31 +1325,73 @@ export class QuizService {
 
     const qb = this.reviewQueueRepository
       .createQueryBuilder('rq')
+      .innerJoin(Question, 'q', 'q.id = rq.questionId')
       .where('rq.userId = :userId', { userId });
 
-    if (stage === 'due') {
-      qb.andWhere('rq.status = :status', { status: 'pending' })
-        .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
-    } else if (stage === 'urgent') {
-      qb.andWhere('rq.status = :status', { status: 'pending' })
-        .andWhere('rq.nextReviewAt < :todayStart', { todayStart: todayStart.toISOString() });
-    } else if (stage === 'today') {
-      qb.andWhere('rq.status = :status', { status: 'pending' })
-        .andWhere('rq.nextReviewAt >= :todayStart', { todayStart: todayStart.toISOString() })
-        .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
-    } else if (stage === 'tomorrow') {
-      qb.andWhere('rq.status = :status', { status: 'pending' })
-        .andWhere('rq.nextReviewAt > :todayEnd', { todayEnd: todayEnd.toISOString() })
-        .andWhere('rq.nextReviewAt <= :tomorrowEnd', { tomorrowEnd: tomorrowEnd.toISOString() });
-    } else if (stage === 'completed') {
-      qb.andWhere('(rq.status = :cStatus OR rq.step >= 5)', { cStatus: 'completed' });
+    if (subjectId) {
+      qb.andWhere('(q.subjectId = :subjectId OR q.subjectId IS NULL OR q.subjectId = 0)', {
+        subjectId: Number(subjectId),
+      });
+    }
+
+    if (questionIds) {
+      const qIdList = String(questionIds)
+        .split(',')
+        .map((id) => Number(id.trim()))
+        .filter(Boolean);
+      if (qIdList.length > 0) {
+        qb.andWhere('rq.questionId IN (:...qIdList)', { qIdList });
+      }
+    } else {
+      if (stage === 'due') {
+        qb.andWhere('rq.status = :status', { status: 'pending' })
+          .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
+      } else if (stage === 'urgent') {
+        qb.andWhere('rq.status = :status', { status: 'pending' })
+          .andWhere('rq.nextReviewAt < :todayStart', { todayStart: todayStart.toISOString() });
+      } else if (stage === 'today') {
+        qb.andWhere('rq.status = :status', { status: 'pending' })
+          .andWhere('rq.nextReviewAt >= :todayStart', { todayStart: todayStart.toISOString() })
+          .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd: todayEnd.toISOString() });
+      } else if (stage === 'tomorrow') {
+        qb.andWhere('rq.status = :status', { status: 'pending' })
+          .andWhere('rq.nextReviewAt > :todayEnd', { todayEnd: todayEnd.toISOString() })
+          .andWhere('rq.nextReviewAt <= :tomorrowEnd', { tomorrowEnd: tomorrowEnd.toISOString() });
+      } else if (stage === 'completed') {
+        qb.andWhere('(rq.status = :cStatus OR rq.step >= 5)', { cStatus: 'completed' });
+      }
     }
 
     qb.skip((page - 1) * pageSize)
       .take(pageSize)
       .orderBy('rq.nextReviewAt', 'ASC');
 
-    const [items, total] = await qb.getManyAndCount();
+    let [items, total] = await qb.getManyAndCount();
+
+    if (items.length === 0 && questionIds) {
+      const qIdList = String(questionIds)
+        .split(',')
+        .map((id) => Number(id.trim()))
+        .filter(Boolean);
+      if (qIdList.length > 0) {
+        const directQuestions = await this.questionRepository.find({ where: { id: In(qIdList) } });
+        for (const dq of directQuestions) {
+          let rItem = await this.reviewQueueRepository.findOne({ where: { userId, questionId: Number(dq.id) } });
+          if (!rItem) {
+            rItem = this.reviewQueueRepository.create({
+              userId,
+              questionId: Number(dq.id),
+              interval: 1,
+              step: 0,
+              nextReviewAt: new Date(),
+              status: 'pending',
+            });
+            await this.reviewQueueRepository.save(rItem);
+          }
+        }
+        return this.getReviewQuestions(userId, query);
+      }
+    }
 
     if (items.length === 0) {
       return { list: [], total: 0, page: Number(page), pageSize: Number(pageSize), overview };
@@ -1464,7 +1514,7 @@ export class QuizService {
           questionId: Number(w.questionId),
           interval: 1,
           step: 0,
-          nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
+          nextReviewAt: new Date(),
           status: 'pending',
         });
         await this.reviewQueueRepository.save(item);
@@ -1486,7 +1536,7 @@ export class QuizService {
           questionId: Number(q.id),
           interval: 1,
           step: 0,
-          nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
+          nextReviewAt: new Date(),
           status: 'pending',
         });
         await this.reviewQueueRepository.save(item);
@@ -1499,6 +1549,46 @@ export class QuizService {
   }
 
   /**
+   * 推进单题艾宾浩斯阶段（记住了/自测正确）
+   */
+  async advanceReviewItem(userId: number, questionId: number): Promise<any> {
+    const INTERVALS = [1, 2, 4, 7, 15, 30];
+    let item = await this.reviewQueueRepository.findOne({
+      where: { userId, questionId },
+    });
+    if (!item) {
+      item = this.reviewQueueRepository.create({
+        userId,
+        questionId,
+        interval: 2,
+        step: 1,
+        nextReviewAt: new Date(Date.now() + 2 * 24 * 3600 * 1000),
+        status: 'pending',
+        lastReviewedAt: new Date(),
+      });
+      await this.reviewQueueRepository.save(item);
+      return { message: '复习成功，已进入第2阶段', item };
+    }
+
+    item.lastReviewedAt = new Date();
+    item.step = (item.step || 0) + 1;
+    if (item.step >= 5) {
+      item.status = 'completed';
+      item.interval = 30;
+      item.nextReviewAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+    } else {
+      item.interval = INTERVALS[item.step] || 1;
+      item.nextReviewAt = new Date(Date.now() + item.interval * 24 * 3600 * 1000);
+      item.status = 'pending';
+    }
+    await this.reviewQueueRepository.save(item);
+    return {
+      message: item.status === 'completed' ? '恭喜！已完成全周期，长效掌握！' : `复习成功，已进入第${item.step + 1}阶段（${item.interval}天后复习）`,
+      item,
+    };
+  }
+
+  /**
    * 标记复习题目状态（如掌握或重置）
    */
   async updateReviewStatus(
@@ -1506,23 +1596,37 @@ export class QuizService {
     questionId: number,
     mastered: boolean,
   ): Promise<void> {
-    const item = await this.reviewQueueRepository.findOne({
+    let item = await this.reviewQueueRepository.findOne({
       where: { userId, questionId },
     });
-    if (item) {
-      if (mastered) {
-        item.status = 'completed';
-        item.step = 5;
-        item.interval = 30;
-        item.lastReviewedAt = new Date();
-      } else {
-        item.status = 'pending';
-        item.step = 0;
-        item.interval = 1;
-        item.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
-      }
+    if (!item) {
+      item = this.reviewQueueRepository.create({
+        userId,
+        questionId,
+        interval: mastered ? 30 : 1,
+        step: mastered ? 5 : 0,
+        nextReviewAt: mastered ? new Date(Date.now() + 30 * 24 * 3600 * 1000) : new Date(Date.now() + 24 * 3600 * 1000),
+        status: mastered ? 'completed' : 'pending',
+        lastReviewedAt: new Date(),
+      });
       await this.reviewQueueRepository.save(item);
+      return;
     }
+
+    if (mastered) {
+      item.status = 'completed';
+      item.step = 5;
+      item.interval = 30;
+      item.nextReviewAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+      item.lastReviewedAt = new Date();
+    } else {
+      item.status = 'pending';
+      item.step = 0;
+      item.interval = 1;
+      item.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
+      item.lastReviewedAt = new Date();
+    }
+    await this.reviewQueueRepository.save(item);
   }
 
   /**

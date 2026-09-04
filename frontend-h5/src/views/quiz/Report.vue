@@ -126,12 +126,28 @@
     <!-- 底部操作按钮 -->
     <div class="bottom-actions">
       <button
+        v-if="quizMode === 'review'"
+        class="btn-primary"
+        @click="$router.push('/review')"
+      >
+        返回艾宾浩斯复习看板
+      </button>
+      <button
+        v-else
         class="btn-outline"
         @click="$router.push('/')"
       >
         返回首页
       </button>
       <button
+        v-if="quizMode === 'review'"
+        class="btn-outline"
+        @click="$router.push('/quiz/review?mode=review&stage=due')"
+      >
+        继续智能复习
+      </button>
+      <button
+        v-else
         class="btn-primary"
         @click="$router.push('/wrong')"
       >
@@ -154,6 +170,7 @@ const correctCount = ref(0)
 const wrongCount = ref(0)
 const correctRate = ref(0)
 const durationText = ref('0分')
+const quizMode = ref('practice')
 const typeStats = ref<Array<{ type: string; label: string; total: number; correct: number; rate: number }>>([])
 const wrongList = ref<any[]>([])
 
@@ -247,6 +264,9 @@ function goToAnalysis(item: any) {
 onMounted(() => {
   let loaded = false
   const historyState = window.history.state
+  if (historyState?.mode) {
+    quizMode.value = historyState.mode
+  }
   if (historyState?.questions && historyState?.answers) {
     computeReport(historyState.questions, historyState.answers, historyState.duration)
     loaded = true
@@ -257,6 +277,9 @@ onMounted(() => {
       const cached = sessionStorage.getItem('last_quiz_report')
       if (cached) {
         const data = JSON.parse(cached)
+        if (data?.mode) {
+          quizMode.value = data.mode
+        }
         if (data?.questions && data?.answers) {
           computeReport(data.questions, data.answers, data.duration)
           loaded = true

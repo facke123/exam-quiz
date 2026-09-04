@@ -260,6 +260,17 @@ export class QuizController {
     return this.quizService.syncWrongToReview(user ? user.id : 1, subjectId ? Number(subjectId) : undefined);
   }
 
+  @Post(['quiz/review/advance', 'quiz/review/:questionId/advance'])
+  @ApiOperation({ summary: '推进单题艾宾浩斯复习阶段' })
+  async advanceReviewItem(
+    @CurrentUser() user: UserPayload,
+    @Param('questionId') paramQId?: number,
+    @Body('questionId') bodyQId?: number,
+  ) {
+    const qId = Number(paramQId || bodyQId);
+    return this.quizService.advanceReviewItem(user ? user.id : 1, qId);
+  }
+
   @Post(['quiz/review/master', 'quiz/review/:questionId/master'])
   @ApiOperation({ summary: '标记已掌握/长效巩固' })
   async markReviewMastered(

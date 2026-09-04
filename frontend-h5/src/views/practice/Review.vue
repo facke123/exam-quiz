@@ -196,7 +196,7 @@
         </div>
 
         <!-- 题目列表加载态 -->
-        <div v-if="loading" class="list-loading">
+        <div v-if="loading && reviewList.length === 0" class="list-loading">
           <van-loading type="spinner" color="#f97316" vertical>加载复习题库中...</van-loading>
         </div>
 
@@ -230,31 +230,53 @@
             <!-- 题干内容 -->
             <div class="ric-title">
               <span class="index-num">{{ idx + 1 }}.</span>
-              {{ item.content || item.title }}
+              <span v-html="renderWithFormula(item.content || item.title)" />
             </div>
 
-            <!-- 展开选项 -->
+            <!-- 选项自测区域（展开或自测中） -->
             <div class="ric-options" v-if="expandedCards[item.questionId]">
               <div
                 v-for="opt in item.options"
                 :key="opt.label"
                 class="ric-option-row"
-                :class="{ 'is-correct': item.answer.toUpperCase().includes(opt.label.toUpperCase()) }"
+                :class="getOptionClass(item, opt.label)"
+                @click="onSelectOption(item, opt.label)"
               >
                 <span class="opt-label">{{ opt.label }}</span>
                 <span class="opt-text">{{ opt.text }}</span>
                 <span
-                  v-if="item.answer.toUpperCase().includes(opt.label.toUpperCase())"
+                  v-if="userAnswers[item.questionId] && isCorrectOption(item, opt.label)"
                   class="correct-tag"
                 >
                   ✓ 正确答案
                 </span>
+                <span
+                  v-else-if="userAnswers[item.questionId] === opt.label && !isCorrectOption(item, opt.label)"
+                  class="wrong-tag"
+                >
+                  ✗ 你的选择
+                </span>
+              </div>
+
+              <!-- 自测反馈与快速推进条 -->
+              <div class="ric-quick-feedback" v-if="userAnswers[item.questionId]">
+                <div class="qf-status" :class="userAnswers[item.questionId] === (item.answer || item.correctAnswer) ? 'is-pass' : 'is-fail'">
+                  {{ userAnswers[item.questionId] === (item.answer || item.correctAnswer) ? '🎉 自测正确！已强化记忆' : '💡 记错啦，建议加强理解' }}
+                </div>
+                <div class="qf-actions">
+                  <button class="qf-btn advance" @click="onAdvanceItem(item)">
+                    ✅ 记住了 · 推进下一阶段
+                  </button>
+                  <button class="qf-btn reset" @click="onResetProgress(item)">
+                    🔄 没记住 · 明日重测
+                  </button>
+                </div>
               </div>
 
               <!-- 官方解析 -->
               <div class="ric-analysis-box" v-if="item.analysis">
                 <div class="ab-title">💡 官方考点解析：</div>
-                <div class="ab-content">{{ item.analysis }}</div>
+                <div class="ab-content" v-html="renderWithFormula(item.analysis)" />
               </div>
             </div>
 
@@ -264,16 +286,24 @@
                 class="ric-toggle-btn"
                 @click="toggleCardExpand(item.questionId)"
               >
-                <span>{{ expandedCards[item.questionId] ? '收起解析 ▴' : '查看答案与解析 ▾' }}</span>
+                <span>{{ expandedCards[item.questionId] ? '收起解析 ▴' : '自测 / 查看解析 ▾' }}</span>
               </div>
 
               <div class="ric-btn-group">
                 <button
                   class="act-btn mini practice"
                   @click="startSingleQuiz(item)"
-                  title="立即单题练习"
+                  title="立即单题全屏做题"
                 >
                   🎯 练习此题
+                </button>
+                <button
+                  v-if="item.status !== 'completed'"
+                  class="act-btn mini advance-btn"
+                  @click="onAdvanceItem(item)"
+                  title="推进到下一艾宾浩斯强化阶段"
+                >
+                  ⚡ 推进
                 </button>
                 <button
                   class="act-btn mini note"
@@ -311,6 +341,16 @@
               </div>
             </div>
           </div>
+
+          <!-- 分页加载更多 -->
+          <div class="load-more-wrap" v-if="hasMore">
+            <button class="load-more-btn" :disabled="loadingMore" @click="loadMore">
+              {{ loadingMore ? '加载中...' : `加载更多题目 (剩余 ${totalCount - reviewList.length} 题)` }}
+            </button>
+          </div>
+          <div class="no-more-tip" v-else-if="reviewList.length >= totalCount && totalCount > 0">
+            已显示全部 {{ totalCount }} 道复习题目
+          </div>
         </div>
 
         <!-- 空数据状态 -->
@@ -331,6 +371,12 @@
         </div>
       </div>
     </div>
+
+    <!-- 科目选择弹窗 -->
+    <SubjectPicker
+      v-model="showSubjectPicker"
+      @select="onSubjectSelect"
+    />
 
     <!-- 试题笔记弹窗 -->
     <NotePopup
@@ -377,20 +423,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast, showDialog, showConfirmDialog } from 'vant'
+import { showToast, showConfirmDialog } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
+import { renderWithFormula } from '@/utils/katex'
 import {
   getReviewOverview,
   getReviewQuestions,
   syncWrongToReview,
+  advanceReviewItem,
   markReviewMastered,
   resetReviewItem,
   removeReviewItem,
   type ReviewItem,
   type ReviewOverview,
 } from '@/api/review'
+import SubjectPicker from '@/components/SubjectPicker.vue'
 import NotePopup from '@/components/NotePopup.vue'
 import ReportPopup from '@/components/ReportPopup.vue'
 
@@ -398,6 +447,7 @@ const router = useRouter()
 const subjectStore = useSubjectStore()
 
 const loading = ref(false)
+const loadingMore = ref(false)
 const syncing = ref(false)
 const showExplainModal = ref(false)
 const showSubjectPicker = ref(false)
@@ -408,6 +458,12 @@ const currentQuestion = ref<ReviewItem | null>(null)
 const currentStage = ref<'due' | 'urgent' | 'today' | 'tomorrow' | 'completed' | 'all'>('due')
 const reviewList = ref<ReviewItem[]>([])
 const expandedCards = reactive<Record<string, boolean>>({})
+const userAnswers = reactive<Record<string, string>>({})
+
+const currentPage = ref(1)
+const pageSize = ref(30)
+const totalCount = ref(0)
+const hasMore = computed(() => reviewList.value.length < totalCount.value)
 
 const overview = reactive<ReviewOverview>({
   totalDue: 0,
@@ -441,8 +497,15 @@ function showExplain() {
   showExplainModal.value = true
 }
 
+function onSubjectSelect(id: number | string) {
+  subjectStore.switchSubject(id)
+  currentPage.value = 1
+  loadData()
+}
+
 async function loadData() {
   loading.value = true
+  currentPage.value = 1
   try {
     const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
     const [ovRes, listRes] = await Promise.all([
@@ -451,7 +514,7 @@ async function loadData() {
         stage: currentStage.value,
         subjectId: subId,
         page: 1,
-        pageSize: 50,
+        pageSize: pageSize.value,
       }),
     ])
 
@@ -461,8 +524,10 @@ async function loadData() {
 
     if (listRes?.data?.list) {
       reviewList.value = listRes.data.list
+      totalCount.value = listRes.data.total || listRes.data.list.length
     } else {
       reviewList.value = []
+      totalCount.value = 0
     }
   } catch {
     showToast('获取复习数据失败，请重试')
@@ -471,8 +536,33 @@ async function loadData() {
   }
 }
 
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  try {
+    const subId = subjectStore.currentSubjectId ? String(subjectStore.currentSubjectId) : undefined
+    const nextPage = currentPage.value + 1
+    const res = await getReviewQuestions({
+      stage: currentStage.value,
+      subjectId: subId,
+      page: nextPage,
+      pageSize: pageSize.value,
+    })
+    if (res?.data?.list && res.data.list.length > 0) {
+      reviewList.value = [...reviewList.value, ...res.data.list]
+      currentPage.value = nextPage
+      totalCount.value = res.data.total || reviewList.value.length
+    }
+  } catch {
+    showToast('加载更多题目失败')
+  } finally {
+    loadingMore.value = false
+  }
+}
+
 async function selectStage(stage: 'due' | 'urgent' | 'today' | 'tomorrow' | 'completed' | 'all') {
   currentStage.value = stage
+  currentPage.value = 1
   await loadData()
 }
 
@@ -498,15 +588,52 @@ function startReview(stage: 'due' | 'urgent' | 'today' | 'all' = 'due') {
     return
   }
   showToast('进入艾宾浩斯智能复习模式')
-  router.push(`/quiz/practice?mode=review&stage=${stage}&subjectId=${subjectStore.currentSubjectId || 1}`)
+  router.push(`/quiz/review?mode=review&stage=${stage}&subjectId=${subjectStore.currentSubjectId || 1}&count=50`)
 }
 
 function startSingleQuiz(item: ReviewItem) {
-  router.push(`/quiz/practice?mode=review&questionIds=${item.questionId}&subjectId=${subjectStore.currentSubjectId || 1}`)
+  router.push(`/quiz/review?mode=review&questionIds=${item.questionId}&subjectId=${subjectStore.currentSubjectId || 1}`)
 }
 
 function toggleCardExpand(qId: string) {
   expandedCards[qId] = !expandedCards[qId]
+}
+
+function isCorrectOption(item: ReviewItem, optLabel: string): boolean {
+  const correct = String(item.answer || item.correctAnswer || '').toUpperCase().trim()
+  return correct.includes(optLabel.toUpperCase().trim())
+}
+
+function getOptionClass(item: ReviewItem, optLabel: string) {
+  const userAns = userAnswers[item.questionId]
+  const isRight = isCorrectOption(item, optLabel)
+  if (!userAns) {
+    return isRight ? 'is-correct-preview' : ''
+  }
+  if (isRight) {
+    return 'is-correct'
+  }
+  if (userAns === optLabel && !isRight) {
+    return 'is-wrong'
+  }
+  return ''
+}
+
+function onSelectOption(item: ReviewItem, optLabel: string) {
+  userAnswers[item.questionId] = optLabel
+  if (!expandedCards[item.questionId]) {
+    expandedCards[item.questionId] = true
+  }
+}
+
+async function onAdvanceItem(item: ReviewItem) {
+  try {
+    const res = await advanceReviewItem(item.questionId)
+    showToast(res?.message || '阶段已推进')
+    await loadData()
+  } catch {
+    showToast('推进失败')
+  }
 }
 
 function openNote(item: ReviewItem) {
@@ -565,6 +692,10 @@ async function onRemoveItem(item: ReviewItem) {
 }
 
 onMounted(() => {
+  loadData()
+})
+
+onActivated(() => {
   loadData()
 })
 </script>
@@ -1051,13 +1182,34 @@ onMounted(() => {
       gap: 8px;
       font-size: 13px;
       color: #334155;
-      padding: 6px 8px;
+      padding: 8px 10px;
       border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+
+      &:hover {
+        background: #f1f5f9;
+      }
+
+      &.is-correct-preview {
+        background: #f0fdf4;
+        color: #15803d;
+        border-color: #bbf7d0;
+      }
 
       &.is-correct {
         background: #dcfce7;
         color: #15803d;
         font-weight: 600;
+        border-color: #86efac;
+      }
+
+      &.is-wrong {
+        background: #fee2e2;
+        color: #b91c1c;
+        font-weight: 600;
+        border-color: #fca5a5;
       }
 
       .opt-label {
@@ -1071,6 +1223,63 @@ onMounted(() => {
       .correct-tag {
         font-size: 11px;
         color: #16a34a;
+        font-weight: 700;
+      }
+
+      .wrong-tag {
+        font-size: 11px;
+        color: #dc2626;
+        font-weight: 700;
+      }
+    }
+
+    .ric-quick-feedback {
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+
+      .qf-status {
+        font-size: 12px;
+        font-weight: 700;
+
+        &.is-pass { color: #16a34a; }
+        &.is-fail { color: #ea580c; }
+      }
+
+      .qf-actions {
+        display: flex;
+        gap: 8px;
+
+        .qf-btn {
+          flex: 1;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 14px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &.advance {
+            background: #16a34a;
+            color: #ffffff;
+          }
+
+          &.reset {
+            background: #fff7ed;
+            color: #ea580c;
+            border: 1px solid #fed7aa;
+          }
+
+          &:active {
+            transform: scale(0.97);
+          }
+        }
       }
     }
 
@@ -1111,6 +1320,7 @@ onMounted(() => {
     .ric-btn-group {
       display: flex;
       gap: 6px;
+      align-items: center;
 
       .act-btn {
         border: none;
@@ -1124,6 +1334,11 @@ onMounted(() => {
         &.practice {
           background: #ea580c;
           color: #ffffff;
+        }
+
+        &.advance-btn {
+          background: #dbeafe;
+          color: #1d4ed8;
         }
 
         &.note {
@@ -1159,6 +1374,40 @@ onMounted(() => {
       }
     }
   }
+}
+
+.load-more-wrap {
+  text-align: center;
+  padding: 12px 0;
+
+  .load-more-btn {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #ea580c;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 24px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: #fff7ed;
+      border-color: #ea580c;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.no-more-tip {
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 16px 0 8px;
 }
 
 /* Empty State */

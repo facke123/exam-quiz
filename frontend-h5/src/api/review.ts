@@ -55,6 +55,7 @@ export function getReviewOverview(subjectId?: string | number) {
 export function getReviewQuestions(params: {
   stage?: 'due' | 'urgent' | 'today' | 'tomorrow' | 'completed' | 'all'
   subjectId?: string | number
+  questionIds?: string
   page?: number
   pageSize?: number
 }) {
@@ -79,6 +80,17 @@ export function syncWrongToReview(subjectId?: string | number) {
     url: '/quiz/review/sync-wrong',
     method: 'post',
     data: { subjectId },
+  })
+}
+
+/**
+ * 推进单题艾宾浩斯阶段（自测掌握/记住了）
+ */
+export function advanceReviewItem(questionId: string | number) {
+  return request<{ message: string; item: any }>({
+    url: `/quiz/review/${questionId}/advance`,
+    method: 'post',
+    data: { questionId },
   })
 }
 
