@@ -504,6 +504,7 @@ function onSubjectSelect(id: number | string) {
 }
 
 async function loadData() {
+  if (loading.value) return
   loading.value = true
   currentPage.value = 1
   try {
@@ -522,9 +523,17 @@ async function loadData() {
       Object.assign(overview, ovRes.data)
     }
 
-    if (listRes?.data?.list) {
-      reviewList.value = listRes.data.list
-      totalCount.value = listRes.data.total || listRes.data.list.length
+    if (listRes?.data?.list && Array.isArray(listRes.data.list)) {
+      // 客户端严格去重保底
+      const map = new Map<string, ReviewItem>()
+      for (const item of listRes.data.list) {
+        const qId = String(item.questionId || item.id)
+        if (!map.has(qId)) {
+          map.set(qId, item)
+        }
+      }
+      reviewList.value = Array.from(map.values())
+      totalCount.value = listRes.data.total ?? reviewList.value.length
     } else {
       reviewList.value = []
       totalCount.value = 0
@@ -549,9 +558,11 @@ async function loadMore() {
       pageSize: pageSize.value,
     })
     if (res?.data?.list && res.data.list.length > 0) {
-      reviewList.value = [...reviewList.value, ...res.data.list]
+      const existingIds = new Set(reviewList.value.map((i) => String(i.questionId || i.id)))
+      const newItems = res.data.list.filter((i: ReviewItem) => !existingIds.has(String(i.questionId || i.id)))
+      reviewList.value = [...reviewList.value, ...newItems]
       currentPage.value = nextPage
-      totalCount.value = res.data.total || reviewList.value.length
+      totalCount.value = res.data.total ?? reviewList.value.length
     }
   } catch {
     showToast('加载更多题目失败')
@@ -563,6 +574,7 @@ async function loadMore() {
 async function selectStage(stage: 'due' | 'urgent' | 'today' | 'tomorrow' | 'completed' | 'all') {
   currentStage.value = stage
   currentPage.value = 1
+  loading.value = false
   await loadData()
 }
 
@@ -691,12 +703,17 @@ async function onRemoveItem(item: ReviewItem) {
   })
 }
 
+let hasMounted = false
 onMounted(() => {
+  hasMounted = true
   loadData()
 })
 
 onActivated(() => {
-  loadData()
+  // keep-alive 切回页面时刷新，首次挂载跳过避免并发双发请求
+  if (hasMounted && !loading.value) {
+    loadData()
+  }
 })
 </script>
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { PracticeRecord } from '@/database/entities/practice-record.entity';
@@ -44,7 +44,7 @@ const toDbType = (t?: string) => {
  * 做题服务
  */
 @Injectable()
-export class QuizService {
+export class QuizService implements OnModuleInit {
   constructor(
     @InjectRepository(PracticeRecord)
     private readonly recordRepository: Repository<PracticeRecord>,
@@ -71,13 +71,50 @@ export class QuizService {
   ) {}
 
   /**
+   * 服务初始化：清理历史重复复习数据并尝试创建唯一键
+   */
+  async onModuleInit() {
+    try {
+      // 启动时清理 review_queue 历史重复题目记录，每对 (user_id, question_id) 仅保留最新的一条
+      await this.reviewQueueRepository.query(
+        `DELETE rq1 FROM review_queue rq1
+         INNER JOIN review_queue rq2
+         ON rq1.user_id = rq2.user_id AND rq1.question_id = rq2.question_id AND rq1.id < rq2.id`
+      );
+      // 尝试创建唯一键约束（若已有则忽略）
+      await this.reviewQueueRepository.query(
+        `ALTER TABLE review_queue ADD UNIQUE INDEX uq_user_question (user_id, question_id)`
+      ).catch(() => {});
+    } catch {
+      // 容错处理
+    }
+  }
+
+  /**
+   * 清理指定用户的 review_queue 重复记录，确保 (userId, questionId) 严格唯一
+   */
+  async cleanupDuplicateReviewQueue(userId: number): Promise<void> {
+    try {
+      await this.reviewQueueRepository.query(
+        `DELETE rq1 FROM review_queue rq1
+         INNER JOIN review_queue rq2
+         ON rq1.user_id = rq2.user_id AND rq1.question_id = rq2.question_id AND rq1.id < rq2.id
+         WHERE rq1.user_id = ?`,
+        [userId],
+      );
+    } catch {
+      // 容错处理
+    }
+  }
+
+  /**
    * 创建练习（章节练习/历年真题/模拟考试/每日一练/自主练习/错题重做）
    */
   async createPractice(userId: number, dto: any): Promise<{ recordId: string; record: any }> {
     let questionIds: number[] = [];
 
     if (dto.questionIds && Array.isArray(dto.questionIds) && dto.questionIds.length > 0) {
-      questionIds = dto.questionIds.map((id: any) => Number(id));
+      questionIds = Array.from(new Set(dto.questionIds.map((id: any) => Number(id)).filter(Boolean)));
     } else if (dto.mode === 'chapter') {
       const qb = this.questionRepository
         .createQueryBuilder('q')
@@ -93,14 +130,14 @@ export class QuizService {
       }
       qb.orderBy('q.id', 'ASC').take(dto.count || dto.questionCount || 20);
       const questions = await qb.getMany();
-      questionIds = questions.map((q) => Number(q.id));
+      questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
     } else if (dto.mode === 'real' || dto.mode === 'mock') {
       if (dto.paperId) {
         const paper = await this.paperRepository.findOne({
           where: { id: dto.paperId },
         });
         if (paper && paper.questionIds) {
-          questionIds = paper.questionIds;
+          questionIds = Array.from(new Set((paper.questionIds as any[]).map((id: any) => Number(id))));
         }
       }
       if (questionIds.length === 0) {
@@ -110,7 +147,7 @@ export class QuizService {
           .orderBy('RAND()')
           .take(75)
           .getMany();
-        questionIds = questions.map((q) => Number(q.id));
+        questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
       }
     } else if (dto.mode === 'daily') {
       const questions = await this.questionRepository
@@ -119,7 +156,7 @@ export class QuizService {
         .orderBy('RAND()')
         .take(dto.count || 5)
         .getMany();
-      questionIds = questions.map((q) => Number(q.id));
+      questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
     } else if (dto.mode === 'knowledge' || dto.knowledgePointId) {
       const qb = this.questionRepository
         .createQueryBuilder('q')
@@ -150,51 +187,81 @@ export class QuizService {
           take: dto.count || 10,
         });
       }
-      questionIds = questions.map((q) => Number(q.id));
+      questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
     } else if (dto.mode === 'favorite') {
       const favorites = await this.favoriteRepository.find({
         where: { userId },
         order: { createdAt: 'DESC' },
       });
-      questionIds = favorites.map((f) => Number(f.questionId));
+      questionIds = Array.from(new Set(favorites.map((f) => Number(f.questionId))));
     } else if (dto.mode === 'review') {
+      await this.cleanupDuplicateReviewQueue(userId);
       const now = new Date();
       const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      let reviewItems = await this.reviewQueueRepository
+
+      const qb = this.reviewQueueRepository
         .createQueryBuilder('rq')
+        .innerJoin(Question, 'q', 'q.id = rq.questionId')
         .where('rq.userId = :userId', { userId })
-        .andWhere('rq.status = :status', { status: 'pending' })
+        .andWhere('rq.status = :status', { status: 'pending' });
+
+      if (dto.subjectId) {
+        qb.andWhere('(q.subjectId = :subjectId OR q.subjectId IS NULL OR q.subjectId = 0)', {
+          subjectId: Number(dto.subjectId),
+        });
+      }
+
+      let reviewItems = await qb
         .andWhere('rq.nextReviewAt <= :todayEnd', { todayEnd })
         .orderBy('rq.nextReviewAt', 'ASC')
-        .take(dto.count || 20)
+        .take((dto.count || 20) * 2)
         .getMany();
 
       if (reviewItems.length === 0) {
-        reviewItems = await this.reviewQueueRepository
+        const fallbackQb = this.reviewQueueRepository
           .createQueryBuilder('rq')
+          .innerJoin(Question, 'q', 'q.id = rq.questionId')
           .where('rq.userId = :userId', { userId })
-          .andWhere('rq.status = :status', { status: 'pending' })
+          .andWhere('rq.status = :status', { status: 'pending' });
+        if (dto.subjectId) {
+          fallbackQb.andWhere('(q.subjectId = :subjectId OR q.subjectId IS NULL OR q.subjectId = 0)', {
+            subjectId: Number(dto.subjectId),
+          });
+        }
+        reviewItems = await fallbackQb
           .orderBy('rq.nextReviewAt', 'ASC')
-          .take(dto.count || 20)
+          .take((dto.count || 20) * 2)
           .getMany();
       }
 
       if (reviewItems.length === 0) {
         await this.syncWrongToReview(userId, dto.subjectId ? Number(dto.subjectId) : undefined);
-        reviewItems = await this.reviewQueueRepository.find({
-          where: { userId, status: 'pending' },
-          take: dto.count || 20,
-        });
+        const retryQb = this.reviewQueueRepository
+          .createQueryBuilder('rq')
+          .innerJoin(Question, 'q', 'q.id = rq.questionId')
+          .where('rq.userId = :userId', { userId })
+          .andWhere('rq.status = :status', { status: 'pending' });
+        if (dto.subjectId) {
+          retryQb.andWhere('(q.subjectId = :subjectId OR q.subjectId IS NULL OR q.subjectId = 0)', {
+            subjectId: Number(dto.subjectId),
+          });
+        }
+        reviewItems = await retryQb.take((dto.count || 20) * 2).getMany();
       }
 
-      questionIds = reviewItems.map((r) => Number(r.questionId));
+      // 严格去重题目ID并截取目标数量
+      questionIds = Array.from(new Set(reviewItems.map((r) => Number(r.questionId)).filter(Boolean)))
+        .slice(0, dto.count || 20);
 
       if (questionIds.length === 0) {
-        const questions = await this.questionRepository.find({
-          where: { status: 'published' },
-          take: dto.count || 10,
-        });
-        questionIds = questions.map((q) => Number(q.id));
+        const qQb = this.questionRepository
+          .createQueryBuilder('q')
+          .where('q.status = :status', { status: 'published' });
+        if (dto.subjectId) {
+          qQb.andWhere('q.subjectId = :subjectId', { subjectId: Number(dto.subjectId) });
+        }
+        const questions = await qQb.take(dto.count || 10).getMany();
+        questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
       }
     } else {
       const questions = await this.questionRepository
@@ -203,8 +270,11 @@ export class QuizService {
         .orderBy('RAND()')
         .take(dto.count || 20)
         .getMany();
-      questionIds = questions.map((q) => Number(q.id));
+      questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
     }
+
+    // 最终全局防重
+    questionIds = Array.from(new Set(questionIds.filter(Boolean)));
 
     const record = this.recordRepository.create({
       userId,
@@ -411,7 +481,10 @@ export class QuizService {
 
     // 错题自动入库（免费用户限制100题）
     const existingWrongCount = await this.wrongQuestionRepository.count({ where: { userId } });
-    for (const wa of wrongAnswers) {
+    const uniqueWrongAnswers = Array.from(
+      new Map(wrongAnswers.map((wa) => [Number(wa.questionId), wa])).values()
+    );
+    for (const wa of uniqueWrongAnswers) {
       if (!isVip && existingWrongCount >= 100) {
         break; // 免费用户达到100题限制不再自动加入新错题
       }
@@ -438,12 +511,19 @@ export class QuizService {
       }
       await this.wrongQuestionRepository.save(wrongQ);
 
-      // 同步进入艾宾浩斯复习队列（若未入队或已重错）
+      // 同步进入艾宾浩斯复习队列（若未入队或已重错，清理历史多余记录）
       try {
-        let rItem = await this.reviewQueueRepository.findOne({
+        const rItems = await this.reviewQueueRepository.find({
           where: { userId, questionId: wa.questionId },
         });
-        if (!rItem) {
+        let rItem: ReviewQueue;
+        if (rItems.length > 1) {
+          const [keep, ...duplicates] = rItems;
+          await this.reviewQueueRepository.remove(duplicates);
+          rItem = keep;
+        } else if (rItems.length === 1) {
+          rItem = rItems[0];
+        } else {
           rItem = this.reviewQueueRepository.create({
             userId,
             questionId: wa.questionId,
@@ -452,27 +532,35 @@ export class QuizService {
             nextReviewAt: new Date(Date.now() + 24 * 3600 * 1000),
             status: 'pending',
           });
-        } else {
-          rItem.step = 0;
-          rItem.interval = 1;
-          rItem.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
-          rItem.status = 'pending';
         }
+        rItem.step = 0;
+        rItem.interval = 1;
+        rItem.nextReviewAt = new Date(Date.now() + 24 * 3600 * 1000);
+        rItem.status = 'pending';
         await this.reviewQueueRepository.save(rItem);
       } catch {
         // ignore
       }
     }
 
-    // 若当前为艾宾浩斯复习模式，推进或重置各题复习周期
+    // 若当前为艾宾浩斯复习模式，推进或重置各题复习周期（严格单题去重推进）
     if (record.mode === 'review') {
       const INTERVALS = [1, 2, 4, 7, 15, 30];
-      for (const a of answers) {
+      const uniqueAnswers = Array.from(
+        new Map(answers.map((a) => [Number(a.questionId), a])).values()
+      );
+      for (const a of uniqueAnswers) {
         try {
-          let rItem = await this.reviewQueueRepository.findOne({
+          const rItems = await this.reviewQueueRepository.find({
             where: { userId, questionId: a.questionId },
           });
-          if (rItem) {
+          if (rItems.length > 0) {
+            let rItem = rItems[0];
+            if (rItems.length > 1) {
+              const [keep, ...duplicates] = rItems;
+              await this.reviewQueueRepository.remove(duplicates);
+              rItem = keep;
+            }
             rItem.lastReviewedAt = new Date();
             if (a.isCorrect === 1) {
               rItem.step = (rItem.step || 0) + 1;
@@ -1219,6 +1307,9 @@ export class QuizService {
     consolidationRate: number;
     stageDistribution: Record<string, number>;
   }> {
+    // 自动清理可能存在的历史重复记录
+    await this.cleanupDuplicateReviewQueue(userId);
+
     // 若用户复习队列为空，自动从错题本与高频题中导入
     const totalCount = await this.reviewQueueRepository.count({ where: { userId } });
     if (totalCount === 0) {
@@ -1236,7 +1327,17 @@ export class QuizService {
       });
     }
 
-    const items = await qb.orderBy('rq.nextReviewAt', 'ASC').getMany();
+    const rawItems = await qb.orderBy('rq.nextReviewAt', 'ASC').getMany();
+
+    // 内存严格按 questionId 去重保底（同一题目仅取一条）
+    const itemMap = new Map<number, ReviewQueue>();
+    for (const item of rawItems) {
+      const qId = Number(item.questionId);
+      if (!itemMap.has(qId)) {
+        itemMap.set(qId, item);
+      }
+    }
+    const items = Array.from(itemMap.values());
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
@@ -1316,6 +1417,9 @@ export class QuizService {
   }> {
     const { page = 1, pageSize = 20, stage = 'due', subjectId, questionIds } = query;
 
+    // 清理历史可能残留的重复数据
+    await this.cleanupDuplicateReviewQueue(userId);
+
     const overview = await this.getReviewOverview(userId, subjectId ? Number(subjectId) : undefined);
 
     const now = new Date();
@@ -1366,7 +1470,7 @@ export class QuizService {
       .take(pageSize)
       .orderBy('rq.nextReviewAt', 'ASC');
 
-    let [items, total] = await qb.getManyAndCount();
+    let [items, rawTotal] = await qb.getManyAndCount();
 
     if (items.length === 0 && questionIds) {
       const qIdList = String(questionIds)
@@ -1397,7 +1501,17 @@ export class QuizService {
       return { list: [], total: 0, page: Number(page), pageSize: Number(pageSize), overview };
     }
 
-    const qIds = items.map((i) => Number(i.questionId)).filter(Boolean);
+    // 内存严格按 questionId 去重
+    const distinctItemMap = new Map<number, ReviewQueue>();
+    for (const it of items) {
+      const qId = Number(it.questionId);
+      if (!distinctItemMap.has(qId)) {
+        distinctItemMap.set(qId, it);
+      }
+    }
+    const uniqueItems = Array.from(distinctItemMap.values());
+
+    const qIds = uniqueItems.map((i) => Number(i.questionId)).filter(Boolean);
     const questions = qIds.length > 0 ? await this.questionRepository.find({ where: { id: In(qIds) } }) : [];
     const qMap = new Map(questions.map((q) => [Number(q.id), q]));
 
@@ -1423,7 +1537,7 @@ export class QuizService {
       subjective: '主观题',
     };
 
-    const formatted = items.map((item) => {
+    const formatted = uniqueItems.map((item) => {
       const q = qMap.get(Number(item.questionId));
       const qType = q ? fromDbType(q.type) : 'single';
       let options = q ? q.options : [];
@@ -1488,7 +1602,24 @@ export class QuizService {
       };
     });
 
-    return { list: formatted, total, page: Number(page), pageSize: Number(pageSize), overview };
+    // 最终列表严格防重保底
+    const seenQuestionIds = new Set<string>();
+    const distinctFormatted = formatted.filter((item) => {
+      if (seenQuestionIds.has(item.questionId)) return false;
+      seenQuestionIds.add(item.questionId);
+      return true;
+    });
+
+    // 计算准确的去重后总数
+    let accurateTotal = rawTotal;
+    if (stage === 'due') accurateTotal = overview.totalDue;
+    else if (stage === 'urgent') accurateTotal = overview.urgentCount;
+    else if (stage === 'today') accurateTotal = overview.todayCount;
+    else if (stage === 'tomorrow') accurateTotal = overview.tomorrowCount;
+    else if (stage === 'completed') accurateTotal = overview.completedCount;
+    else if (stage === 'all') accurateTotal = overview.totalQueue;
+
+    return { list: distinctFormatted, total: accurateTotal, page: Number(page), pageSize: Number(pageSize), overview };
   }
 
   /**
@@ -1498,20 +1629,25 @@ export class QuizService {
     userId: number,
     subjectId?: number,
   ): Promise<{ syncedCount: number; totalCount: number }> {
+    await this.cleanupDuplicateReviewQueue(userId);
+
     const wrongList = await this.wrongQuestionRepository.find({
       where: { userId },
       order: { lastWrongAt: 'DESC' },
     });
 
+    // 提取不重复的错题ID
+    const uniqueWrongQIds = Array.from(new Set(wrongList.map((w) => Number(w.questionId)).filter(Boolean)));
+
     let syncedCount = 0;
-    for (const w of wrongList) {
+    for (const qId of uniqueWrongQIds) {
       const exists = await this.reviewQueueRepository.findOne({
-        where: { userId, questionId: Number(w.questionId) },
+        where: { userId, questionId: qId },
       });
       if (!exists) {
         const item = this.reviewQueueRepository.create({
           userId,
-          questionId: Number(w.questionId),
+          questionId: qId,
           interval: 1,
           step: 0,
           nextReviewAt: new Date(),
@@ -1522,28 +1658,36 @@ export class QuizService {
       }
     }
 
-    // 若错题本为空，抓取 15 道精选已发布试题初始化复习库
-    if (syncedCount === 0 && (await this.reviewQueueRepository.count({ where: { userId } })) === 0) {
+    // 若错题本为空或复习队列仍为空，抓取 15 道精选已发布试题初始化复习库
+    const currentCount = await this.reviewQueueRepository.count({ where: { userId } });
+    if (currentCount === 0) {
       const qb = this.questionRepository
         .createQueryBuilder('q')
         .where('q.status = :status', { status: 'published' });
-      if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
+      if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId: Number(subjectId) });
       const questions = await qb.take(15).getMany();
 
-      for (const q of questions) {
-        const item = this.reviewQueueRepository.create({
-          userId,
-          questionId: Number(q.id),
-          interval: 1,
-          step: 0,
-          nextReviewAt: new Date(),
-          status: 'pending',
+      const uniqueInitQIds = Array.from(new Set(questions.map((q) => Number(q.id)).filter(Boolean)));
+      for (const qId of uniqueInitQIds) {
+        const exists = await this.reviewQueueRepository.findOne({
+          where: { userId, questionId: qId },
         });
-        await this.reviewQueueRepository.save(item);
-        syncedCount++;
+        if (!exists) {
+          const item = this.reviewQueueRepository.create({
+            userId,
+            questionId: qId,
+            interval: 1,
+            step: 0,
+            nextReviewAt: new Date(),
+            status: 'pending',
+          });
+          await this.reviewQueueRepository.save(item);
+          syncedCount++;
+        }
       }
     }
 
+    await this.cleanupDuplicateReviewQueue(userId);
     const totalCount = await this.reviewQueueRepository.count({ where: { userId } });
     return { syncedCount, totalCount };
   }
@@ -1553,10 +1697,17 @@ export class QuizService {
    */
   async advanceReviewItem(userId: number, questionId: number): Promise<any> {
     const INTERVALS = [1, 2, 4, 7, 15, 30];
-    let item = await this.reviewQueueRepository.findOne({
+    const items = await this.reviewQueueRepository.find({
       where: { userId, questionId },
     });
-    if (!item) {
+    let item: ReviewQueue;
+    if (items.length > 1) {
+      const [keep, ...duplicates] = items;
+      await this.reviewQueueRepository.remove(duplicates);
+      item = keep;
+    } else if (items.length === 1) {
+      item = items[0];
+    } else {
       item = this.reviewQueueRepository.create({
         userId,
         questionId,
@@ -1596,10 +1747,17 @@ export class QuizService {
     questionId: number,
     mastered: boolean,
   ): Promise<void> {
-    let item = await this.reviewQueueRepository.findOne({
+    const items = await this.reviewQueueRepository.find({
       where: { userId, questionId },
     });
-    if (!item) {
+    let item: ReviewQueue;
+    if (items.length > 1) {
+      const [keep, ...duplicates] = items;
+      await this.reviewQueueRepository.remove(duplicates);
+      item = keep;
+    } else if (items.length === 1) {
+      item = items[0];
+    } else {
       item = this.reviewQueueRepository.create({
         userId,
         questionId,

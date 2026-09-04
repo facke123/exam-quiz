@@ -4,12 +4,14 @@ import {
   Column,
   UpdateDateColumn,
   Index,
+  Unique,
 } from 'typeorm';
 
 /**
  * 艾宾浩斯复习队列实体 - 复习队列表
  */
 @Entity('review_queue')
+@Unique('uq_user_question', ['userId', 'questionId'])
 export class ReviewQueue {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;

@@ -354,7 +354,7 @@ onMounted(async () => {
         pageSize: countParam,
       })
       if (rRes?.data?.list && Array.isArray(rRes.data.list) && rRes.data.list.length > 0) {
-        questions.value = rRes.data.list.map((item: any) => ({
+        const rawList = rRes.data.list.map((item: any) => ({
           id: item.questionId || item.id,
           subjectId: item.subjectId,
           chapterId: item.chapterId,
@@ -367,6 +367,13 @@ onMounted(async () => {
           difficulty: 3,
           score: 1,
         }))
+        const seenReview = new Set<string>()
+        questions.value = rawList.filter((q) => {
+          const id = String(q.id)
+          if (seenReview.has(id)) return false
+          seenReview.add(id)
+          return true
+        })
       } else {
         questions.value = []
       }
@@ -411,6 +418,17 @@ onMounted(async () => {
       } else {
         questions.value = []
       }
+    }
+
+    // 全局题目去重保底：防止任何模式出现重复题目
+    if (questions.value && questions.value.length > 0) {
+      const globalSeen = new Set<string>()
+      questions.value = questions.value.filter((q) => {
+        const id = String(q.id)
+        if (globalSeen.has(id)) return false
+        globalSeen.add(id)
+        return true
+      })
     }
   } catch {
     questions.value = []
