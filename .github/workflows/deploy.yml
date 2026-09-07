@@ -44,7 +44,21 @@ jobs:
             echo "🚀 正在更新 Google Cloud 线上应用版本..."
             echo "=========================================="
             
-            # 1. 查找项目根目录
+            # 1. 优化系统网络与 Git 配置（解决 GCP 节点 IPv6 路由假死及连接 GitHub 超时）
+            echo ">>> 优化网络协议栈与 Git 传输配置..."
+            if [ -f /etc/gai.conf ]; then
+              if ! grep -q "^precedence ::ffff:0:0/96" /etc/gai.conf; then
+                echo "precedence ::ffff:0:0/96 100" >> /etc/gai.conf 2>/dev/null || true
+              fi
+            else
+              echo "precedence ::ffff:0:0/96 100" > /etc/gai.conf 2>/dev/null || true
+            fi
+
+            git config --global http.lowSpeedLimit 1000
+            git config --global http.lowSpeedTime 15
+            git config --global http.postBuffer 524288000
+
+            # 2. 查找项目根目录
             TARGET_DIR="/opt/app/exam-quiz"
             if [ ! -d "$TARGET_DIR" ] && [ -d "/opt/exam-quiz" ]; then
               TARGET_DIR="/opt/exam-quiz"
@@ -53,16 +67,48 @@ jobs:
             if [ ! -d "$TARGET_DIR" ]; then
               echo ">>> 项目目录不存在，正在克隆仓库..."
               mkdir -p /opt/app
-              git clone https://github.com/facke123/exam-quiz.git /opt/app/exam-quiz
+              git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/facke123/exam-quiz.git /opt/app/exam-quiz || \
+              git clone https://github.com/facke123/exam-quiz.git /opt/app/exam-quiz || \
+              git clone https://ghp.ci/https://github.com/facke123/exam-quiz.git /opt/app/exam-quiz
               TARGET_DIR="/opt/app/exam-quiz"
             fi
             
             cd "$TARGET_DIR"
             echo ">>> 工作目录: $TARGET_DIR"
             
-            # 2. 拉取最新代码
-            echo ">>> 同步最新 main 分支代码..."
-            git fetch --all
+            # 3. 多线路与重试拉取最新代码
+            echo ">>> 正在多通道同步最新 main 分支代码..."
+            FETCH_SUCCESS=0
+            REMOTES=(
+              "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/facke123/exam-quiz.git"
+              "https://github.com/facke123/exam-quiz.git"
+              "https://ghp.ci/https://github.com/facke123/exam-quiz.git"
+              "https://mirror.ghproxy.com/https://github.com/facke123/exam-quiz.git"
+            )
+
+            for REMOTE_URL in "${REMOTES[@]}"; do
+              MASKED_URL=$(echo "$REMOTE_URL" | sed -E 's/:[^@]+@/:***@/')
+              echo ">>> 尝试从源拉取: $MASKED_URL ..."
+              git remote set-url origin "$REMOTE_URL"
+              for retry in 1 2 3; do
+                if git fetch origin main || git fetch --all; then
+                  echo "✅ 代码拉取成功！"
+                  FETCH_SUCCESS=1
+                  break 2
+                fi
+                echo "⚠️ 第 $retry 次拉取超时或中断，3 秒后重试..."
+                sleep 3
+              done
+            done
+
+            # 无论何种源拉取成功，最终均恢复干净的标准远程地址
+            git remote set-url origin https://github.com/facke123/exam-quiz.git
+
+            if [ $FETCH_SUCCESS -ne 1 ]; then
+              echo "❌ 无法从任何通道连接 GitHub，请检查虚拟机公网网络！"
+              exit 1
+            fi
+
             git reset --hard origin/main
             
             mkdir -p "$TARGET_DIR/backups/mysql"
