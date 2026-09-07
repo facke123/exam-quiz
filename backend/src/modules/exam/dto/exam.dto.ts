@@ -270,5 +270,40 @@ export class ImportPaperDto {
 
   @ApiPropertyOptional({ description: '试卷年份' })
   @IsOptional()
+  @IsNumber()
   year?: number;
 }
+
+/**
+ * 知识点去重 DTO
+ */
+export class DeduplicateKnowledgePointDto {
+  @ApiPropertyOptional({
+    description: '去重策略: keep_richer(保留最丰富内容) / keep_earliest(保留最早) / keep_latest(保留最新) / manual(手动指定)',
+    example: 'keep_richer',
+  })
+  @IsOptional()
+  @IsString()
+  strategy?: 'keep_richer' | 'keep_earliest' | 'keep_latest' | 'manual' | string;
+
+  @ApiPropertyOptional({ description: '科目ID' })
+  @IsOptional()
+  @IsNumber()
+  subjectId?: number;
+
+  @ApiPropertyOptional({ description: '匹配模式: exact_name / normalized_name' })
+  @IsOptional()
+  @IsString()
+  matchType?: string;
+
+  @ApiPropertyOptional({ description: '指定去重的组 key 列表' })
+  @IsOptional()
+  @IsArray()
+  groupKeys?: string[];
+
+  @ApiPropertyOptional({ description: '手动指定要删除的知识点 ID 列表' })
+  @IsOptional()
+  @IsArray()
+  deleteIds?: number[];
+}
+

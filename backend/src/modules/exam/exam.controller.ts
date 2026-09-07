@@ -18,6 +18,7 @@ import {
   CreateKnowledgePointDto,
   CreatePaperDto,
   GeneratePaperDto,
+  DeduplicateKnowledgePointDto,
 } from './dto/exam.dto';
 import { Public } from '@/common/decorators/public.decorator';
 
@@ -189,6 +190,24 @@ export class ExamController {
   @ApiOperation({ summary: '批量删除知识点' })
   async batchDeleteKnowledgePoints(@Body() body: { ids: number[] }) {
     return this.examService.batchDeleteKnowledgePoints(body.ids || []);
+  }
+
+  @Get(['admin/knowledge-points/duplicates', 'exam/knowledge-points/duplicates', 'knowledge-points/duplicates'])
+  @ApiOperation({ summary: '检测重复知识点列表' })
+  async getDuplicateKnowledgePoints(
+    @Query('subjectId') subjectId?: number,
+    @Query('matchType') matchType?: string,
+  ) {
+    return this.examService.getDuplicateKnowledgePoints({
+      subjectId: subjectId ? Number(subjectId) : undefined,
+      matchType,
+    });
+  }
+
+  @Post(['admin/knowledge-points/deduplicate', 'exam/knowledge-points/deduplicate', 'knowledge-points/deduplicate'])
+  @ApiOperation({ summary: '智能去重与批量清理重复知识点' })
+  async deduplicateKnowledgePoints(@Body() dto: DeduplicateKnowledgePointDto) {
+    return this.examService.deduplicateKnowledgePoints(dto);
   }
 
   // ==================== 试卷管理 ====================

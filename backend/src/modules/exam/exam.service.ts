@@ -12,6 +12,7 @@ import {
   CreateKnowledgePointDto,
   CreatePaperDto,
   GeneratePaperDto,
+  DeduplicateKnowledgePointDto,
 } from './dto/exam.dto';
 
 /**
@@ -1216,6 +1217,240 @@ export class ExamService implements OnModuleInit {
     return {
       count: result.affected || 0,
       message: `成功批量删除 ${result.affected || 0} 个考点`,
+    };
+  }
+
+  /**
+   * 检测重复知识点列表与聚合统计
+   */
+  async getDuplicateKnowledgePoints(params?: {
+    subjectId?: number | string;
+    matchType?: string;
+  }): Promise<{
+    totalDuplicates: number;
+    duplicateGroupCount: number;
+    groups: Array<{
+      groupKey: string;
+      name: string;
+      subjectId: number;
+      subjectName: string;
+      count: number;
+      redundantCount: number;
+      recommendedKeepId: number;
+      items: any[];
+    }>;
+  }> {
+    const resolvedSubjectId = params?.subjectId ? Number(params.subjectId) : undefined;
+    const matchType = params?.matchType || 'exact_name';
+
+    // 获取科目字典
+    const subjects = await this.subjectRepository.find({ select: ['id', 'name'] });
+    const subjectMap = new Map<number, string>();
+    for (const s of subjects) {
+      subjectMap.set(Number(s.id), s.name);
+    }
+
+    // 获取章节字典
+    const chapters = await this.chapterRepository.find({ select: ['id', 'name'] });
+    const chapterMap = new Map<number, string>();
+    for (const c of chapters) {
+      chapterMap.set(Number(c.id), c.name);
+    }
+
+    const qb = this.knowledgePointRepository.createQueryBuilder('kp');
+    if (resolvedSubjectId && resolvedSubjectId > 0) {
+      qb.where('(kp.subjectId = :subId OR kp.subjectId IS NULL)', { subId: resolvedSubjectId });
+    }
+    qb.orderBy('kp.subjectId', 'ASC').addOrderBy('kp.name', 'ASC').addOrderBy('kp.id', 'ASC');
+
+    const allKps = await qb.getMany();
+
+    // 分组聚合
+    const groupMap = new Map<string, any[]>();
+    for (const kp of allKps) {
+      const rawName = (kp.name || '').trim();
+      if (!rawName) continue;
+
+      let keyPart = rawName.toLowerCase();
+      if (matchType === 'normalized_name') {
+        // 移除标点符号、特殊字符与多余空格
+        keyPart = keyPart.replace(/[\s\p{P}\p{S}]/gu, '');
+      }
+
+      const subId = kp.subjectId ? Number(kp.subjectId) : 0;
+      const groupKey = `${subId}_${keyPart}`;
+
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, []);
+      }
+      groupMap.get(groupKey).push(kp);
+    }
+
+    // 过滤出重复组（数量 > 1）
+    const groups: any[] = [];
+    let totalDuplicates = 0;
+
+    for (const [groupKey, items] of groupMap.entries()) {
+      if (items.length <= 1) continue;
+
+      // 评估每条记录的丰富度评分，评选出推荐保留项 (recommendedKeepId)
+      // 评分依据：核心解析长度 + 口诀长度 + 配套试题数 + 是否有教材出处
+      let bestScore = -1;
+      let recommendedKeepId = Number(items[0].id);
+
+      const formattedItems = items.map((kp) => {
+        const analysisLen = (kp.coreAnalysis || kp.description || '').trim().length;
+        const tipLen = (kp.memoryTips || '').trim().length;
+        const qCount = kp.questionCount || 0;
+        const hasSource = kp.sourceBook && kp.sourceBook !== '《教程》对应章节' ? 30 : 0;
+        const score = analysisLen * 2 + tipLen * 3 + qCount * 20 + hasSource;
+
+        if (score > bestScore) {
+          bestScore = score;
+          recommendedKeepId = Number(kp.id);
+        }
+
+        const subId = kp.subjectId ? Number(kp.subjectId) : (resolvedSubjectId || 1);
+        return {
+          id: Number(kp.id),
+          subjectId: subId,
+          subjectName: subjectMap.get(subId) || `科目 ${subId}`,
+          chapterId: Number(kp.chapterId),
+          chapterName: chapterMap.get(Number(kp.chapterId)) || `章节 ${kp.chapterId}`,
+          name: kp.name,
+          categoryTag: kp.categoryTag || '核心考点',
+          sourceBook: kp.sourceBook || '《教程》对应章节',
+          importance: kp.importance || '必考',
+          coreAnalysis: kp.coreAnalysis || kp.description || '',
+          memoryTips: kp.memoryTips || '',
+          questionCount: qCount,
+          contentLength: analysisLen + tipLen,
+          sort: kp.sort || 0,
+          createdAt: kp.createdAt,
+          updatedAt: kp.updatedAt,
+        };
+      });
+
+      const subId = formattedItems[0].subjectId;
+      groups.push({
+        groupKey,
+        name: formattedItems[0].name,
+        subjectId: subId,
+        subjectName: subjectMap.get(subId) || `科目 ${subId}`,
+        count: formattedItems.length,
+        redundantCount: formattedItems.length - 1,
+        recommendedKeepId,
+        items: formattedItems,
+      });
+
+      totalDuplicates += formattedItems.length - 1;
+    }
+
+    // 按重复数量从多到少排序
+    groups.sort((a, b) => b.count - a.count);
+
+    return {
+      totalDuplicates,
+      duplicateGroupCount: groups.length,
+      groups,
+    };
+  }
+
+  /**
+   * 知识点智能去重清理
+   */
+  async deduplicateKnowledgePoints(dto: DeduplicateKnowledgePointDto): Promise<{
+    success: boolean;
+    deletedCount: number;
+    deletedIds: number[];
+    message: string;
+  }> {
+    // 1. 如果前端直接指定了删除 ID 列表（手动删除模式）
+    if (dto.deleteIds && Array.isArray(dto.deleteIds) && dto.deleteIds.length > 0) {
+      const numIds = dto.deleteIds.map(Number).filter((id) => !isNaN(id) && id > 0);
+      if (numIds.length > 0) {
+        const res = await this.knowledgePointRepository.delete(numIds);
+        return {
+          success: true,
+          deletedCount: res.affected || numIds.length,
+          deletedIds: numIds,
+          message: `成功删除 ${res.affected || numIds.length} 个冗余考点`,
+        };
+      }
+    }
+
+    // 2. 根据策略自动计算要删除的 ID 列表
+    const strategy = dto.strategy || 'keep_richer';
+    const { groups } = await this.getDuplicateKnowledgePoints({
+      subjectId: dto.subjectId,
+      matchType: dto.matchType,
+    });
+
+    if (!groups || groups.length === 0) {
+      return {
+        success: true,
+        deletedCount: 0,
+        deletedIds: [],
+        message: '未检测到重复知识点，无需清理',
+      };
+    }
+
+    // 过滤指定组（如果有）
+    let targetGroups = groups;
+    if (dto.groupKeys && dto.groupKeys.length > 0) {
+      const keySet = new Set(dto.groupKeys);
+      targetGroups = groups.filter((g) => keySet.has(g.groupKey));
+    }
+
+    const toDeleteIds: number[] = [];
+
+    for (const group of targetGroups) {
+      if (!group.items || group.items.length <= 1) continue;
+
+      let keepId: number;
+      if (strategy === 'keep_earliest') {
+        // 保留最早创建 / 最小 ID
+        const sorted = [...group.items].sort((a, b) => a.id - b.id);
+        keepId = sorted[0].id;
+      } else if (strategy === 'keep_latest') {
+        // 保留最新更新 / 最大 ID
+        const sorted = [...group.items].sort((a, b) => b.id - a.id);
+        keepId = sorted[0].id;
+      } else {
+        // keep_richer (默认): 保留内容最丰富的推荐项
+        keepId = group.recommendedKeepId || group.items[0].id;
+      }
+
+      for (const item of group.items) {
+        if (item.id !== keepId) {
+          toDeleteIds.push(Number(item.id));
+        }
+      }
+    }
+
+    if (toDeleteIds.length === 0) {
+      return {
+        success: true,
+        deletedCount: 0,
+        deletedIds: [],
+        message: '未发现可清理的重复知识点',
+      };
+    }
+
+    // 批量分批执行删除
+    const chunkSize = 500;
+    let totalDeleted = 0;
+    for (let i = 0; i < toDeleteIds.length; i += chunkSize) {
+      const chunk = toDeleteIds.slice(i, i + chunkSize);
+      const res = await this.knowledgePointRepository.delete(chunk);
+      totalDeleted += (res.affected || chunk.length);
+    }
+
+    return {
+      success: true,
+      deletedCount: totalDeleted,
+      deletedIds: toDeleteIds,
+      message: `智能去重完成：成功清理 ${totalDeleted} 条重复知识点`,
     };
   }
 

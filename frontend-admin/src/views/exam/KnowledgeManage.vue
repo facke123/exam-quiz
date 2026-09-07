@@ -92,6 +92,9 @@
           <el-button type="primary" @click="openCreateDialog">
             ➕ 新增考点
           </el-button>
+          <el-button type="warning" plain @click="showDuplicateDialog = true">
+            🔍 检测与清理重复知识
+          </el-button>
           <el-button
             type="danger"
             plain
@@ -330,6 +333,14 @@
       :subjects="subjects"
       @imported="loadData"
     />
+
+    <!-- 知识库重复内容检测与智能清理弹窗 -->
+    <KnowledgeDuplicateDialog
+      v-model="showDuplicateDialog"
+      :subject-id="selectedSubjectId"
+      :subjects="subjects"
+      @cleaned="loadData"
+    />
   </div>
 </template>
 
@@ -346,9 +357,11 @@ import {
   getAllSubjects,
 } from '@/api/exam'
 import KnowledgeImportDialog from './components/KnowledgeImportDialog.vue'
+import KnowledgeDuplicateDialog from './components/KnowledgeDuplicateDialog.vue'
 
 const subjects = ref<Array<{ label: string; value: number }>>([])
 const selectedSubjectId = ref<number>(1)
+const showDuplicateDialog = ref(false)
 const filterCategory = ref('')
 const filterImportance = ref('')
 const keyword = ref('')

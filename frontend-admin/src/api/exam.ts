@@ -315,3 +315,72 @@ export function batchImportKnowledge(data: {
   })
 }
 
+// ==================== 知识库重复内容检测与智能去重 ====================
+
+export interface DuplicateKnowledgeItem {
+  id: number
+  subjectId: number
+  subjectName: string
+  chapterId: number
+  chapterName: string
+  name: string
+  categoryTag: string
+  sourceBook: string
+  importance: string
+  coreAnalysis: string
+  memoryTips: string
+  questionCount: number
+  contentLength: number
+  sort: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DuplicateKnowledgeGroup {
+  groupKey: string
+  name: string
+  subjectId: number
+  subjectName: string
+  count: number
+  redundantCount: number
+  recommendedKeepId: number
+  items: DuplicateKnowledgeItem[]
+}
+
+export interface DuplicateKnowledgeResult {
+  totalDuplicates: number
+  duplicateGroupCount: number
+  groups: DuplicateKnowledgeGroup[]
+}
+
+export function getDuplicateKnowledgePoints(params?: {
+  subjectId?: number | string
+  matchType?: string
+}) {
+  return request<DuplicateKnowledgeResult>({
+    url: '/admin/knowledge-points/duplicates',
+    method: 'get',
+    params,
+  })
+}
+
+export function deduplicateKnowledgePoints(data: {
+  strategy?: 'keep_richer' | 'keep_earliest' | 'keep_latest' | 'manual' | string
+  subjectId?: number
+  matchType?: string
+  groupKeys?: string[]
+  deleteIds?: number[]
+}) {
+  return request<{
+    success: boolean
+    deletedCount: number
+    deletedIds: number[]
+    message: string
+  }>({
+    url: '/admin/knowledge-points/deduplicate',
+    method: 'post',
+    data,
+  })
+}
+
+
