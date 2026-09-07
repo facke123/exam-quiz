@@ -1240,7 +1240,10 @@ export class ExamService implements OnModuleInit {
       items: any[];
     }>;
   }> {
-    const resolvedSubjectId = params?.subjectId ? Number(params.subjectId) : undefined;
+    const resolvedSubjectId =
+      params?.subjectId && !isNaN(Number(params.subjectId)) && Number(params.subjectId) > 0
+        ? Number(params.subjectId)
+        : undefined;
     const matchType = params?.matchType || 'exact_name';
 
     // 获取科目字典
