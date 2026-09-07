@@ -25,7 +25,6 @@
 | 站点端 | 访问地址 | 默认体验账号 / 说明 |
 | :--- | :--- | :--- |
 | **考生端 (移动端 H5)** | [https://quiz.wothat.com](https://quiz.wothat.com) | 支持手机浏览器直接访问、微信内打开体验，亦可在 PC 浏览器开启开发者模式 (F12) 切换手机视图浏览。可直接注册新账号或体验基础功能。 |
-| **后台管理端 (Admin)** | [https://admin.wothat.com](https://admin.wothat.com) | 账号：`admin` &emsp; 密码：`admin123` |
 | **Swagger 接口文档** | [https://quiz.wothat.com/api/docs](https://quiz.wothat.com/api/docs) | 交互式 RESTful API 在线文档与接口调试控制台 (支持 Bearer JWT 授权调试)。 |
 
 ---
