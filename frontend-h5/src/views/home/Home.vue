@@ -149,6 +149,133 @@
       </van-swipe>
     </div>
 
+    <!-- 🔥 高频做题双入口（高频考点 & 高频错题，完全对标设计稿） -->
+    <div class="hot-quiz-grid">
+      <div
+        class="hot-quiz-card"
+        @click="startHotQuiz('hot_point')"
+      >
+        <div class="hq-content">
+          <div class="hq-icon-book">
+            <svg
+              viewBox="0 0 24 28"
+              width="22"
+              height="26"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M2 3.5C2 2.67 2.67 2 3.5 2H6V26H3.5C2.67 26 2 25.33 2 24.5V3.5Z"
+                fill="#5b8ff9"
+                opacity="0.65"
+              />
+              <rect
+                x="4.5"
+                y="2"
+                width="17.5"
+                height="24"
+                rx="3"
+                fill="#6995f5"
+              />
+              <rect
+                x="8"
+                y="6.5"
+                width="8.5"
+                height="2.5"
+                rx="1.25"
+                fill="white"
+              />
+              <rect
+                x="8"
+                y="11.5"
+                width="8.5"
+                height="2.5"
+                rx="1.25"
+                fill="white"
+              />
+            </svg>
+          </div>
+          <span class="hq-title">高频考点</span>
+        </div>
+        <div class="hq-arrow">
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </div>
+      </div>
+
+      <div
+        class="hot-quiz-card"
+        @click="startHotQuiz('hot_wrong')"
+      >
+        <div class="hq-content">
+          <div class="hq-icon-book">
+            <svg
+              viewBox="0 0 24 28"
+              width="22"
+              height="26"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M2 3.5C2 2.67 2.67 2 3.5 2H6V26H3.5C2.67 26 2 25.33 2 24.5V3.5Z"
+                fill="#5b8ff9"
+                opacity="0.65"
+              />
+              <rect
+                x="4.5"
+                y="2"
+                width="17.5"
+                height="24"
+                rx="3"
+                fill="#6995f5"
+              />
+              <rect
+                x="8"
+                y="6.5"
+                width="8.5"
+                height="2.5"
+                rx="1.25"
+                fill="white"
+              />
+              <rect
+                x="8"
+                y="11.5"
+                width="8.5"
+                height="2.5"
+                rx="1.25"
+                fill="white"
+              />
+            </svg>
+          </div>
+          <span class="hq-title">高频错题</span>
+        </div>
+        <div class="hq-arrow">
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </div>
+      </div>
+    </div>
+
     <!-- 💡 AI 考点知识库高亮推荐卡片 -->
     <div class="ai-knowledge-banner" @click="$router.push('/knowledge')">
       <div class="akb-left">
@@ -569,6 +696,20 @@ watch(
     fetchHomeStats()
   }
 )
+
+function startHotQuiz(type: 'hot_point' | 'hot_wrong') {
+  const currentSubId = subjectStore.currentSubjectId || '4'
+  const title = type === 'hot_point' ? '高频考点专练' : '高频错题专练'
+  router.push({
+    path: `/quiz/${type}`,
+    query: {
+      mode: type,
+      subjectId: String(currentSubId),
+      count: '20',
+      title,
+    },
+  })
+}
 
 onMounted(async () => {
   if (subjectStore.subjectList.length === 0) {
@@ -1250,6 +1391,66 @@ onMounted(async () => {
         opacity: 0.9;
         transform: scale(0.98);
       }
+    }
+  }
+}
+
+/* 🔥 高频考点 & 高频错题 双入口对标设计 */
+.hot-quiz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 14px 0;
+
+  .hot-quiz-card {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 16px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #f0f2f5;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+
+    &:active {
+      transform: scale(0.98);
+      background: #f8fafc;
+    }
+
+    .hq-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .hq-icon-book {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .hq-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #1e293b;
+        letter-spacing: 0.2px;
+      }
+    }
+
+    .hq-arrow {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f3f4f6;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
     }
   }
 }

@@ -378,7 +378,11 @@ export class QuestionService implements OnModuleInit {
       qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
     }
 
-    if (mode === 'random' || mode === 'daily' || mode === 'practice') {
+    if (mode === 'hot_wrong') {
+      qb.orderBy('q.wrongCount', 'DESC').addOrderBy('RAND()');
+    } else if (mode === 'hot_point') {
+      qb.orderBy('q.difficulty', 'DESC').addOrderBy('RAND()');
+    } else if (mode === 'random' || mode === 'daily' || mode === 'practice') {
       qb.orderBy('RAND()');
     } else {
       qb.orderBy('q.id', 'ASC');

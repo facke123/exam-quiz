@@ -229,6 +229,14 @@ const examDisplayTitle = computed(() => {
     const curSub = subjectStore.currentSubject?.name || '软考冲刺'
     return `${curSub}·每日一练`
   }
+  if (mode.value === 'hot_wrong') {
+    const curSub = subjectStore.currentSubject?.name || '软考冲刺'
+    return `${curSub}·高频错题专练`
+  }
+  if (mode.value === 'hot_point') {
+    const curSub = subjectStore.currentSubject?.name || '软考冲刺'
+    return `${curSub}·高频考点专练`
+  }
   if (mode.value === 'wrong') return '错题本·针对性强化'
   if (mode.value === 'favorite') return '我的收藏·查漏补缺'
   if (mode.value === 'review') return '艾宾浩斯·遗忘曲线复习'
