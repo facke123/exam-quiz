@@ -369,8 +369,8 @@ function onSelect(key: string) {
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 6px;
-  background: #fef0f0;
-  color: #f56c6c;
+  background: #eef0ff;
+  color: #6366f1;
 
   &.tag-multiple {
     background: #f3e8ff;
@@ -429,12 +429,18 @@ function onSelect(key: string) {
   height: 42px;
   border-radius: 21px;
   border: none;
-  background: #f56c6c;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #ffffff;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(245, 108, 108, 0.3);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  transition: all 0.2s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+    opacity: 0.92;
+  }
 
   &:disabled {
     background: #e5e7eb;
@@ -458,7 +464,7 @@ function onSelect(key: string) {
 }
 
 .sb-clear {
-  color: #f56c6c;
+  color: #6366f1;
   cursor: pointer;
 }
 
@@ -475,7 +481,7 @@ function onSelect(key: string) {
 
   &:focus {
     outline: none;
-    border-color: #f56c6c;
+    border-color: #6366f1;
     background: #ffffff;
   }
 }
@@ -496,11 +502,18 @@ function onSelect(key: string) {
   height: 40px;
   border-radius: 20px;
   border: none;
-  background: #f56c6c;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  transition: all 0.2s;
+
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.92;
+  }
 }
 
 /* ========================================================
@@ -529,7 +542,7 @@ function onSelect(key: string) {
   margin-bottom: 12px;
 
   .double-dot {
-    color: #f56c6c;
+    color: #6366f1;
     font-size: 12px;
     letter-spacing: -1px;
   }
@@ -538,7 +551,7 @@ function onSelect(key: string) {
 .feedback-btn {
   border: 1px solid #e5e7eb;
   background: #ffffff;
-  color: #9ca3af;
+  color: #6b7280;
   border-radius: 12px;
   padding: 3px 10px;
   font-size: 12px;
@@ -547,9 +560,9 @@ function onSelect(key: string) {
 
   &:hover,
   &:active {
-    background: #f9fafb;
-    color: #f56c6c;
-    border-color: #fca5a5;
+    background: #eef2ff;
+    color: #6366f1;
+    border-color: #c7d2fe;
   }
 }
 

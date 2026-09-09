@@ -79,7 +79,7 @@
     >
       <van-loading
         type="spinner"
-        color="#f56c6c"
+        color="#6366f1"
       >
         正在组卷抽取考点试题...
       </van-loading>
@@ -94,7 +94,7 @@
         type="primary"
         size="small"
         round
-        style="margin-top: 12px; background: #f56c6c; border-color: #f56c6c;"
+        style="margin-top: 12px; background: #6366f1; border-color: #6366f1;"
         @click="$router.push('/')"
       >
         返回首页选择其他科目
@@ -839,11 +839,11 @@ function handleKeydown(e: KeyboardEvent) {
   }
 
   &.active {
-    color: #f56c6c;
+    color: #6366f1;
     font-weight: 700;
 
     .tab-indicator {
-      background: #f56c6c;
+      background: #6366f1;
     }
   }
 }
@@ -876,7 +876,7 @@ function handleKeydown(e: KeyboardEvent) {
     color: #6b7280;
 
     strong {
-      color: #111827;
+      color: #6366f1;
       font-size: 14.5px;
     }
   }
@@ -891,7 +891,7 @@ function handleKeydown(e: KeyboardEvent) {
 
   .progress-fill {
     height: 100%;
-    background: #f56c6c;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
     border-radius: 2px;
     transition: width 0.3s ease;
   }

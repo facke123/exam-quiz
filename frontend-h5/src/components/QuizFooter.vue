@@ -5,7 +5,7 @@
       <!-- 1. 收藏 -->
       <div
         class="footer-icon"
-        :class="{ active: favorited }"
+        :class="{ 'fav-active': favorited }"
         @click="$emit('toggle-favorite')"
       >
         <div class="icon-wrap">
@@ -191,7 +191,15 @@ defineEmits<{
   }
 
   &.active {
-    color: #f56c6c;
+    color: #6366f1;
+
+    .icon-label {
+      font-weight: 600;
+    }
+  }
+
+  &.fav-active {
+    color: #f59e0b;
 
     .icon-label {
       font-weight: 600;
@@ -232,22 +240,23 @@ defineEmits<{
   padding: 0 20px;
   border-radius: 19px;
   border: none;
-  background: #f56c6c;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.5px;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(245, 108, 108, 0.35);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
   transition: all 0.2s;
 
   &:active {
     transform: scale(0.97);
-    background: #e05252;
+    opacity: 0.92;
   }
 
   &.btn-submit {
-    background: #e11d48;
+    background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
   }
 }
 </style>

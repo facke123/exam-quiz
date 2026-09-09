@@ -135,22 +135,22 @@ function handleClick() {
     cursor: default;
   }
 
-  /* 未判题时的常规选中样式 */
+  /* 未判题时的常规选中样式（统一系统主色 #6366f1） */
   &.selected {
-    border-color: #f56c6c;
-    background: #fff5f5;
+    border-color: #6366f1;
+    background: #eef0ff;
 
     .opt-letter {
-      color: #f56c6c;
+      color: #6366f1;
       font-weight: 700;
     }
 
     .opt-divider {
-      background-color: rgba(245, 108, 108, 0.3);
+      background-color: rgba(99, 102, 241, 0.35);
     }
 
     .opt-text {
-      color: #f56c6c;
+      color: #4f46e5;
       font-weight: 600;
     }
   }
@@ -218,7 +218,7 @@ function handleClick() {
   }
 
   &.multi-selected {
-    background: #f56c6c;
+    background: #6366f1;
   }
 }
 
