@@ -124,14 +124,26 @@ const marked = computed(() => props.list.filter((i) => i.marked).length)
     color: var(--color-primary);
   }
 
+  &.correct {
+    background: #edfbf3;
+    border-color: #22c55e;
+    color: #15803d;
+    font-weight: 700;
+  }
+
+  &.wrong {
+    background: #fef0f0;
+    border-color: #fca5a5;
+    color: #dc2626;
+    font-weight: 700;
+  }
+
   &.marked {
     border-color: var(--color-warning);
   }
 
   &.current {
-    background: var(--gradient-primary);
-    color: #fff;
-    border: none;
+    box-shadow: 0 0 0 2px #f56c6c;
   }
 }
 
