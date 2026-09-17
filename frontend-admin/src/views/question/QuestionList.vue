@@ -100,6 +100,9 @@
           <el-button type="success" class="btn-success" @click="$router.push('/question/import')">
             📥 批量导入
           </el-button>
+          <el-button type="warning" class="btn-warning" @click="handleBatchAutoSplitOptions">
+            ⚡ 一键分离题干与选项
+          </el-button>
           <el-button
             type="danger"
             class="btn-danger"
@@ -142,8 +145,8 @@
               <span v-if="hasImageInQuestion(row)" class="has-img-badge" title="本题包含图片/图表">
                 🖼️ 图
               </span>
-              <span class="stem-plain-text" :title="getPlainText(row.content || row.title)">
-                {{ getPlainText(row.content || row.title) }}
+              <span class="stem-plain-text" :title="getPlainText(getDisplayStem(row))">
+                {{ getPlainText(getDisplayStem(row)) }}
               </span>
             </div>
           </template>
@@ -358,7 +361,7 @@
             <span class="stem-badge">{{ typeMap[currentPreviewQuestion.type] || '单选题' }}</span>
             <div
               class="stem-text-full rich-content-render"
-              v-html="renderRichContent(currentPreviewQuestion.content || currentPreviewQuestion.title)"
+              v-html="renderRichContent(getDisplayStem(currentPreviewQuestion))"
             />
           </div>
 
@@ -525,6 +528,9 @@
                     🖼️ 上传题干配图
                   </el-button>
                 </el-upload>
+                <el-button type="warning" link size="small" @click="autoSplitOptionsFromStem">
+                  ✂️ 智能分离题干与选项
+                </el-button>
                 <el-button type="primary" link size="small" @click="autoCleanStem">
                   ✨ 智能清洗题干前缀
                 </el-button>
@@ -714,10 +720,12 @@ import {
   batchDeleteQuestions,
   exportQuestions,
   uploadQuestionImage,
+  autoSplitQuestionOptions,
 } from '@/api/question'
 import { getAllSubjects, getChapterTree } from '@/api/exam'
 import { downloadBlob } from '@/utils/export'
 import { renderRichContent, extractImagesFromText } from '@/utils/richText'
+import { splitStemAndOptions } from '@/utils/question-parser'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -843,8 +851,19 @@ function checkQuestionQuality(row: any) {
   }
   if (!Array.isArray(options)) options = []
 
+  let hasStemMixedOptions = false
+  if (options.length === 0 && content && ['single', 'multiple'].includes(type)) {
+    const splitCheck = splitStemAndOptions(content)
+    if (splitCheck.options.length >= 2) {
+      hasStemMixedOptions = true
+      options = splitCheck.options
+    }
+  }
+
   if (['single', 'multiple'].includes(type)) {
-    if (options.length === 0) {
+    if (hasStemMixedOptions) {
+      issues.push('选项混在题干中未分离（可点上方一键分离）')
+    } else if (options.length === 0) {
       issues.push('未配置选择题选项')
     } else if (options.length > 6) {
       issues.push(`选项过多(${options.length}项)，疑似多题合并异常`)
@@ -872,6 +891,7 @@ function checkQuestionQuality(row: any) {
   let score = 100
   if (!content || content.length < 5) score -= 30
   if (['single', 'multiple'].includes(type) && (options.length < 2 || options.length > 6)) score -= 30
+  if (hasStemMixedOptions) score -= 15
   if (!answer) score -= 25
   if (!analysis) score -= 15
   score = Math.max(0, score)
@@ -893,6 +913,28 @@ function checkQuestionQuality(row: any) {
   }
 }
 
+function getDisplayStem(row: any): string {
+  if (!row) return ''
+  const content = (row.content || row.title || '').trim()
+  if (!content) return ''
+  let options = row.options
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options)
+    } catch {
+      options = []
+    }
+  }
+  const hasOptions = Array.isArray(options) && options.length >= 2
+  if (!hasOptions && ['single', 'multiple', 'case'].includes(row.type || 'single')) {
+    const splitRes = splitStemAndOptions(content)
+    if (splitRes.options.length >= 2) {
+      return splitRes.stem
+    }
+  }
+  return content
+}
+
 function getNormalizedOptions(row: any) {
   if (!row) return []
   let options = row.options
@@ -903,19 +945,35 @@ function getNormalizedOptions(row: any) {
       options = []
     }
   }
-  if (!Array.isArray(options)) return []
-  return options.map((opt: any, idx: number) => {
-    if (typeof opt === 'string') {
-      const key = String.fromCharCode(65 + idx)
-      return { key, label: key, content: opt }
+  if (Array.isArray(options) && options.length > 0) {
+    return options.map((opt: any, idx: number) => {
+      if (typeof opt === 'string') {
+        const key = String.fromCharCode(65 + idx)
+        return { key, label: key, content: opt }
+      }
+      const key = opt.key || opt.label || String.fromCharCode(65 + idx)
+      return {
+        key,
+        label: opt.label || key,
+        content: opt.content || opt.text || '',
+      }
+    })
+  }
+
+  // 兜底容错：如果 options 为空或异常，智能从题干中识别选项
+  const content = (row.content || row.title || '').trim()
+  if (content && ['single', 'multiple', 'case'].includes(row.type || 'single')) {
+    const splitRes = splitStemAndOptions(content)
+    if (splitRes.options.length >= 2) {
+      return splitRes.options.map((o) => ({
+        key: o.key,
+        label: o.key,
+        content: o.content,
+      }))
     }
-    const key = opt.key || opt.label || String.fromCharCode(65 + idx)
-    return {
-      key,
-      label: opt.label || key,
-      content: opt.content || opt.text || '',
-    }
-  })
+  }
+
+  return []
 }
 
 function isOptionCorrect(key: string, answer?: string) {
@@ -987,6 +1045,35 @@ function removeImageFromAnalysis(imgSrc: string) {
   const htmlImg = new RegExp(`<img[^>]+src=["']${imgSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>`, 'gi')
   formData.analysis = (formData.analysis || '').replace(htmlImg, '').trim()
   ElMessage.success('已从解析中移除配图')
+}
+
+// 智能分离题干与选项（编辑弹窗中点击）
+function autoSplitOptionsFromStem() {
+  const content = (formData.content || '').trim()
+  if (!content) {
+    ElMessage.warning('题干内容为空，无法提取选项')
+    return
+  }
+
+  const res = splitStemAndOptions(content)
+  if (res.options && res.options.length >= 2) {
+    formData.content = res.stem
+    formData.options = res.options.map((o) => ({
+      key: o.key,
+      content: o.content,
+      isAnswer: isOptionCorrect(o.key, formData.answerStr || formData.answer),
+    }))
+    if (res.answer && !formData.answer) {
+      formData.answer = res.answer
+      formData.answerStr = res.answer
+    }
+    if (res.analysis && !formData.analysis) {
+      formData.analysis = res.analysis
+    }
+    ElMessage.success(`成功从题干中智能分离出 ${res.options.length} 个选项！`)
+  } else {
+    ElMessage.info('未在题干中检测到可成对分离的 ABCD 选项')
+  }
 }
 
 // 智能清洗题干前缀残留
@@ -1252,7 +1339,6 @@ function handleEdit(row: any) {
   editId.value = row.id
   formData.subjectId = row.subjectId || 1
   formData.chapterId = row.chapterId || 1
-  formData.content = row.content || row.title
   formData.type = row.type || 'single'
   formData.difficulty = typeof row.difficulty === 'number' ? row.difficulty : 3
   formData.analysis = row.analysis || ''
@@ -1260,12 +1346,37 @@ function handleEdit(row: any) {
   formData.answerStr = row.answer || 'A'
   formData.source = row.source || '历年真题'
 
-  const normalized = getNormalizedOptions(row)
+  let content = row.content || row.title || ''
+  let normalized = getNormalizedOptions(row)
+
+  // 智能自动识别：如果题目选项少于2项且题干混杂了选项，自动拆分填入
+  if ((!normalized || normalized.length < 2) && ['single', 'multiple', 'case'].includes(formData.type)) {
+    const splitRes = splitStemAndOptions(content)
+    if (splitRes.options.length >= 2) {
+      content = splitRes.stem
+      normalized = splitRes.options.map((o) => ({
+        key: o.key,
+        label: o.key,
+        content: o.content,
+      }))
+      if (splitRes.answer && !formData.answer) {
+        formData.answer = splitRes.answer
+        formData.answerStr = splitRes.answer
+      }
+      if (splitRes.analysis && !formData.analysis) {
+        formData.analysis = splitRes.analysis
+      }
+      ElMessage.info('检测到该题目题干中混有 ABCD 选项，已自动智能分离填充！')
+    }
+  }
+
+  formData.content = content
+
   if (normalized.length > 0) {
     formData.options = normalized.map((o: any) => ({
       key: o.key,
       content: o.content,
-      isAnswer: isOptionCorrect(o.key, row.answer),
+      isAnswer: isOptionCorrect(o.key, formData.answer),
     }))
   } else {
     formData.options = [
@@ -1306,6 +1417,44 @@ async function handleBatchDelete() {
     fetchList()
   } catch {
     // cancel
+  }
+}
+
+// 批量一键分离全库题干与选项
+async function handleBatchAutoSplitOptions() {
+  try {
+    const subjectName = query.subjectId
+      ? subjects.value.find((s) => s.value === query.subjectId)?.label
+      : '全库所有科目'
+    await ElMessageBox.confirm(
+      `此操作将扫描【${subjectName}】下所有题干中混有 ABCD 选项的历史题目，自动将题干与选项分离并规范化保存到数据库中。\n\n是否立即开始？`,
+      '全库一键分离题干与选项',
+      {
+        type: 'warning',
+        confirmButtonText: '立即执行',
+        cancelButtonText: '取消',
+      }
+    )
+
+    loading.value = true
+    ElMessage.info('正在全量扫描并智能分离题干与选项，请稍候...')
+    const res: any = await autoSplitQuestionOptions({ subjectId: query.subjectId })
+    const data = res?.data || res
+    const updatedCount = data?.updatedCount ?? 0
+    const totalScanned = data?.totalScanned ?? 0
+
+    await ElMessageBox.alert(
+      `扫描与分离执行完毕！\n• 扫描题目总数：${totalScanned} 道\n• 成功分离修复：${updatedCount} 道题目`,
+      '执行结果报告',
+      { type: 'success' }
+    )
+    fetchList()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err?.message || '批量分离处理失败，请稍后重试')
+    }
+  } finally {
+    loading.value = false
   }
 }
 

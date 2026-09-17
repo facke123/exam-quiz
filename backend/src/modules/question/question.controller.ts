@@ -144,6 +144,12 @@ export class QuestionController {
     );
   }
 
+  @Post(['admin/questions/auto-split-options', 'questions/admin/auto-split-options'])
+  @ApiOperation({ summary: '后台-一键智能分离题干与选项' })
+  async autoSplitOptions(@Body() body: { subjectId?: number }) {
+    return this.questionService.autoSplitAllQuestions(body?.subjectId ? Number(body.subjectId) : undefined);
+  }
+
   @Post(['admin/questions/import', 'questions/admin/batch-import'])
   @ApiOperation({ summary: '后台-批量导入题目' })
   async batchImport(@Body() dto: ImportQuestionDto | any) {

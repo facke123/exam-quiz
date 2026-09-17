@@ -33,6 +33,7 @@ import {
   AiSaveKnowledgeBatchDto,
 } from './dto/knowledge-import.dto';
 import * as mammoth from 'mammoth';
+import { splitStemAndOptions } from '@/common/utils/question-parser.util';
 
 const toDbType = (t?: string) => {
   if (!t) return undefined;
@@ -3868,9 +3869,9 @@ ${cleanText.slice(0, 15000)}`;
       const formatted = llmQuestions.map((q: any, idx: number) => {
         const rawType = q.type || 'single';
         const type = rawType.includes('multi') ? 'multiple' : rawType.includes('judge') || rawType.includes('true') ? 'judge' : rawType.includes('essay') ? 'essay' : 'single';
-        const content = q.content || q.title || `试题 ${idx + 1}`;
-        const answer = String(q.answer || 'A').trim().toUpperCase();
-        const options = Array.isArray(q.options)
+        let content = q.content || q.title || `试题 ${idx + 1}`;
+        let answer = String(q.answer || 'A').trim().toUpperCase();
+        let options = Array.isArray(q.options)
           ? q.options.map((opt: any, oIdx: number) => {
               if (typeof opt === 'string') {
                 const label = String.fromCharCode(65 + oIdx);
@@ -3883,6 +3884,16 @@ ${cleanText.slice(0, 15000)}`;
               };
             })
           : [];
+
+        // 智能兜底拆分：如果选项为空或少于2项，且题干内混有选项，自动拆分
+        if ((!options || options.length < 2 || options.every((o: any) => !o.content)) && content) {
+          const split = splitStemAndOptions(content);
+          if (split.options.length >= 2) {
+            content = split.stem;
+            options = split.options;
+            if (split.answer && (!answer || answer === 'A')) answer = split.answer;
+          }
+        }
 
         let valid = true;
         let errorMsg = '';
@@ -3933,7 +3944,7 @@ ${cleanText.slice(0, 15000)}`;
     let currentQ: any = null;
 
     const extractOptionsFromLine = (line: string) => {
-      const optRegex = /(?:^|\s+|[\t　]+)(?:([A-Ea-e])[\.、．\s]|[（(]([A-Ea-e])[）)])\s*/g;
+      const optRegex = /(?:^|\s+|[\t　]+|[·•●◆■※\-*+、\u00b7\u2022\u25cf\u25cb\u25aa\u25ab]+)(?:([A-Ga-g])[\.、．:：\-\—\s]|[（(]([A-Ga-g])[）)])\s*/g;
       const matches: Array<{ key: string; startIndex: number; contentStart: number }> = [];
       let m: RegExpExecArray | null;
       while ((m = optRegex.exec(line)) !== null) {
@@ -3967,6 +3978,17 @@ ${cleanText.slice(0, 15000)}`;
       content = content.replace(/^\d+[\.、．\s]\s*/, '');
       content = content.replace(/^第\d+题[\.、．\s]?\s*/, '');
       content = content.replace(/^[（(]\d+[）)][\.、\s]?\s*/, '');
+
+      // 智能拆分保护：如果选项不足且题干中含选项，自动分离
+      if ((!q.options || q.options.length < 2) && content) {
+        const split = splitStemAndOptions(content);
+        if (split.options.length >= 2) {
+          content = split.stem;
+          q.options = split.options;
+          if (split.answer && (!q.answer || q.answer === 'A')) q.answer = split.answer;
+          if (split.analysis && q.analysisLines.length === 0) q.analysisLines.push(split.analysis);
+        }
+      }
 
       if (!content) return;
 

@@ -231,3 +231,17 @@ export function handleErrorReport(id: number, data: { status: 'accepted' | 'reje
     data,
   })
 }
+
+// 一键智能分离全库题干与选项
+export function autoSplitQuestionOptions(data?: { subjectId?: number }) {
+  return request<{
+    totalScanned: number
+    fixedCount: number
+    message: string
+  }>({
+    url: '/admin/questions/auto-split-options',
+    method: 'post',
+    data,
+  })
+}
+

@@ -12,6 +12,7 @@ import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
 import { ImportQuestionDto } from './dto/import-question.dto';
+import { splitStemAndOptions } from '@/common/utils/question-parser.util';
 
 const toDbType = (t?: string) => {
   if (!t) return 'single_choice';
@@ -244,15 +245,31 @@ export class QuestionService implements OnModuleInit {
    * 创建题目
    */
   async create(dto: CreateQuestionDto | any): Promise<Question> {
+    let content = dto.content || dto.title || '';
+    let options = dto.options || [];
+    let answer = dto.answer || 'A';
+    let analysis = dto.analysis || '';
+
+    // 智能防混杂保护：如果选项为空或少于2项，且题干内混有选项，自动拆分
+    if ((!options || options.length < 2 || options.every((o: any) => !o.content)) && content) {
+      const split = splitStemAndOptions(content);
+      if (split.options.length >= 2) {
+        content = split.stem;
+        options = split.options;
+        if (split.answer && (!dto.answer || dto.answer === 'A')) answer = split.answer;
+        if (split.analysis && !dto.analysis) analysis = split.analysis;
+      }
+    }
+
     const question = this.questionRepository.create({
       subjectId: dto.subjectId || 1,
       chapterId: dto.chapterId || 1,
       type: toDbType(dto.type) || 'single_choice',
       difficulty: dto.difficulty || 2,
-      content: dto.content || dto.title || '',
-      options: dto.options || [],
-      answer: dto.answer || 'A',
-      analysis: dto.analysis || '',
+      content,
+      options,
+      answer,
+      analysis,
       aiAnalysis: dto.aiAnalysis || '',
       source: toDbSource(dto.source),
       status: dto.status || 'published',
@@ -270,6 +287,21 @@ export class QuestionService implements OnModuleInit {
     }
     if (dto.type) dto.type = toDbType(dto.type);
     if (dto.source) dto.source = toDbSource(dto.source);
+
+    if (dto.content || dto.title) {
+      let content = dto.content || dto.title || '';
+      let options = dto.options || question.options || [];
+      if ((!options || options.length < 2 || options.every((o: any) => !o.content)) && content) {
+        const split = splitStemAndOptions(content);
+        if (split.options.length >= 2) {
+          dto.content = split.stem;
+          dto.options = split.options;
+          if (split.answer && (!dto.answer || dto.answer === 'A')) dto.answer = split.answer;
+          if (split.analysis && !dto.analysis) dto.analysis = split.analysis;
+        }
+      }
+    }
+
     Object.assign(question, dto);
     if (dto.title && !dto.content) {
       question.content = dto.title;
@@ -733,8 +765,23 @@ export class QuestionService implements OnModuleInit {
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       try {
-        const content = String(q.content || q.title || '').trim();
+        let content = String(q.content || q.title || '').trim();
         if (!content) throw new Error('题干不能为空');
+
+        let options = q.options || [];
+        let answer = String(q.answer || 'A').trim().toUpperCase();
+        let analysis = q.analysis || '';
+
+        // 智能防混杂二次兜底：如果选项为空或少于2项，且题干混杂了选项，执行拆分
+        if ((!options || options.length < 2 || options.every((o: any) => !o.content)) && content) {
+          const split = splitStemAndOptions(content);
+          if (split.options.length >= 2) {
+            content = split.stem;
+            options = split.options;
+            if (split.answer && (!q.answer || q.answer === 'A')) answer = split.answer;
+            if (split.analysis && !q.analysis) analysis = split.analysis;
+          }
+        }
 
         // 匹配章节ID
         let chapterId = q.chapterId ? Number(q.chapterId) : defaultChapterId;
@@ -764,9 +811,9 @@ export class QuestionService implements OnModuleInit {
               existingQuestion.chapterId = chapterId;
               existingQuestion.type = toDbType(q.type) || 'single_choice';
               existingQuestion.difficulty = Number(q.difficulty) || 3;
-              existingQuestion.options = q.options || [];
-              existingQuestion.answer = String(q.answer || 'A').trim().toUpperCase();
-              existingQuestion.analysis = q.analysis || '';
+              existingQuestion.options = options;
+              existingQuestion.answer = answer;
+              existingQuestion.analysis = analysis;
               existingQuestion.source = toDbSource(dto.type) || 'import';
               await this.questionRepository.save(existingQuestion as any);
               updated++;
@@ -781,9 +828,9 @@ export class QuestionService implements OnModuleInit {
           type: toDbType(q.type) || 'single_choice',
           difficulty: Number(q.difficulty) || 3,
           content,
-          options: q.options || [],
-          answer: String(q.answer || 'A').trim().toUpperCase(),
-          analysis: q.analysis || '',
+          options,
+          answer,
+          analysis,
           source: toDbSource(dto.type) || 'import',
           status: 'published',
         } as any);
@@ -1104,5 +1151,65 @@ export class QuestionService implements OnModuleInit {
    */
   async deleteErrorReport(id: number): Promise<void> {
     await this.errorReportRepository.delete(id);
+  }
+
+  /**
+   * 全库扫描并一键智能分离题干与选项
+   */
+  async autoSplitAllQuestions(subjectId?: number): Promise<{
+    totalScanned: number;
+    fixedCount: number;
+    message: string;
+  }> {
+    const qb = this.questionRepository.createQueryBuilder('q');
+    if (subjectId) {
+      qb.where('q.subjectId = :subjectId', { subjectId });
+    }
+    const questions = await qb.getMany();
+    let fixedCount = 0;
+
+    for (const q of questions) {
+      const rawContent = q.content || '';
+      let opts = q.options as any;
+      if (typeof opts === 'string') {
+        try {
+          opts = JSON.parse(opts);
+        } catch {
+          opts = [];
+        }
+      }
+      const hasEmptyOpts =
+        !opts ||
+        !Array.isArray(opts) ||
+        opts.length < 2 ||
+        opts.every((o: any) => !(o.content || o.text || '').trim());
+
+      // 如果选项为空，或者题干内明显含有 · A. 或 A. 等选项特征
+      if (
+        hasEmptyOpts ||
+        /[·•●◆■※\-*+、\u00b7\u2022\s]+[A-Da-d][\.、．:：\s]/.test(rawContent) ||
+        /^[·•●◆■※\-*+、\u00b7\u2022\s]*[A-Da-d][\.、．:：\s]/m.test(rawContent)
+      ) {
+        const split = splitStemAndOptions(rawContent);
+        if (split.options.length >= 2) {
+          q.content = split.stem;
+          q.options = split.options;
+          if (split.answer && (!q.answer || q.answer === 'A')) {
+            q.answer = split.answer;
+          }
+          if (split.analysis && (!q.analysis || q.analysis.length < 5)) {
+            q.analysis = split.analysis;
+          }
+          await this.questionRepository.save(q);
+          fixedCount++;
+        }
+      }
+    }
+
+    return {
+      totalScanned: questions.length,
+      fixedCount,
+      message: `成功扫描 ${questions.length} 道试题，已自动分离并修复 ${fixedCount} 道题目的题干与 ABCD 选项！`,
+    };
   }
 }

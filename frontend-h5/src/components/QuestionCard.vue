@@ -182,6 +182,7 @@ import { computed, ref, watch } from 'vue'
 import type { Question, QuestionOption } from '@/api/question'
 import { questionTypeText, difficultyText } from '@/utils/format'
 import { renderWithFormula } from '@/utils/katex'
+import { splitStemAndOptions } from '@/utils/question-parser'
 import OptionItem from './OptionItem.vue'
 
 interface Props {
@@ -222,7 +223,23 @@ const normalizedType = computed(() => {
 
 const typeText = computed(() => questionTypeText(props.question.type))
 const isMultiple = computed(() => normalizedType.value === 'multiple')
-const renderedTitle = computed(() => renderWithFormula(props.question.title || (props.question as any).content || ''))
+
+// 自动识别题干中是否混杂选项（移动端动态容错保护）
+const parsedStemAndOptions = computed(() => {
+  const raw = props.question.title || (props.question as any).content || ''
+  const hasOpts = props.question.options && props.question.options.length >= 2
+  if (!hasOpts && ['single', 'multiple', 'case'].includes(normalizedType.value)) {
+    return splitStemAndOptions(raw)
+  }
+  return { stem: raw, options: [] }
+})
+
+const renderedTitle = computed(() => {
+  const text = parsedStemAndOptions.value.options.length >= 2
+    ? parsedStemAndOptions.value.stem
+    : (props.question.title || (props.question as any).content || '')
+  return renderWithFormula(text)
+})
 
 // 针对判断题或缺失选项安全生成
 const effectiveOptions = computed<QuestionOption[]>(() => {
@@ -236,7 +253,16 @@ const effectiveOptions = computed<QuestionOption[]>(() => {
       { key: 'B', content: '错误' },
     ]
   }
-  return props.question.options || []
+  if (props.question.options && props.question.options.length > 0) {
+    return props.question.options
+  }
+  if (parsedStemAndOptions.value.options.length >= 2) {
+    return parsedStemAndOptions.value.options.map((o) => ({
+      key: o.key,
+      content: o.content,
+    }))
+  }
+  return []
 })
 
 // 判断是否为主观题/问答题/案例题

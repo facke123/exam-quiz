@@ -356,6 +356,7 @@ import {
   cleanDuplicates,
 } from '@/api/question'
 import { parseQuestions } from '@/api/ai'
+import { splitStemAndOptions } from '@/utils/question-parser'
 
 const subjects = ref<{ label: string; value: number }[]>([])
 const selectedSubjectId = ref<number>(1)
@@ -582,15 +583,29 @@ async function parseExcelFile(file: File) {
     if (optD) options.push({ key: 'D', label: 'D', content: optD })
     if (optE) options.push({ key: 'E', label: 'E', content: optE })
 
+    let finalContent = content
+    let finalOptions = options
+    let finalAnswer = answer
+
+    // 如果表格未提供独立选项列，但题干中包含 ABCD 选项，智能拆分
+    if (finalOptions.length < 2 && finalContent) {
+      const split = splitStemAndOptions(finalContent)
+      if (split.options.length >= 2) {
+        finalContent = split.stem
+        finalOptions = split.options
+        if (split.answer && (!finalAnswer || finalAnswer === 'A')) finalAnswer = split.answer
+      }
+    }
+
     let valid = true
     let errorMsg = ''
-    if (!content) {
+    if (!finalContent) {
       valid = false
       errorMsg = '题干不能为空'
-    } else if (type === 'single' && options.length < 2) {
+    } else if (type === 'single' && finalOptions.length < 2) {
       valid = false
       errorMsg = '单选题至少需要提供A和B选项'
-    } else if (!answer) {
+    } else if (!finalAnswer) {
       valid = false
       errorMsg = '正确答案不能为空'
     }
@@ -601,10 +616,10 @@ async function parseExcelFile(file: File) {
       typeText,
       chapter,
       chapterName: chapter,
-      title: content,
-      content,
-      options,
-      answer,
+      title: finalContent,
+      content: finalContent,
+      options: finalOptions,
+      answer: finalAnswer,
       analysis: analysis || '详见教材对应核心考点解析。',
       difficulty,
       valid,
@@ -672,6 +687,22 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
 
   function saveCurrentQ() {
     if (!currentQ || !currentQ.content) return
+
+    // 智能兜底拆分：如果选项少于2项，且题干内混杂了选项，执行拆分
+    if ((!currentQ.options || currentQ.options.length < 2) && currentQ.content) {
+      const split = splitStemAndOptions(currentQ.content)
+      if (split.options.length >= 2) {
+        currentQ.content = split.stem
+        currentQ.options = split.options
+        if (split.answer && (!currentQ.answer || currentQ.answer === 'A')) {
+          currentQ.answer = split.answer
+        }
+        if (split.analysis && (!currentQ.analysis || currentQ.analysis.length < 5)) {
+          currentQ.analysis = split.analysis
+        }
+      }
+    }
+
     if (!currentQ.answer && currentQ.options.length > 0) {
       currentQ.answer = 'A'
     }
@@ -825,12 +856,14 @@ function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信
       }
     }
 
-    // 独立选项: A. / A、 / A． / (A) / （A） / A: / A
-    const optMatch = line.match(/^[\(（]?([A-Ga-g])[\)）]?\s*[.、．:：\s]\s*(.*)/)
+    // 独立选项: 支持各种圆点/破折号/括号前缀: · A. / • A. / - A. / A. / A、 / (A) / [A]
+    const optMatch = line.match(
+      /^[\s\t]*[·•●◆■※\-*+、\u00b7\u2022\u25cf\u25cb\u25aa\u25ab]*\s*(?:[\(（\[【<]?([A-Ga-g])[\)）\]】>]?[\.、．:：\-\—\s]\s*|[\(（\[【<]([A-Ga-g])[\)）\]】>]\s*)(.*)/
+    )
     if (optMatch && currentQ.state !== 'analysis' && currentQ.state !== 'kp') {
       currentQ.state = 'option'
-      const key = optMatch[1].toUpperCase()
-      currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
+      const key = (optMatch[1] || optMatch[2]).toUpperCase()
+      currentQ.options.push({ key, label: key, content: (optMatch[3] || '').trim() })
       continue
     }
 
@@ -856,13 +889,18 @@ async function parseTextOrDocFile(file: File) {
       const arrayBuffer = await file.arrayBuffer()
       const htmlResult = await mammoth.convertToHtml({ arrayBuffer })
       const rawHtml = htmlResult.value || ''
-      // 保留 <img> 图片标签，将 <p>、<br>、<tr> 转换为换行，去除其它无关 HTML 标签
+      // 保留 <img> 图片标签，将 <li>、<p>、<br>、<tr>、<div> 转换为换行，去除其它无关 HTML 标签
       text = rawHtml
+        .replace(/<\/li>/gi, '\n')
         .replace(/<\/p>/gi, '\n')
-        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
         .replace(/<\/tr>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<td[^>]*>/gi, ' ')
         .replace(/<th[^>]*>/gi, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&emsp;/gi, ' ')
+        .replace(/&ensp;/gi, ' ')
         .replace(/<(?!\/?img\b)[^>]+>/gi, '')
     } else {
       text = await file.text()
@@ -926,9 +964,25 @@ async function startAIParsing() {
       content: aiText.value.trim(),
     })
     if (res?.data?.questions && res.data.questions.length > 0) {
-      previewList.value = res.data.questions
+      const cleaned = res.data.questions.map((q: any) => {
+        let content = q.content || q.title || ''
+        let options = q.options || []
+        if ((!options || options.length < 2 || options.every((o: any) => !o.content)) && content) {
+          const split = splitStemAndOptions(content)
+          if (split.options.length >= 2) {
+            content = split.stem
+            options = split.options
+            q.content = content
+            q.title = content
+            q.options = options
+            if (split.answer && (!q.answer || q.answer === 'A')) q.answer = split.answer
+          }
+        }
+        return q
+      })
+      previewList.value = cleaned
       await runBatchDuplicateCheck()
-      ElMessage.success(`AI 成功识别出 ${res.data.questions.length} 道题目！`)
+      ElMessage.success(`AI 成功识别出 ${cleaned.length} 道题目！`)
     } else {
       ElMessage.warning('AI 未能识别出题目，请检查文本内容')
     }
