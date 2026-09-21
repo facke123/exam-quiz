@@ -4,7 +4,7 @@
     <div class="quiz-top-nav">
       <div
         class="nav-back-btn"
-        @click="$router.back()"
+        @click="handleBack"
       >
         ‹
       </div>
@@ -167,11 +167,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showDialog, showToast } from 'vant'
 import { useQuizStore } from '@/stores/quiz'
 import { useSubjectStore } from '@/stores/subject'
+import { useUserStore } from '@/stores/user'
+import {
+  getQuizSessionKey,
+  saveQuizProgress,
+  getQuizProgress,
+  clearQuizProgress,
+  hasValidProgress,
+  type QuizProgressData,
+} from '@/utils/quiz-progress'
 import { getQuestions } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
 import { recordWrong, getWrongList } from '@/api/wrong'
@@ -188,9 +197,23 @@ const route = useRoute()
 const router = useRouter()
 const quizStore = useQuizStore()
 const subjectStore = useSubjectStore()
+const userStore = useUserStore()
+
+const currentUserId = computed(() => userStore.userInfo?.id || 'guest')
 
 const loading = ref(false)
 const mode = computed(() => (route.query.mode as string) || (route.params.mode as string) || 'practice')
+
+const sessionKey = computed(() =>
+  getQuizSessionKey({
+    mode: mode.value,
+    subjectId: route.query.subjectId ? String(route.query.subjectId) : (subjectStore.currentSubjectId || '1'),
+    chapterId: route.query.chapterId ? String(route.query.chapterId) : undefined,
+    paperId: route.query.paperId ? String(route.query.paperId) : undefined,
+    examId: route.query.examId ? String(route.query.examId) : undefined,
+    userId: currentUserId.value,
+  })
+)
 const needCountdown = computed(() => ['real', 'mock'].includes(mode.value))
 const remainingSeconds = ref(9000)
 const currentRecordId = ref<string | number | undefined>(route.query.recordId ? String(route.query.recordId) : undefined)
@@ -472,6 +495,67 @@ function onReport() {
   reportPopupVisible.value = true
 }
 
+function handleBack() {
+  if (autoNextTimer) clearTimeout(autoNextTimer)
+  if (questions.value.length > 0 && (Object.keys(answers.value).length > 0 || currentIndex.value > 0)) {
+    saveCurrentSessionProgress()
+    showToast({ message: '练习进度已自动保存，下次可继续练习', duration: 1500 })
+  }
+  router.back()
+}
+
+function saveCurrentSessionProgress() {
+  if (!questions.value || questions.value.length === 0) return
+  const answered = Object.keys(answers.value).filter((k) => answers.value[k]).length
+  if (answered === 0 && currentIndex.value === 0) return
+
+  saveQuizProgress({
+    storageKey: sessionKey.value,
+    userId: currentUserId.value,
+    mode: mode.value,
+    title: examDisplayTitle.value,
+    subjectId: route.query.subjectId ? String(route.query.subjectId) : (subjectStore.currentSubjectId || '1'),
+    chapterId: route.query.chapterId ? String(route.query.chapterId) : undefined,
+    paperId: route.query.paperId ? String(route.query.paperId) : undefined,
+    examId: route.query.examId ? String(route.query.examId) : undefined,
+    query: { ...route.query },
+    questions: questions.value,
+    currentIndex: currentIndex.value,
+    answers: answers.value,
+    judgeMap: judgeMap.value,
+    practiceMode: practiceMode.value,
+    remainingSeconds: remainingSeconds.value,
+    paperName: paperName.value,
+    total: questions.value.length,
+    answeredCount: answered,
+    progressPercentage: progressPercentage.value,
+    savedAt: Date.now(),
+  })
+}
+
+watch(
+  [currentIndex, answers, judgeMap, practiceMode],
+  () => {
+    saveCurrentSessionProgress()
+  },
+  { deep: true }
+)
+
+function restoreSavedState(saved: QuizProgressData) {
+  questions.value = saved.questions || []
+  currentIndex.value = typeof saved.currentIndex === 'number' ? saved.currentIndex : 0
+  answers.value = saved.answers || {}
+  judgeMap.value = saved.judgeMap || {}
+  practiceMode.value = saved.practiceMode || 'practice'
+  if (typeof saved.remainingSeconds === 'number' && saved.remainingSeconds > 0) {
+    remainingSeconds.value = saved.remainingSeconds
+  }
+  if (saved.paperName) {
+    paperName.value = saved.paperName
+  }
+  loading.value = false
+}
+
 function onPrev() {
   if (autoNextTimer) clearTimeout(autoNextTimer)
   if (currentIndex.value > 0) {
@@ -524,6 +608,9 @@ async function onSubmit() {
     return
   }
 
+  // 交卷成功，清除未完成练习进度
+  clearQuizProgress(sessionKey.value, currentUserId.value)
+
   const dParam = route.query.duration ? Number(route.query.duration) : undefined
   const durationVal = dParam ? dParam * 60 : (needCountdown.value ? (9000 - remainingSeconds.value) : 180)
   let submittedRecordId = currentRecordId.value
@@ -566,9 +653,7 @@ async function onSubmit() {
   })
 }
 
-onMounted(async () => {
-  quizStore.fetchFavorites()
-
+async function loadQuestionsFromServer() {
   const paperId = route.query.paperId || (['real', 'mock'].includes(mode.value) ? route.query.examId : undefined)
   const durationParam = route.query.duration ? Number(route.query.duration) : undefined
 
@@ -707,8 +792,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
 
-  if (needCountdown.value) {
+function initTimerAndShortcuts() {
+  if (needCountdown.value && !timer) {
     timer = setInterval(() => {
       if (remainingSeconds.value > 0) remainingSeconds.value--
       else onSubmit()
@@ -716,12 +803,59 @@ onMounted(async () => {
   }
 
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('beforeunload', saveCurrentSessionProgress)
+}
+
+onMounted(async () => {
+  quizStore.fetchFavorites()
+
+  // 1. 检查是否存在本地未完成练习进度
+  const saved = getQuizProgress(sessionKey.value)
+  if (saved && hasValidProgress(saved)) {
+    // 若路由显式指定 resume=1（例如从首页一键继续卡片跳转），直接静默恢复
+    if (route.query.resume === '1') {
+      restoreSavedState(saved)
+      showToast({ message: '已为您恢复上次练习进度', duration: 1500 })
+      initTimerAndShortcuts()
+      return
+    }
+
+    // 交互弹窗：友好询问用户「继续练习」还是「重新开始」
+    try {
+      const modeTitle = examDisplayTitle.value || '当前练习'
+      await showDialog({
+        title: '发现未完成练习',
+        message: `检测到您上次在【${modeTitle}】有未完成的练习进度：\n已作答 ${saved.answeredCount} / ${saved.total} 题（答至第 ${saved.currentIndex + 1} 题，完成度 ${saved.progressPercentage}%）\n\n请问您想要继续练习还是重新开始？`,
+        showCancelButton: true,
+        confirmButtonText: '继续练习',
+        cancelButtonText: '重新开始',
+        confirmButtonColor: '#6366f1',
+        cancelButtonColor: '#94a3b8',
+      })
+
+      // 用户选择「继续练习」
+      restoreSavedState(saved)
+      showToast({ message: '已恢复练习进度', duration: 1500 })
+      initTimerAndShortcuts()
+      return
+    } catch {
+      // 用户选择「重新开始」
+      clearQuizProgress(sessionKey.value, currentUserId.value)
+      showToast({ message: '已清空旧进度，重新开始练习', duration: 1200 })
+    }
+  }
+
+  // 2. 正常从服务端抽取试题
+  await loadQuestionsFromServer()
+  initTimerAndShortcuts()
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
   if (autoNextTimer) clearTimeout(autoNextTimer)
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('beforeunload', saveCurrentSessionProgress)
+  saveCurrentSessionProgress()
 })
 
 // PC 键盘快捷键监听

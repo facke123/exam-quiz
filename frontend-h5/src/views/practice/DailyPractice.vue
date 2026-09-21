@@ -198,7 +198,13 @@
     <!-- 7. 底部固定操作栏 -->
     <div class="daily-bottom-bar">
       <button class="start-btn" :class="{ 'btn-secondary': isCompleted }" @click="onStart">
-        {{ isCompleted ? `🔄 再次自测刷题（${selectedCount}题）` : `🎯 开启今日打卡挑战（${selectedCount}题）` }}
+        {{
+          unfinishedDaily
+            ? `⚡ 继续今日练习（第 ${unfinishedDaily.currentIndex + 1}/${unfinishedDaily.total} 题）`
+            : isCompleted
+            ? `🔄 再次自测刷题（${selectedCount}题）`
+            : `🎯 开启今日打卡挑战（${selectedCount}题）`
+        }}
       </button>
     </div>
 
@@ -264,6 +270,7 @@ import { showToast } from 'vant'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
 import { getDailyStatus } from '@/api/quiz'
+import { getQuizSessionKey, getQuizProgress, hasValidProgress } from '@/utils/quiz-progress'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
@@ -271,6 +278,17 @@ const userStore = useUserStore()
 
 const currentSubjectName = computed(() => {
   return subjectStore.currentSubject?.name || '系统集成项目管理工程师'
+})
+
+const unfinishedDaily = computed(() => {
+  const currentSubId = subjectStore.currentSubjectId || '1'
+  const key = getQuizSessionKey({
+    mode: 'daily',
+    subjectId: currentSubId,
+    userId: userStore.userInfo?.id,
+  })
+  const saved = getQuizProgress(key)
+  return saved && hasValidProgress(saved) ? saved : null
 })
 
 const now = new Date()

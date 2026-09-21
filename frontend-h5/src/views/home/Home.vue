@@ -276,6 +276,29 @@
       </div>
     </div>
 
+    <!-- ⚡ 未完成练习快速续做卡片 -->
+    <div
+      v-if="unfinishedQuiz"
+      class="unfinished-quiz-banner"
+      @click="resumeUnfinishedQuiz"
+    >
+      <div class="uqb-left">
+        <div class="uqb-icon">⏳</div>
+        <div class="uqb-info">
+          <div class="uqb-title-row">
+            <span class="uqb-badge">未完成练习</span>
+            <span class="uqb-title">{{ unfinishedQuiz.title }}</span>
+          </div>
+          <div class="uqb-desc">
+            上次答至第 {{ unfinishedQuiz.currentIndex + 1 }} 题 · 已完成 {{ unfinishedQuiz.answeredCount }}/{{ unfinishedQuiz.total }} 题（进度 {{ unfinishedQuiz.progressPercentage }}%）
+          </div>
+        </div>
+      </div>
+      <div class="uqb-right">
+        <button class="uqb-btn">继续练习 ›</button>
+      </div>
+    </div>
+
     <!-- 💡 AI 考点知识库高亮推荐卡片 -->
     <div class="ai-knowledge-banner" @click="$router.push('/knowledge')">
       <div class="akb-left">
@@ -564,18 +587,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
 import { useConfigStore } from '@/stores/config'
 import { getOverview, getRadar } from '@/api/stats'
 import { getBanners, getAnnouncements, type BannerItem, type AnnouncementItem } from '@/api/content'
+import { getLastUnfinishedQuiz, type QuizProgressSummary } from '@/utils/quiz-progress'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
 const userStore = useUserStore()
 const configStore = useConfigStore()
+
+const unfinishedQuiz = ref<QuizProgressSummary | null>(null)
+
+function checkUnfinishedQuiz() {
+  unfinishedQuiz.value = getLastUnfinishedQuiz(userStore.userInfo?.id)
+}
+
+function resumeUnfinishedQuiz() {
+  if (!unfinishedQuiz.value) return
+  router.push({
+    path: `/quiz/${unfinishedQuiz.value.mode}`,
+    query: {
+      ...unfinishedQuiz.value.query,
+      resume: '1',
+    },
+  })
+}
 
 const radarList = ref<any[]>([])
 const radarColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
@@ -712,6 +753,7 @@ function startHotQuiz(type: 'hot_point' | 'hot_wrong') {
 }
 
 onMounted(async () => {
+  checkUnfinishedQuiz()
   if (subjectStore.subjectList.length === 0) {
     await subjectStore.fetchSubjects()
   }
@@ -723,6 +765,10 @@ onMounted(async () => {
       // ignore
     }
   }
+})
+
+onActivated(() => {
+  checkUnfinishedQuiz()
 })
 </script>
 
@@ -1033,6 +1079,95 @@ onMounted(async () => {
     font-weight: 700;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+  }
+}
+
+/* ⚡ 未完成练习快速续做横幅 */
+.unfinished-quiz-banner {
+  margin: 12px 14px 0;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  .uqb-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+
+    .uqb-icon {
+      font-size: 24px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .uqb-info {
+      flex: 1;
+      min-width: 0;
+
+      .uqb-title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+
+        .uqb-badge {
+          background: #ef4444;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 1px 6px;
+          border-radius: 4px;
+          flex-shrink: 0;
+        }
+
+        .uqb-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #1e293b;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+
+      .uqb-desc {
+        font-size: 11px;
+        color: #64748b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+
+  .uqb-right {
+    margin-left: 10px;
+    flex-shrink: 0;
+
+    .uqb-btn {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+      cursor: pointer;
+    }
   }
 }
 
