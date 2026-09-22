@@ -181,6 +181,7 @@ import {
   hasValidProgress,
   type QuizProgressData,
 } from '@/utils/quiz-progress'
+import { deduplicateQuestions, recordDailyPracticedIds } from '@/utils/quiz-dedup'
 import { getQuestions } from '@/api/question'
 import { getPaperDetail } from '@/api/exam'
 import { recordWrong, getWrongList } from '@/api/wrong'
@@ -763,6 +764,7 @@ async function loadQuestionsFromServer() {
         knowledgePointId: targetKpId,
         mode: mode.value,
         count,
+        excludeIds: route.query.excludeIds ? String(route.query.excludeIds) : undefined,
       })
       if (res?.data) {
         if (Array.isArray(res.data)) {
@@ -777,15 +779,14 @@ async function loadQuestionsFromServer() {
       }
     }
 
-    // 全局题目去重
+    // 全局题目特征指纹与ID深度去重（100% 杜绝同套练习出现重复题目）
     if (questions.value && questions.value.length > 0) {
-      const globalSeen = new Set<string>()
-      questions.value = questions.value.filter((q) => {
-        const id = String(q.id)
-        if (globalSeen.has(id)) return false
-        globalSeen.add(id)
-        return true
-      })
+      questions.value = deduplicateQuestions(questions.value)
+
+      // 若为每日一练，同步记录到本地防重复滚动窗口中
+      if (mode.value === 'daily') {
+        recordDailyPracticedIds(questions.value.map((q) => q.id), currentUserId.value)
+      }
     }
   } catch {
     questions.value = []

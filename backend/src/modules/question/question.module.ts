@@ -9,6 +9,7 @@ import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { User } from '@/database/entities/user.entity';
 import { WrongQuestion } from '@/database/entities/wrong-question.entity';
+import { PracticeAnswer } from '@/database/entities/practice-answer.entity';
 
 /**
  * 题库模块
@@ -23,6 +24,7 @@ import { WrongQuestion } from '@/database/entities/wrong-question.entity';
       Chapter,
       User,
       WrongQuestion,
+      PracticeAnswer,
     ]),
   ],
   controllers: [QuestionController],

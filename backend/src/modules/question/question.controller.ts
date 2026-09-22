@@ -34,8 +34,8 @@ export class QuestionController {
   @Public()
   @Get(['question/list', 'questions'])
   @ApiOperation({ summary: '前台题目列表' })
-  async findList(@Query() dto: any) {
-    return this.questionService.findList(dto);
+  async findList(@Query() dto: any, @CurrentUser() user?: UserPayload) {
+    return this.questionService.findList(dto, user?.id);
   }
 
   @Public()

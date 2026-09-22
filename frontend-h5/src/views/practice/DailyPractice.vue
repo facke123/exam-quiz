@@ -271,6 +271,7 @@ import { useSubjectStore } from '@/stores/subject'
 import { useUserStore } from '@/stores/user'
 import { getDailyStatus } from '@/api/quiz'
 import { getQuizSessionKey, getQuizProgress, hasValidProgress } from '@/utils/quiz-progress'
+import { getRecentDailyPracticedIds } from '@/utils/quiz-dedup'
 
 const router = useRouter()
 const subjectStore = useSubjectStore()
@@ -428,14 +429,16 @@ function onDayClick(d: any) {
 
 function onStart() {
   const subId = subjectStore.currentSubjectId || '1'
-  router.push(`/quiz/daily?mode=daily&subjectId=${subId}&count=${selectedCount.value}`)
+  const recentIds = getRecentDailyPracticedIds(userStore.userInfo?.id)
+  const excludeParam = recentIds.length > 0 ? `&excludeIds=${recentIds.slice(-100).join(',')}` : ''
+  router.push(`/quiz/daily?mode=daily&subjectId=${subId}&count=${selectedCount.value}${excludeParam}`)
 }
 
 function onViewReport() {
   if (todayRecordId.value) {
     router.push(`/quiz/report/${todayRecordId.value}`)
   } else {
-    router.push(`/quiz/daily?mode=daily&subjectId=${subjectStore.currentSubjectId || '1'}&count=${selectedCount.value}`)
+    onStart()
   }
 }
 

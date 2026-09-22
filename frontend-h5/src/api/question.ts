@@ -44,6 +44,7 @@ export function getQuestions(params: {
   type?: QuestionType
   mode?: string
   count?: number
+  excludeIds?: string
 }) {
   return request<Question[]>({
     url: '/question/list',

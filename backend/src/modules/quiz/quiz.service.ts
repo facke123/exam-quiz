@@ -18,6 +18,7 @@ import {
   FavoriteDto,
   NoteDto,
 } from './dto/quiz.dto';
+import { deduplicateQuestions } from '@/common/utils/question-fingerprint.util';
 
 const fromDbType = (t?: string) => {
   if (!t) return 'single';
@@ -154,13 +155,43 @@ export class QuizService implements OnModuleInit {
         questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
       }
     } else if (dto.mode === 'daily') {
-      const questions = await this.questionRepository
+      const subId = dto.subjectId ? Number(dto.subjectId) : undefined;
+      const count = dto.count || dto.questionCount || 20;
+
+      // 优先获取用户已答过的题目并排除
+      const answered = await this.answerRepository.find({
+        where: { userId },
+        select: ['questionId'],
+      });
+      const answeredIds = Array.from(new Set(answered.map((a) => Number(a.questionId)).filter(Boolean)));
+
+      const qb = this.questionRepository
         .createQueryBuilder('q')
-        .where('q.status = :status', { status: 'published' })
-        .orderBy('RAND()')
-        .take(dto.count || 5)
-        .getMany();
-      questionIds = Array.from(new Set(questions.map((q) => Number(q.id))));
+        .where('q.status = :status', { status: 'published' });
+      if (subId) {
+        qb.andWhere('q.subjectId = :subId', { subId });
+      }
+      if (answeredIds.length > 0) {
+        qb.andWhere('q.id NOT IN (:...answeredIds)', { answeredIds });
+      }
+      qb.orderBy('RAND()').take(count * 3 + 10);
+      let candidates = await qb.getMany();
+      let deduped = deduplicateQuestions(candidates);
+
+      if (deduped.length < count) {
+        const existingIds = deduped.map((q) => Number(q.id));
+        const fbQb = this.questionRepository
+          .createQueryBuilder('q')
+          .where('q.status = :status', { status: 'published' });
+        if (subId) fbQb.andWhere('q.subjectId = :subId', { subId });
+        if (existingIds.length > 0) {
+          fbQb.andWhere('q.id NOT IN (:...existingIds)', { existingIds });
+        }
+        fbQb.orderBy('RAND()').take((count - deduped.length) * 3 + 10);
+        const fbCandidates = await fbQb.getMany();
+        deduped = deduplicateQuestions([...deduped, ...fbCandidates]);
+      }
+      questionIds = Array.from(new Set(deduped.slice(0, count).map((q) => Number(q.id))));
     } else if (dto.mode === 'knowledge' || dto.knowledgePointId) {
       const qb = this.questionRepository
         .createQueryBuilder('q')

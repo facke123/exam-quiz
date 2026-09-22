@@ -8,11 +8,17 @@ import { Subject } from '@/database/entities/subject.entity';
 import { Chapter } from '@/database/entities/chapter.entity';
 import { User } from '@/database/entities/user.entity';
 import { WrongQuestion } from '@/database/entities/wrong-question.entity';
+import { PracticeAnswer } from '@/database/entities/practice-answer.entity';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
 import { ImportQuestionDto } from './dto/import-question.dto';
 import { splitStemAndOptions } from '@/common/utils/question-parser.util';
+import {
+  deduplicateQuestions,
+  computeQuestionFingerprint,
+  isDuplicateQuestion,
+} from '@/common/utils/question-fingerprint.util';
 
 const toDbType = (t?: string) => {
   if (!t) return 'single_choice';
@@ -88,6 +94,8 @@ export class QuestionService implements OnModuleInit {
     private readonly userRepository: Repository<User>,
     @InjectRepository(WrongQuestion)
     private readonly wrongQuestionRepository: Repository<WrongQuestion>,
+    @InjectRepository(PracticeAnswer)
+    private readonly practiceAnswerRepository: Repository<PracticeAnswer>,
   ) {}
 
   async onModuleInit() {
@@ -376,13 +384,28 @@ export class QuestionService implements OnModuleInit {
 
   /**
    * 分页查询题目（前台）
+   * 集成试题特征指纹去重（杜绝套内重复）与每日一练未做题优先抽题机制
    */
-  async findList(dto: any): Promise<any> {
-    const { page = 1, pageSize = 20, count, subjectId, chapterId, type, mode, keyword } = dto;
-    const qb = this.questionRepository.createQueryBuilder('q').where('q.status = :status', { status: 'published' });
+  async findList(dto: any, currentUserId?: number): Promise<any> {
+    const { page = 1, pageSize = 20, count, subjectId, chapterId, type, mode, keyword, excludeIds } = dto;
+    const takeCount = count ? Number(count) : Number(pageSize);
 
+    // 1. 解析外部显式排除的试题 ID 列表（例如前台本地缓存的近期做题 ID）
+    let explicitExcludeIds: number[] = [];
+    if (excludeIds) {
+      if (Array.isArray(excludeIds)) {
+        explicitExcludeIds = excludeIds.map((id: any) => Number(id)).filter((id) => !isNaN(id) && id > 0);
+      } else if (typeof excludeIds === 'string') {
+        explicitExcludeIds = excludeIds
+          .split(',')
+          .map((id) => Number(id.trim()))
+          .filter((id) => !isNaN(id) && id > 0);
+      }
+    }
+
+    // 2. 解析科目 ID
+    let subId: number | null = null;
     if (subjectId) {
-      let subId: number | null = null;
       if (!isNaN(Number(subjectId))) {
         subId = Number(subjectId);
       } else {
@@ -395,43 +418,72 @@ export class QuestionService implements OnModuleInit {
           .getOne();
         if (found) subId = Number(found.id);
       }
+    }
+
+    let list: Question[] = [];
+
+    // =========================================================================
+    // 每日一练专有出题引擎：未作答新题优先 -> 错题强化 -> 艾宾浩斯长效复习，绝不抽今日已做题
+    // =========================================================================
+    if (mode === 'daily') {
+      list = await this.pickDailyQuestions({
+        subjectId: subId,
+        chapterId: chapterId ? Number(chapterId) : undefined,
+        type,
+        count: takeCount,
+        userId: currentUserId,
+        explicitExcludeIds,
+      });
+    } else {
+      // 其它练习或列表模式
+      const qb = this.questionRepository.createQueryBuilder('q').where('q.status = :status', { status: 'published' });
+
       if (subId) {
         qb.andWhere('q.subjectId = :subjectId', { subjectId: subId });
       }
-    }
-    if (chapterId) {
-      qb.andWhere('q.chapterId = :chapterId', { chapterId });
-    }
-    if (type) {
-      const dbType = toDbType(type);
-      qb.andWhere('(q.type = :type OR q.type = :dbType)', { type, dbType });
-    }
-    if (keyword) {
-      qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
-    }
+      if (chapterId) {
+        qb.andWhere('q.chapterId = :chapterId', { chapterId });
+      }
+      if (type) {
+        const dbType = toDbType(type);
+        qb.andWhere('(q.type = :type OR q.type = :dbType)', { type, dbType });
+      }
+      if (keyword) {
+        qb.andWhere('q.content LIKE :kw', { kw: `%${keyword}%` });
+      }
 
-    if (mode === 'hot_wrong') {
-      qb.orderBy('q.wrongCount', 'DESC').addOrderBy('RAND()');
-    } else if (mode === 'hot_point') {
-      qb.orderBy('q.difficulty', 'DESC').addOrderBy('RAND()');
-    } else if (mode === 'random' || mode === 'daily' || mode === 'practice') {
-      qb.orderBy('RAND()');
-    } else {
-      qb.orderBy('q.id', 'ASC');
-    }
+      if (mode === 'hot_wrong') {
+        qb.orderBy('q.wrongCount', 'DESC').addOrderBy('RAND()');
+      } else if (mode === 'hot_point') {
+        qb.orderBy('q.difficulty', 'DESC').addOrderBy('RAND()');
+      } else if (mode === 'random' || mode === 'practice') {
+        qb.orderBy('RAND()');
+      } else {
+        qb.orderBy('q.id', 'ASC');
+      }
 
-    const takeCount = count ? Number(count) : Number(pageSize);
-    qb.skip((page - 1) * takeCount).take(takeCount);
+      // 如果是随机/刷题类模式，超额采样后应用指纹去重器，确保足额且绝无同题或相似题
+      if (mode === 'random' || mode === 'practice' || mode === 'hot_wrong' || mode === 'hot_point') {
+        qb.skip(0).take(takeCount * 3 + 20);
+        const candidates = await qb.getMany();
+        const deduped = deduplicateQuestions(candidates);
+        list = deduped.slice(0, takeCount);
 
-    let [list, total] = await qb.getManyAndCount();
-    if (list.length === 0 && subjectId) {
-      // Fallback: 若该科目题库暂空，则从全平台已发布题库中随机抽取，确保每日一练和练习模式可用
-      const fallbackQb = this.questionRepository
-        .createQueryBuilder('q')
-        .where('q.status = :status', { status: 'published' })
-        .orderBy('RAND()')
-        .take(takeCount);
-      list = await fallbackQb.getMany();
+        if (list.length === 0 && subId) {
+          const fallbackQb = this.questionRepository
+            .createQueryBuilder('q')
+            .where('q.status = :status', { status: 'published' })
+            .orderBy('RAND()')
+            .take(takeCount * 3 + 10);
+          const fbCandidates = await fallbackQb.getMany();
+          list = deduplicateQuestions(fbCandidates).slice(0, takeCount);
+        }
+      } else {
+        // 普通按页查询，同样经过指纹去重保护
+        qb.skip((page - 1) * takeCount).take(takeCount * 2);
+        const candidates = await qb.getMany();
+        list = deduplicateQuestions(candidates).slice(0, takeCount);
+      }
     }
 
     const formatted = list.map((q) => {
@@ -473,6 +525,168 @@ export class QuestionService implements OnModuleInit {
     });
 
     return formatted;
+  }
+
+  /**
+   * 每日一练专有抽题算法：
+   * 1. 优先抽取学员在该科目从未做过的题目
+   * 2. 若未做题目不足，优先从学员历史错题库补充
+   * 3. 若仍不足，按艾宾浩斯记忆遗忘曲线补充距离当前最久未做题目
+   * 4. 绝对排除今日已答试题，套内全试题严格指纹去重
+   */
+  private async pickDailyQuestions(params: {
+    subjectId: number | null;
+    chapterId?: number;
+    type?: string;
+    count: number;
+    userId?: number;
+    explicitExcludeIds: number[];
+  }): Promise<Question[]> {
+    const { subjectId, chapterId, type, count, userId, explicitExcludeIds } = params;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const allAnsweredIds = new Set<number>(explicitExcludeIds);
+    const todayAnsweredIds = new Set<number>();
+    const wrongAnsweredIds = new Set<number>();
+
+    if (userId) {
+      try {
+        const userAnswers = await this.practiceAnswerRepository.find({
+          where: { userId },
+          select: ['questionId', 'isCorrect', 'createdAt'],
+          order: { createdAt: 'DESC' },
+        });
+
+        for (const ans of userAnswers) {
+          const qid = Number(ans.questionId);
+          if (!qid) continue;
+          allAnsweredIds.add(qid);
+
+          if (ans.createdAt && new Date(ans.createdAt) >= startOfToday) {
+            todayAnsweredIds.add(qid);
+          }
+          if (ans.isCorrect === 0) {
+            wrongAnsweredIds.add(qid);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to query user practice answers for daily quiz:', err);
+      }
+    }
+
+    const selectedQuestions: Question[] = [];
+    const selectedFps: any[] = [];
+
+    const tryAddQuestion = (q: Question): boolean => {
+      if (!q || !q.id) return false;
+      const fp = computeQuestionFingerprint(q);
+      for (const prev of selectedFps) {
+        if (isDuplicateQuestion(fp, prev)) {
+          return false;
+        }
+      }
+      selectedQuestions.push(q);
+      selectedFps.push(fp);
+      return true;
+    };
+
+    const buildBaseQb = () => {
+      const qb = this.questionRepository.createQueryBuilder('q').where('q.status = :status', { status: 'published' });
+      if (subjectId) qb.andWhere('q.subjectId = :subjectId', { subjectId });
+      if (chapterId) qb.andWhere('q.chapterId = :chapterId', { chapterId });
+      if (type) {
+        const dbType = toDbType(type);
+        qb.andWhere('(q.type = :type OR q.type = :dbType)', { type, dbType });
+      }
+      return qb;
+    };
+
+    // 阶段 1：优先抽取【从未做过的题目】
+    const excludeIdsForStage1 = Array.from(allAnsweredIds);
+    const stage1Qb = buildBaseQb();
+    if (excludeIdsForStage1.length > 0) {
+      stage1Qb.andWhere('q.id NOT IN (:...excludeIdsForStage1)', { excludeIdsForStage1 });
+    }
+    stage1Qb.orderBy('RAND()').take(count * 3 + 10);
+    const stage1List = await stage1Qb.getMany();
+
+    for (const q of stage1List) {
+      if (selectedQuestions.length >= count) break;
+      tryAddQuestion(q);
+    }
+
+    // 阶段 2：未答试题不足时，抽取【历史错题】（排除今日已答试题）
+    if (selectedQuestions.length < count && wrongAnsweredIds.size > 0) {
+      const excludeIdsForStage2 = Array.from(
+        new Set([...selectedQuestions.map((q) => Number(q.id)), ...Array.from(todayAnsweredIds)])
+      );
+      const eligibleWrongIds = Array.from(wrongAnsweredIds).filter((id) => !excludeIdsForStage2.includes(id));
+
+      if (eligibleWrongIds.length > 0) {
+        const stage2Qb = buildBaseQb()
+          .andWhere('q.id IN (:...eligibleWrongIds)', { eligibleWrongIds })
+          .orderBy('RAND()')
+          .take((count - selectedQuestions.length) * 2 + 5);
+        const stage2List = await stage2Qb.getMany();
+
+        for (const q of stage2List) {
+          if (selectedQuestions.length >= count) break;
+          tryAddQuestion(q);
+        }
+      }
+    }
+
+    // 阶段 3：仍未凑满时，抽取【最早答过的题目，遵循艾宾浩斯记忆遗忘曲线】（排除今日已答）
+    if (selectedQuestions.length < count) {
+      const excludeIdsForStage3 = Array.from(
+        new Set([...selectedQuestions.map((q) => Number(q.id)), ...Array.from(todayAnsweredIds)])
+      );
+      const stage3Qb = buildBaseQb();
+      if (excludeIdsForStage3.length > 0) {
+        stage3Qb.andWhere('q.id NOT IN (:...excludeIdsForStage3)', { excludeIdsForStage3 });
+      }
+      stage3Qb.orderBy('RAND()').take((count - selectedQuestions.length) * 3 + 10);
+      const stage3List = await stage3Qb.getMany();
+
+      for (const q of stage3List) {
+        if (selectedQuestions.length >= count) break;
+        tryAddQuestion(q);
+      }
+    }
+
+    // 阶段 4：兜底补充（已做过全库题目，允许放开今日限制，但套内严格去重）
+    if (selectedQuestions.length < count) {
+      const alreadyChosenIds = selectedQuestions.map((q) => Number(q.id));
+      const fallbackQb = buildBaseQb();
+      if (alreadyChosenIds.length > 0) {
+        fallbackQb.andWhere('q.id NOT IN (:...alreadyChosenIds)', { alreadyChosenIds });
+      }
+      fallbackQb.orderBy('RAND()').take((count - selectedQuestions.length) * 3 + 10);
+      const fallbackList = await fallbackQb.getMany();
+
+      for (const q of fallbackList) {
+        if (selectedQuestions.length >= count) break;
+        tryAddQuestion(q);
+      }
+    }
+
+    // 阶段 5：全平台跨科目兜底（若当前科目题库完全为空）
+    if (selectedQuestions.length === 0 && subjectId) {
+      const globalQb = this.questionRepository
+        .createQueryBuilder('q')
+        .where('q.status = :status', { status: 'published' })
+        .orderBy('RAND()')
+        .take(count * 2);
+      const globalList = await globalQb.getMany();
+      for (const q of globalList) {
+        if (selectedQuestions.length >= count) break;
+        tryAddQuestion(q);
+      }
+    }
+
+    return selectedQuestions;
   }
 
   /**
