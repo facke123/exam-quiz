@@ -356,7 +356,7 @@ import {
   cleanDuplicates,
 } from '@/api/question'
 import { parseQuestions } from '@/api/ai'
-import { splitStemAndOptions } from '@/utils/question-parser'
+import { splitStemAndOptions, parseDocxOrTextToQuestions } from '@/utils/question-parser'
 
 const subjects = ref<{ label: string; value: number }[]>([])
 const selectedSubjectId = ref<number>(1)
@@ -632,253 +632,43 @@ async function parseExcelFile(file: File) {
   ElMessage.success(`成功从 Excel 解析出 ${parsed.length} 道试题！`)
 }
 
-// 客户端状态机试卷解析算法
+// 客户端智能试题解析算法
 function parseWordQuestionsClient(rawText: string, defaultChapter = '第1章 信息化发展') {
-  // eslint-disable-next-line no-control-regex
-  const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
-  const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
+  const parsed = parseDocxOrTextToQuestions(rawText, defaultChapter)
+  const typeTextMap: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', essay: '问答' }
 
-  const questions: any[] = []
-  let currentQ: any = null
-  let currentChapter = defaultChapter
-  let currentTypeFromTag = ''
-
-  function isHeaderOrInstruction(line: string): boolean {
-    if (/^(?:系统集成|信息系统|软考|全国计算机|中级|高级|基础知识|应用技术).*模拟试卷/i.test(line)) return true
-    if (/^（依据《.*》.*编写）/.test(line)) return true
-    if (/^(?:试卷说明|考试科目|合格分数线|建议用时|使用说明|满分|题量|题型|说明|项目)$/.test(line)) return true
-    if (/^\d+\s*分(?:（含\s*\d+\s*分）)?$/.test(line)) return true
-    if (/^\d+\s*分钟$/.test(line)) return true
-    if (/^共\s*\d+\s*题/.test(line)) return true
-    if (/^第[一二三四五六七八九十]+部分/.test(line)) return true
-    if (/^[一二三四五六七八九十]+[、.．\s].*（第\s*\d+.*题）/.test(line)) return true
-    if (/^-\(全国卷\)/.test(line)) return true
-    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
-    return false
-  }
-
-  function extractChapterFromHeader(line: string) {
-    const chMatch = line.match(/^(?:第\s*(\d{1,2})\s*章|[一二三四五六七八九十]+[、.．\s])\s*([^（(\n\r]+)/)
-    if (chMatch) {
-      return line.trim()
-    }
-    return null
-  }
-
-  function extractQuestionStart(line: string) {
-    if (isHeaderOrInstruction(line)) return null
-
-    // 匹配各种真题格式：
-    // 1. 第1题. / 第1题：/ 第 1 题 / 第1题 / 试题1. / 试题1 / 【试题1】
-    // 2. 1. / 1、 / 1． / 1: / 1：
-    // 3. (1) / （1） / [1] / 【1】
-    const qPattern = /^(?:【?(?:单选|多选|判断|问答|案例|论述)题?】?\s*)?(?:【?(?:试题\s*|第\s*)?(\d{1,3})\s*(?:题)?[\)）\]】]?[\.、．:：\-\—_\s]\s*|(?:试题\s*|第\s*)(\d{1,3})\s*题[\.、．:：\-\—_\s]*|[\(（\[【](\d{1,3})[\)）\]】][\.、．:：\-\—_\s]*)(.*)/
-    const m = line.match(qPattern)
-    if (m) {
-      const numStr = m[1] || m[2] || m[3]
-      const num = parseInt(numStr, 10)
-      const content = (m[4] || '').trim()
-      if (num >= 1 && num <= 200) {
-        return { num, content }
-      }
-    }
-    return null
-  }
-
-  function saveCurrentQ() {
-    if (!currentQ || !currentQ.content) return
-
-    // 智能兜底拆分：如果选项少于2项，且题干内混杂了选项，执行拆分
-    if ((!currentQ.options || currentQ.options.length < 2) && currentQ.content) {
-      const split = splitStemAndOptions(currentQ.content)
-      if (split.options.length >= 2) {
-        currentQ.content = split.stem
-        currentQ.options = split.options
-        if (split.answer && (!currentQ.answer || currentQ.answer === 'A')) {
-          currentQ.answer = split.answer
-        }
-        if (split.analysis && (!currentQ.analysis || currentQ.analysis.length < 5)) {
-          currentQ.analysis = split.analysis
-        }
-      }
-    }
-
-    if (!currentQ.answer && currentQ.options.length > 0) {
-      currentQ.answer = 'A'
-    }
-
-    const optCount = currentQ.options.length
-    let type = currentQ.type || 'single'
-    if (optCount >= 2) {
-      if (currentQ.answer && currentQ.answer.length > 1 && /^[A-E]+$/.test(currentQ.answer)) {
-        type = 'multiple'
-      } else {
-        type = 'single'
-      }
-    } else if (/正确|错误|对|错|√|×/i.test(currentQ.answer) || /判断/i.test(currentQ.content)) {
-      type = 'judge'
-    } else if (optCount === 0 && ((currentQ.answer && currentQ.answer.length > 8) || /简述|论述|简答|案例|分析/i.test(currentQ.content))) {
-      type = 'essay'
-    }
-
-    const typeTextMap: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', essay: '问答' }
-
+  return parsed.map((q, idx) => {
     let valid = true
     let errorMsg = ''
-    if (!currentQ.content || currentQ.content.length < 2) {
+    if (!q.content || q.content.length < 2) {
       valid = false
       errorMsg = '题干不能为空'
-    } else if (type === 'single' && currentQ.options.length < 2) {
+    } else if (q.type === 'single' && q.options.length < 2) {
       valid = false
       errorMsg = '单选缺少选项'
-    } else if (!currentQ.answer) {
+    } else if (!q.answer) {
       valid = false
       errorMsg = '缺少正确答案'
     }
 
-    const qNum = currentQ.num || (questions.length + 1)
-    questions.push({
-      rowNo: questions.length + 1,
-      num: qNum,
-      type,
-      typeText: typeTextMap[type] || '单选',
-      content: currentQ.content.trim(),
-      title: currentQ.content.trim(),
-      options: currentQ.options,
-      answer: currentQ.answer.trim().toUpperCase() || (type === 'essay' ? '详见解析' : 'A'),
-      analysis: currentQ.analysis.trim() || '详见教材对应核心考点解析。',
-      chapter: currentQ.chapter || currentChapter,
-      chapterName: currentQ.chapter || currentChapter,
+    return {
+      rowNo: idx + 1,
+      num: q.num,
+      type: q.type,
+      typeText: typeTextMap[q.type] || '单选',
+      content: q.content,
+      title: q.content,
+      options: q.options,
+      answer: q.answer || (q.type === 'essay' ? '详见解析' : 'A'),
+      analysis: q.analysis || '详见教材对应核心考点解析。',
+      chapter: q.chapter || defaultChapter,
+      chapterName: q.chapter || defaultChapter,
       difficulty: 3,
       valid,
       errorMsg,
       isDuplicate: false,
-    })
-    currentQ = null
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^【(单选题|多选题|判断题|问答题|案例分析题|论述题)】$/.test(line)) {
-      currentTypeFromTag = line.replace(/[【】]/g, '')
-      continue
     }
-    const ch = extractChapterFromHeader(line)
-    if (ch && !line.includes('。') && !line.includes('？') && line.length < 30) {
-      currentChapter = ch
-      continue
-    }
-    if (isHeaderOrInstruction(line)) continue
-
-    const qStart = extractQuestionStart(line)
-    if (qStart) {
-      saveCurrentQ()
-      let type = 'single'
-      const fullContent = (currentTypeFromTag + ' ' + qStart.content)
-      if (fullContent.includes('多选')) type = 'multiple'
-      else if (fullContent.includes('判断')) type = 'judge'
-      else if (fullContent.includes('问答') || fullContent.includes('案例') || fullContent.includes('论述')) type = 'essay'
-
-      currentQ = {
-        num: qStart.num,
-        type,
-        chapter: currentChapter,
-        content: qStart.content.replace(/【(?:单选|多选|判断|问答|案例|论述)题?】/g, '').trim(),
-        options: [],
-        answer: '',
-        analysis: '',
-        knowledgePoint: '',
-        state: 'stem',
-      }
-      continue
-    }
-
-    if (!currentQ) continue
-
-    // 答案识别
-    const ansMatch = line.match(/^【?(?:参考|正确)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
-    if (ansMatch) {
-      currentQ.state = 'answer'
-      let rawAns = ansMatch[1].trim()
-      if (rawAns === '对' || rawAns === '√') rawAns = '正确'
-      if (rawAns === '错' || rawAns === '×') rawAns = '错误'
-      currentQ.answer = rawAns.toUpperCase()
-      continue
-    }
-
-    // 考点识别
-    const kpMatch = line.match(/^【?(?:核心)?考点(?:定位)?】?[:：\s]*(.*)/i)
-    if (kpMatch) {
-      currentQ.state = 'kp'
-      currentQ.knowledgePoint = kpMatch[1].trim()
-      if (currentQ.analysis) {
-        currentQ.analysis += '\n【考点定位】' + kpMatch[1].trim()
-      } else {
-        currentQ.analysis = '【考点定位】' + kpMatch[1].trim()
-      }
-      continue
-    }
-
-    // 解析识别
-    const anaMatch = line.match(/^【?(?:答案|试题)?解析】?[:：\s]*(.*)/i)
-    if (anaMatch) {
-      currentQ.state = 'analysis'
-      const anaText = anaMatch[1].trim()
-      if (currentQ.analysis) {
-        currentQ.analysis += '\n【名师解析】' + anaText
-      } else {
-        currentQ.analysis = '【名师解析】' + anaText
-      }
-      continue
-    }
-
-    // 易错点 / 避坑口诀 / 名师点拨
-    const extraMatch = line.match(/^【(易错点|避坑口诀|名师点拨|考前速记)】[:：\s]*(.*)/i)
-    if (extraMatch) {
-      currentQ.state = 'analysis'
-      currentQ.analysis += '\n【' + extraMatch[1] + '】' + extraMatch[2].trim()
-      continue
-    }
-
-    // 单行多个选项: A. xxx B. yyy C. zzz D. kkk
-    if (/[A-Da-d][.、．:：\s].+[B-Eb-e][.、．:：\s]/.test(line)) {
-      const inlineRegex = /([A-Ga-g])[.、．:：\s]\s*([^A-Ga-g]+)/g
-      let m: RegExpExecArray | null
-      let count = 0
-      while ((m = inlineRegex.exec(line)) !== null) {
-        count++
-        const key = m[1].toUpperCase()
-        currentQ.options.push({ key, label: key, content: m[2].trim() })
-      }
-      if (count > 0) {
-        currentQ.state = 'option'
-        continue
-      }
-    }
-
-    // 独立选项: 支持各种圆点/破折号/括号前缀: · A. / • A. / - A. / A. / A、 / (A) / [A]
-    const optMatch = line.match(
-      /^[\s\t]*[·•●◆■※\-*+、\u00b7\u2022\u25cf\u25cb\u25aa\u25ab]*\s*(?:[\(（\[【<]?([A-Ga-g])[\)）\]】>]?[\.、．:：\-\—\s]\s*|[\(（\[【<]([A-Ga-g])[\)）\]】>]\s*)(.*)/
-    )
-    if (optMatch && currentQ.state !== 'analysis' && currentQ.state !== 'kp') {
-      currentQ.state = 'option'
-      const key = (optMatch[1] || optMatch[2]).toUpperCase()
-      currentQ.options.push({ key, label: key, content: (optMatch[3] || '').trim() })
-      continue
-    }
-
-    // 状态续行
-    if (currentQ.state === 'analysis' || currentQ.state === 'kp') {
-      currentQ.analysis += '\n' + line
-    } else if (currentQ.state === 'option' && currentQ.options.length > 0) {
-      currentQ.options[currentQ.options.length - 1].content += '\n' + line
-    } else if (currentQ.state === 'stem') {
-      currentQ.content += '\n' + line
-    }
-  }
-
-  saveCurrentQ()
-  return questions
+  })
 }
 
 // 解析 Word / 纯文本文件
@@ -888,20 +678,7 @@ async function parseTextOrDocFile(file: File) {
     if (file.name.endsWith('.docx')) {
       const arrayBuffer = await file.arrayBuffer()
       const htmlResult = await mammoth.convertToHtml({ arrayBuffer })
-      const rawHtml = htmlResult.value || ''
-      // 保留 <img> 图片标签，将 <li>、<p>、<br>、<tr>、<div> 转换为换行，去除其它无关 HTML 标签
-      text = rawHtml
-        .replace(/<\/li>/gi, '\n')
-        .replace(/<\/p>/gi, '\n')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<\/tr>/gi, '\n')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<td[^>]*>/gi, ' ')
-        .replace(/<th[^>]*>/gi, ' ')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&emsp;/gi, ' ')
-        .replace(/&ensp;/gi, ' ')
-        .replace(/<(?!\/?img\b)[^>]+>/gi, '')
+      text = htmlResult.value || ''
     } else {
       text = await file.text()
     }

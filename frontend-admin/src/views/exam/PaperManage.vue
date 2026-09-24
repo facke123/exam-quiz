@@ -703,7 +703,7 @@
             >
               <div class="pqi-title">
                 <strong>{{ idx + 1 }}. [{{ q.type === 'single' ? '单选' : q.type === 'multiple' ? '多选' : '问答' }}]</strong>
-                {{ q.content }}
+                <span v-html="formatQuestionContent(q.content)" />
               </div>
               <div v-if="q.options && q.options.length" class="pqi-opts">
                 <span v-for="opt in q.options" :key="opt.key" style="margin-right: 12px">
@@ -712,7 +712,7 @@
               </div>
               <div class="pqi-ans">
                 <span style="color: var(--success); font-weight: 600">【答案】{{ q.answer }}</span>
-                <span v-if="q.analysis" style="margin-left: 12px; color: var(--text-muted)">【解析】{{ q.analysis }}</span>
+                <div v-if="q.analysis" style="margin-top: 4px; color: var(--text-muted)" v-html="formatAnalysisHtml(q.analysis)" />
               </div>
             </div>
             <div v-if="parsedQuestions.length > 3" style="text-align: center; color: var(--text-muted); font-size: 12px; padding-top: 4px">
@@ -973,6 +973,7 @@ import {
 } from '@/api/exam'
 import { generateEntirePaper, generateEntirePaperAsync, getAITaskDetail, getAIConfig } from '@/api/ai'
 import { getQuestionList, type Question, type QuestionType } from '@/api/question'
+import { parseDocxOrTextToQuestions } from '@/utils/question-parser'
 
 const loading = ref(false)
 const list = ref<any[]>([])
@@ -1410,16 +1411,22 @@ function formatQuestionContent(content: string) {
   html = html
     .replace(/(【案例背景】|【案例说明】|【说明】)/g, '<div class="case-section-title">$1</div>')
     .replace(/(【问题\s*\d+】[（(][^）)]*[）)]|【问题\s*\d+】)/g, '<div class="case-question-title">$1</div>')
-    .replace(/\n/g, '<br/>')
+
+  // 4. 清理 table 内部换行，防止将换行替换为 <br/> 破坏原生 HTML 表格排版
+  html = html.replace(/<table[\s\S]*?<\/table>/gi, (tbl) => tbl.replace(/\r?\n/g, ''))
+
+  html = html.replace(/\n/g, '<br/>')
 
   return html
 }
 
 function formatAnalysisHtml(analysis: string) {
   if (!analysis) return '<span style="color: var(--text-muted)">暂无详细解析</span>'
-  return String(analysis)
+  let html = String(analysis)
     .replace(/【(.*?)】/g, '<strong style="color: var(--primary); display: inline-block; margin-top: 6px;">【$1】</strong>')
-    .replace(/\n/g, '<br/>')
+  html = html.replace(/<table[\s\S]*?<\/table>/gi, (tbl) => tbl.replace(/\r?\n/g, ''))
+  html = html.replace(/\n/g, '<br/>')
+  return html
 }
 
 // ==================== AI 一键整卷生成 ====================
@@ -1639,9 +1646,9 @@ async function onPaperFileSelected(e: Event) {
   try {
     if (file.name.endsWith('.docx')) {
       const buffer = await file.arrayBuffer()
-      const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-      const text = (result.value || '').trim()
-      const count = parseTextToQuestions(text)
+      const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+      const html = (result.value || '').trim()
+      const count = parseTextToQuestions(html)
       if (count === 0) {
         ElMessageBox.alert(
           `文档「${file.name}」中未能提取到可识别的试题文本内容。\n\n【原因分析】\n检测到该文件可能为纯图片扫描版。\n【解决方案】\n1. 请上传包含文字可编辑版的文档；\n2. 或将试题文字直接复制粘贴至「或粘贴试卷」输入框中。`,
@@ -1699,191 +1706,7 @@ function parseExcelToQuestions(rows: any[]) {
 }
 
 function parseTextToQuestions(rawText: string): number {
-  // eslint-disable-next-line no-control-regex
-  const cleanText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
-  const lines = cleanText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
-  const questions: any[] = []
-  let currentQ: any = null
-  let currentChapter = '第1章 信息化发展'
-  let currentTypeFromTag = ''
-
-  function isHeaderOrInstruction(line: string): boolean {
-    if (/^(?:系统集成|信息系统|软考|全国计算机|中级|高级|基础知识|应用技术).*模拟试卷/i.test(line)) return true
-    if (/^（依据《.*》.*编写）/.test(line)) return true
-    if (/^(?:试卷说明|考试科目|合格分数线|建议用时|使用说明|满分|题量|题型|说明|项目)$/.test(line)) return true
-    if (/^\d+\s*分(?:（含\s*\d+\s*分）)?$/.test(line)) return true
-    if (/^\d+\s*分钟$/.test(line)) return true
-    if (/^共\s*\d+\s*题/.test(line)) return true
-    if (/^第[一二三四五六七八九十]+部分/.test(line)) return true
-    if (/^[一二三四五六七八九十]+[、.．\s].*（第\s*\d+.*题）/.test(line)) return true
-    if (/^-\(全国卷\)/.test(line)) return true
-    if (/(?:微信搜索|手机端题库|PC端题库|公众号|版权所有|软考达人|www\.ruankaodaren)/i.test(line)) return true
-    return false
-  }
-
-  function extractChapterFromHeader(line: string) {
-    const chMatch = line.match(/^(?:第\s*(\d{1,2})\s*章|[一二三四五六七八九十]+[、.．\s])\s*([^（(\n\r]+)/)
-    if (chMatch) {
-      return line.trim()
-    }
-    return null
-  }
-
-  function extractQuestionStart(line: string) {
-    if (isHeaderOrInstruction(line)) return null
-
-    // 匹配各种真题格式：
-    // 1. 第1题. / 第1题：/ 第 1 题 / 第1题 / 试题1. / 试题1 / 【试题1】
-    // 2. 1. / 1、 / 1． / 1: / 1：
-    // 3. (1) / （1） / [1] / 【1】
-    const qPattern = /^(?:【?(?:单选|多选|判断|问答|案例|论述)题?】?\s*)?(?:【?(?:试题\s*|第\s*)?(\d{1,3})\s*(?:题)?[\)）\]】]?[\.、．:：\-\—_\s]\s*|(?:试题\s*|第\s*)(\d{1,3})\s*题[\.、．:：\-\—_\s]*|[\(（\[【](\d{1,3})[\)）\]】][\.、．:：\-\—_\s]*)(.*)/
-    const m = line.match(qPattern)
-    if (m) {
-      const numStr = m[1] || m[2] || m[3]
-      const num = parseInt(numStr, 10)
-      const content = (m[4] || '').trim()
-      if (num >= 1 && num <= 200) {
-        return { num, content }
-      }
-    }
-    return null
-  }
-
-  function saveCurrentQ() {
-    if (!currentQ || !currentQ.content) return
-    if (!currentQ.answer && currentQ.options.length > 0) {
-      currentQ.answer = 'A'
-    }
-    questions.push({
-      num: currentQ.num || (questions.length + 1),
-      type: currentQ.type || (currentQ.options.length > 0 ? (currentQ.answer.length > 1 ? 'multiple' : 'single') : 'essay'),
-      chapter: currentQ.chapter || currentChapter,
-      content: currentQ.content.trim(),
-      options: currentQ.options,
-      answer: currentQ.answer.trim().toUpperCase(),
-      analysis: currentQ.analysis.trim(),
-      knowledgePoint: currentQ.knowledgePoint,
-      score: 1,
-    })
-    currentQ = null
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (/^【(单选题|多选题|判断题|问答题|案例分析题|论述题)】$/.test(line)) {
-      currentTypeFromTag = line.replace(/[【】]/g, '')
-      continue
-    }
-    const ch = extractChapterFromHeader(line)
-    if (ch && !line.includes('。') && !line.includes('？') && line.length < 30) {
-      currentChapter = ch
-      continue
-    }
-    if (isHeaderOrInstruction(line)) continue
-
-    const qStart = extractQuestionStart(line)
-    if (qStart) {
-      saveCurrentQ()
-      let type = 'single'
-      const fullContent = (currentTypeFromTag + ' ' + qStart.content)
-      if (fullContent.includes('多选')) type = 'multiple'
-      else if (fullContent.includes('判断')) type = 'judge'
-      else if (fullContent.includes('问答') || fullContent.includes('案例') || fullContent.includes('论述')) type = 'essay'
-
-      currentQ = {
-        num: qStart.num,
-        type,
-        chapter: currentChapter,
-        content: qStart.content.replace(/【(?:单选|多选|判断|问答|案例|论述)题?】/g, '').trim(),
-        options: [],
-        answer: '',
-        analysis: '',
-        knowledgePoint: '',
-        state: 'stem',
-      }
-      continue
-    }
-
-    if (!currentQ) continue
-
-    // 答案识别
-    const ansMatch = line.match(/^【?(?:参考|正确)?答案】?[:：\s]*([A-Za-z对错正确错误√×]+)/i)
-    if (ansMatch) {
-      currentQ.state = 'answer'
-      currentQ.answer = ansMatch[1].trim().toUpperCase()
-      continue
-    }
-
-    // 考点识别
-    const kpMatch = line.match(/^【?(?:核心)?考点(?:定位)?】?[:：\s]*(.*)/i)
-    if (kpMatch) {
-      currentQ.state = 'kp'
-      currentQ.knowledgePoint = kpMatch[1].trim()
-      if (currentQ.analysis) {
-        currentQ.analysis += '\n【考点定位】' + kpMatch[1].trim()
-      } else {
-        currentQ.analysis = '【考点定位】' + kpMatch[1].trim()
-      }
-      continue
-    }
-
-    // 解析识别
-    const anaMatch = line.match(/^【?(?:答案|试题)?解析】?[:：\s]*(.*)/i)
-    if (anaMatch) {
-      currentQ.state = 'analysis'
-      const anaText = anaMatch[1].trim()
-      if (currentQ.analysis) {
-        currentQ.analysis += '\n【名师解析】' + anaText
-      } else {
-        currentQ.analysis = '【名师解析】' + anaText
-      }
-      continue
-    }
-
-    // 易错点 / 避坑口诀 / 名师点拨
-    const extraMatch = line.match(/^【(易错点|避坑口诀|名师点拨|考前速记)】[:：\s]*(.*)/i)
-    if (extraMatch) {
-      currentQ.state = 'analysis'
-      currentQ.analysis += '\n【' + extraMatch[1] + '】' + extraMatch[2].trim()
-      continue
-    }
-
-    // 选项识别 - 单行多个选项
-    if (/[A-Da-d][.、．:：\s].+[B-Eb-e][.、．:：\s]/.test(line)) {
-      const inlineRegex = /([A-Ga-g])[.、．:：\s]\s*([^A-Ga-g]+)/g
-      let m: RegExpExecArray | null
-      let count = 0
-      while ((m = inlineRegex.exec(line)) !== null) {
-        count++
-        const key = m[1].toUpperCase()
-        currentQ.options.push({ key, label: key, content: m[2].trim() })
-      }
-      if (count > 0) {
-        currentQ.state = 'option'
-        continue
-      }
-    }
-
-    // 独立选项: A. / A、 / A． / (A) / （A） / A: / A
-    const optMatch = line.match(/^[\(（]?([A-Ga-g])[\)）]?\s*[.、．:：\s]\s*(.*)/)
-    if (optMatch && currentQ.state !== 'analysis' && currentQ.state !== 'kp') {
-      currentQ.state = 'option'
-      const key = optMatch[1].toUpperCase()
-      currentQ.options.push({ key, label: key, content: optMatch[2].trim() })
-      continue
-    }
-
-    // 状态续行
-    if (currentQ.state === 'analysis' || currentQ.state === 'kp') {
-      currentQ.analysis += '\n' + line
-    } else if (currentQ.state === 'option' && currentQ.options.length > 0) {
-      currentQ.options[currentQ.options.length - 1].content += '\n' + line
-    } else if (currentQ.state === 'stem') {
-      currentQ.content += '\n' + line
-    }
-  }
-
-  saveCurrentQ()
+  const questions = parseDocxOrTextToQuestions(rawText)
   parsedQuestions.value = questions
   if (questions.length > 0) {
     ElMessage.success(`试卷解析完毕，共提取出 ${questions.length} 道试题！`)
@@ -2627,5 +2450,16 @@ onMounted(() => {
       background: #f0fdf4;
     }
   }
+}
+
+:deep(.pqc-stem img),
+:deep(.ana-content img),
+:deep(.preview-q-item img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+  margin: 10px auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 </style>

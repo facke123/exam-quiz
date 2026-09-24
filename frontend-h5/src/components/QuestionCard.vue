@@ -438,6 +438,36 @@ function onSelect(key: string) {
   color: #111827;
   margin-bottom: 18px;
   word-break: break-word;
+
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    margin: 10px auto;
+  }
+
+  :deep(.q-table-responsive),
+  :deep(table) {
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid #e2e8f0;
+    padding: 6px 10px;
+    text-align: center;
+  }
+
+  :deep(th) {
+    background: #f8fafc;
+    font-weight: 600;
+  }
 }
 
 .options-list {
@@ -695,5 +725,35 @@ function onSelect(key: string) {
   line-height: 1.7;
   color: #374151;
   word-break: break-word;
+
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    margin: 10px auto;
+  }
+
+  :deep(.q-table-responsive),
+  :deep(table) {
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid #e2e8f0;
+    padding: 6px 10px;
+    text-align: center;
+  }
+
+  :deep(th) {
+    background: #f8fafc;
+    font-weight: 600;
+  }
 }
 </style>

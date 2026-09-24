@@ -99,6 +99,14 @@ export class QuestionService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    try {
+      await this.questionRepository.query(
+        'ALTER TABLE questions MODIFY COLUMN content MEDIUMTEXT NOT NULL, MODIFY COLUMN analysis MEDIUMTEXT;',
+      );
+    } catch {
+      // 容错：若非 MySQL 或字段已修改则忽略
+    }
+
     const count = await this.questionRepository.count();
     if (count === 0) {
       await this.seedInitialQuestions();

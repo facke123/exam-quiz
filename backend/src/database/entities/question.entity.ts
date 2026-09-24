@@ -45,7 +45,7 @@ export class Question {
   })
   difficulty: number;
 
-  @Column({ type: 'text', comment: '题干内容' })
+  @Column({ type: 'mediumtext', comment: '题干内容' })
   content: string;
 
   @Column({
@@ -58,7 +58,7 @@ export class Question {
   @Column({ type: 'text', nullable: true, comment: '答案' })
   answer: string;
 
-  @Column({ type: 'text', nullable: true, comment: '解析' })
+  @Column({ type: 'mediumtext', nullable: true, comment: '解析' })
   analysis: string;
 
   @Column({
